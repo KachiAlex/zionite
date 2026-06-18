@@ -1,21 +1,20 @@
 {
   "version": 2,
-  "framework": "vite",
-  "buildCommand": "cd backend && npm run build && cd ../frontend && npm run build",
+  "buildCommand": "cd backend && npx tsc && cd ../frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd backend && npm install",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/backend/dist/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/socket.io/(.*)",
-      "destination": "/backend/dist/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/(.*)",
-      "destination": "/frontend/dist/$1"
+      "destination": "/index.html"
     }
   ]
 }
