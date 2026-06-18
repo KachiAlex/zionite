@@ -30,6 +30,15 @@ app.get('/', (_req, res) => {
   res.json({ status: 'API is running' })
 })
 
+// Global error handler
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('Server error:', err)
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  })
+})
+
 // Initialize database
 initDb().catch(console.error)
 

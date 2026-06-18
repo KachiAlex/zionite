@@ -1,2 +1,2 @@
-import app from '../backend/src/index'
+import app from '../backend/dist/index'
 export default app

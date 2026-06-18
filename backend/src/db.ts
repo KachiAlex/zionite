@@ -40,9 +40,33 @@ function createDbClient(client: PoolClient): DbClient {
   }
 }
 
+// Auto-managing db singleton — acquires/releases a client per query
+export const db = {
+  async query(sql: string, params?: any[]): Promise<QueryResult> {
+    const client = await pool.connect()
+    try {
+      return await client.query(sql, params)
+    } finally {
+      client.release()
+    }
+  },
+  async get<T extends Record<string, any> = any>(sql: string, params?: any[]): Promise<T | undefined> {
+    const result = await this.query(sql, params)
+    return result.rows[0] as T
+  },
+  async all<T extends Record<string, any> = any>(sql: string, params?: any[]): Promise<T[]> {
+    const result = await this.query(sql, params)
+    return result.rows as T[]
+  },
+  async run(sql: string, params?: any[]): Promise<{ lastID: number; changes: number }> {
+    const result = await this.query(sql, params)
+    return { lastID: 0, changes: result.rowCount || 0 }
+  }
+}
+
+// Backward-compatible helper — returns the auto-managing singleton
 export async function getDb(): Promise<DbClient> {
-  const client = await pool.connect()
-  return createDbClient(client)
+  return db
 }
 
 export async function initDb() {
