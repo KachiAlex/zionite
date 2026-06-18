@@ -44,7 +44,6 @@ const uuid_1 = require("uuid");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 let _sql = null;
-let _connectionString = '';
 function getSql() {
     if (_sql)
         return _sql;
@@ -52,37 +51,49 @@ function getSql() {
     if (!rawUrl) {
         throw new Error('DATABASE_URL environment variable is required');
     }
-    // Normalize postgres:// to postgresql:// for URL parser
-    _connectionString = rawUrl.replace(/^postgres:\/\//, 'postgresql://').replace('-pooler.', '.').replace(/\?.*$/, '');
-    try {
-        const u = new URL(_connectionString);
-        console.log(`DB host: ${u.hostname}`);
-    }
-    catch (e) {
-        console.error('Invalid DATABASE_URL format');
-        throw new Error('Invalid DATABASE_URL format: ' + e);
-    }
-    _sql = (0, serverless_1.neon)(_connectionString, { fullResults: true });
+    // Log that we received something (mask credentials)
+    const masked = rawUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+    console.log(`DATABASE_URL received: ${masked}`);
+    // Use raw string — neon() handles postgres:// and postgresql://
+    const cs = rawUrl.trim();
+    console.log(`Connecting to Neon...`);
+    _sql = (0, serverless_1.neon)(cs, { fullResults: true });
     return _sql;
+}
+async function queryWithTimeout(sqlFn, queryStr, params, timeoutMs = 8000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        // @neondatabase/serverless doesn't use AbortController directly,
+        // but we wrap in Promise.race for timeout
+        const resultPromise = sqlFn.query(queryStr, params);
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Query timed out after ' + timeoutMs + 'ms')), timeoutMs);
+        });
+        return await Promise.race([resultPromise, timeoutPromise]);
+    }
+    finally {
+        clearTimeout(timeout);
+    }
 }
 exports.db = {
     async query(sqlStr, params) {
         const sql = getSql();
-        return sql.query(sqlStr, params);
+        return queryWithTimeout(sql, sqlStr, params);
     },
     async get(sqlStr, params) {
         const sql = getSql();
-        const result = await sql.query(sqlStr, params);
+        const result = await queryWithTimeout(sql, sqlStr, params);
         return result.rows[0];
     },
     async all(sqlStr, params) {
         const sql = getSql();
-        const result = await sql.query(sqlStr, params);
+        const result = await queryWithTimeout(sql, sqlStr, params);
         return result.rows;
     },
     async run(sqlStr, params) {
         const sql = getSql();
-        const result = await sql.query(sqlStr, params);
+        const result = await queryWithTimeout(sql, sqlStr, params);
         return { lastID: 0, changes: result.rowCount || 0 };
     }
 };
@@ -130,6 +141,16 @@ const SCHEMA_QUERIES = [
 ];
 async function initDb() {
     console.log('DB init starting...');
+    try {
+        // Test connection first with a simple query
+        console.log('Testing DB connection...');
+        await exports.db.query('SELECT 1 as test');
+        console.log('DB connection OK');
+    }
+    catch (e) {
+        console.error('DB connection test failed:', e.message);
+        throw e;
+    }
     for (let i = 0; i < SCHEMA_QUERIES.length; i++) {
         await exports.db.query(SCHEMA_QUERIES[i]);
     }

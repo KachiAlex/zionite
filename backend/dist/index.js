@@ -33,12 +33,15 @@ app.get('/', (_req, res) => {
 // DB health check
 app.get('/health', async (_req, res) => {
     try {
+        console.log('Health check: testing getSql()...');
+        // Just test that getSql() doesn't throw and connection string is valid
         const result = await db_1.db.get('SELECT NOW() as now');
+        console.log('Health check: query succeeded');
         res.json({ status: 'ok', db: 'connected', now: result?.now });
     }
     catch (err) {
-        console.error('Health check failed:', err?.message);
-        res.status(500).json({ status: 'error', db: 'disconnected', error: err?.message });
+        console.error('Health check failed:', err?.message || err);
+        res.status(500).json({ status: 'error', db: 'disconnected', error: err?.message || String(err) });
     }
 });
 // Global error handler

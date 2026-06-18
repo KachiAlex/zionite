@@ -5,7 +5,6 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 let _sql: any = null
-let _connectionString = ''
 
 function getSql() {
   if (_sql) return _sql
@@ -14,19 +13,33 @@ function getSql() {
   if (!rawUrl) {
     throw new Error('DATABASE_URL environment variable is required')
   }
-  // Normalize postgres:// to postgresql:// for URL parser
-  _connectionString = rawUrl.replace(/^postgres:\/\//, 'postgresql://').replace('-pooler.', '.').replace(/\?.*$/, '')
 
-  try {
-    const u = new URL(_connectionString)
-    console.log(`DB host: ${u.hostname}`)
-  } catch (e) {
-    console.error('Invalid DATABASE_URL format')
-    throw new Error('Invalid DATABASE_URL format: ' + e)
-  }
+  // Log that we received something (mask credentials)
+  const masked = rawUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
+  console.log(`DATABASE_URL received: ${masked}`)
 
-  _sql = neon(_connectionString, { fullResults: true })
+  // Use raw string — neon() handles postgres:// and postgresql://
+  const cs = rawUrl.trim()
+  console.log(`Connecting to Neon...`)
+
+  _sql = neon(cs, { fullResults: true })
   return _sql
+}
+
+async function queryWithTimeout(sqlFn: any, queryStr: string, params?: any[], timeoutMs = 8000) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    // @neondatabase/serverless doesn't use AbortController directly,
+    // but we wrap in Promise.race for timeout
+    const resultPromise = sqlFn.query(queryStr, params)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timed out after ' + timeoutMs + 'ms')), timeoutMs)
+    })
+    return await Promise.race([resultPromise, timeoutPromise])
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export interface DbClient {
@@ -39,21 +52,21 @@ export interface DbClient {
 export const db: DbClient = {
   async query(sqlStr: string, params?: any[]) {
     const sql = getSql() as any
-    return sql.query(sqlStr, params)
+    return queryWithTimeout(sql, sqlStr, params) as any
   },
   async get<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
     const sql = getSql() as any
-    const result = await sql.query(sqlStr, params)
+    const result = await queryWithTimeout(sql, sqlStr, params) as any
     return result.rows[0] as T | undefined
   },
   async all<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
     const sql = getSql() as any
-    const result = await sql.query(sqlStr, params)
+    const result = await queryWithTimeout(sql, sqlStr, params) as any
     return result.rows as T[]
   },
   async run(sqlStr: string, params?: any[]) {
     const sql = getSql() as any
-    const result = await sql.query(sqlStr, params)
+    const result = await queryWithTimeout(sql, sqlStr, params) as any
     return { lastID: 0, changes: result.rowCount || 0 }
   }
 }
@@ -104,6 +117,16 @@ const SCHEMA_QUERIES = [
 
 export async function initDb() {
   console.log('DB init starting...')
+  try {
+    // Test connection first with a simple query
+    console.log('Testing DB connection...')
+    await db.query('SELECT 1 as test')
+    console.log('DB connection OK')
+  } catch (e: any) {
+    console.error('DB connection test failed:', e.message)
+    throw e
+  }
+
   for (let i = 0; i < SCHEMA_QUERIES.length; i++) {
     await db.query(SCHEMA_QUERIES[i])
   }
