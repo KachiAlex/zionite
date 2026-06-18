@@ -1,17 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd backend && npx tsc && cd ../frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "npm install && cd backend && npm install",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/socket.io/(.*)",
-      "destination": "/api/index"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
