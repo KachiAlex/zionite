@@ -47,18 +47,17 @@ app.get('/', (_req, res) => {
 
 setupStreaming(io)
 
+// Initialize database
+initDb().catch(console.error)
+
 // Export for Vercel serverless
 import serverless from 'serverless-http'
 export default serverless(app)
 
 // Local development
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 3001
-  async function start() {
-    await initDb()
-    httpServer.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`)
-    })
-  }
-  start()
+  httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
 }
