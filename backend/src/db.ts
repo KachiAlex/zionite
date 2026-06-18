@@ -4,24 +4,30 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-// Direct endpoint for Neon's HTTP API (pooler is TCP-only)
-const rawUrl = process.env.DATABASE_URL
-if (!rawUrl) {
-  throw new Error('DATABASE_URL environment variable is required')
+let _sql: any = null
+let _connectionString = ''
+
+function getSql() {
+  if (_sql) return _sql
+
+  const rawUrl = process.env.DATABASE_URL
+  if (!rawUrl) {
+    throw new Error('DATABASE_URL environment variable is required')
+  }
+  // Normalize postgres:// to postgresql:// for URL parser
+  _connectionString = rawUrl.replace(/^postgres:\/\//, 'postgresql://').replace('-pooler.', '.').replace(/\?.*$/, '')
+
+  try {
+    const u = new URL(_connectionString)
+    console.log(`DB host: ${u.hostname}`)
+  } catch (e) {
+    console.error('Invalid DATABASE_URL format')
+    throw new Error('Invalid DATABASE_URL format: ' + e)
+  }
+
+  _sql = neon(_connectionString, { fullResults: true })
+  return _sql
 }
-const connectionString = rawUrl.replace('-pooler.', '.').replace(/\?.*$/, '')
-
-// Debug: log which host we're connecting to (no credentials)
-try {
-  const u = new URL(connectionString)
-  console.log(`DB host: ${u.hostname}`)
-} catch { /* ignore */ }
-
-type SqlQueryFn = {
-  query: (sql: string, params?: any[]) => Promise<{ rows: any[]; rowCount: number | null }>
-}
-
-const sql = neon(connectionString, { fullResults: true }) as unknown as SqlQueryFn
 
 export interface DbClient {
   query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount: number | null }>
@@ -32,17 +38,21 @@ export interface DbClient {
 
 export const db: DbClient = {
   async query(sqlStr: string, params?: any[]) {
+    const sql = getSql() as any
     return sql.query(sqlStr, params)
   },
   async get<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
+    const sql = getSql() as any
     const result = await sql.query(sqlStr, params)
     return result.rows[0] as T | undefined
   },
   async all<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
+    const sql = getSql() as any
     const result = await sql.query(sqlStr, params)
     return result.rows as T[]
   },
   async run(sqlStr: string, params?: any[]) {
+    const sql = getSql() as any
     const result = await sql.query(sqlStr, params)
     return { lastID: 0, changes: result.rowCount || 0 }
   }

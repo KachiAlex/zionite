@@ -43,32 +43,45 @@ const serverless_1 = require("@neondatabase/serverless");
 const uuid_1 = require("uuid");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-// Direct endpoint for Neon's HTTP API (pooler is TCP-only)
-const rawUrl = process.env.DATABASE_URL;
-if (!rawUrl) {
-    throw new Error('DATABASE_URL environment variable is required');
+let _sql = null;
+let _connectionString = '';
+function getSql() {
+    if (_sql)
+        return _sql;
+    const rawUrl = process.env.DATABASE_URL;
+    if (!rawUrl) {
+        throw new Error('DATABASE_URL environment variable is required');
+    }
+    // Normalize postgres:// to postgresql:// for URL parser
+    _connectionString = rawUrl.replace(/^postgres:\/\//, 'postgresql://').replace('-pooler.', '.').replace(/\?.*$/, '');
+    try {
+        const u = new URL(_connectionString);
+        console.log(`DB host: ${u.hostname}`);
+    }
+    catch (e) {
+        console.error('Invalid DATABASE_URL format');
+        throw new Error('Invalid DATABASE_URL format: ' + e);
+    }
+    _sql = (0, serverless_1.neon)(_connectionString, { fullResults: true });
+    return _sql;
 }
-const connectionString = rawUrl.replace('-pooler.', '.').replace(/\?.*$/, '');
-// Debug: log which host we're connecting to (no credentials)
-try {
-    const u = new URL(connectionString);
-    console.log(`DB host: ${u.hostname}`);
-}
-catch { /* ignore */ }
-const sql = (0, serverless_1.neon)(connectionString, { fullResults: true });
 exports.db = {
     async query(sqlStr, params) {
+        const sql = getSql();
         return sql.query(sqlStr, params);
     },
     async get(sqlStr, params) {
+        const sql = getSql();
         const result = await sql.query(sqlStr, params);
         return result.rows[0];
     },
     async all(sqlStr, params) {
+        const sql = getSql();
         const result = await sql.query(sqlStr, params);
         return result.rows;
     },
     async run(sqlStr, params) {
+        const sql = getSql();
         const result = await sql.query(sqlStr, params);
         return { lastID: 0, changes: result.rowCount || 0 };
     }
