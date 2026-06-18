@@ -1,23 +1,71 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-[#0a0a0f] text-white font-sans antialiased;
+  :root {
+    --ink: #14141a;
+    --ink-2: #1c1d24;
+    --panel: #21222c;
+    --line: rgba(243, 238, 228, 0.10);
+    --parchment: #f3eee4;
+    --dim: #9c958a;
+    --gold: #c9a227;
+    --gold-soft: #e0bd5a;
+    --oxblood: #8a3326;
+    --oxblood-soft: #c1564a;
   }
+  
+  body {
+    @apply font-sans antialiased;
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: 'Work Sans', sans-serif;
+  }
+  
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
+    font-family: 'Fraunces', serif;
   }
 }
 
 @layer components {
-  .btn-primary {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg text-white bg-purple-600 hover:bg-purple-500 transition-colors;
+  .font-serif {
+    font-family: 'Fraunces', serif;
   }
-  .btn-secondary {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg text-white bg-white/10 hover:bg-white/20 transition-colors;
+  .font-mono {
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-medium transition-colors;
+    background: var(--gold);
+    color: #1b1208;
+  }
+  .btn-gold:hover {
+    background: var(--gold-soft);
+  }
+  
+  .btn-oxblood {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-medium border transition-colors;
+    background: transparent;
+    border-color: var(--oxblood-soft);
+    color: var(--oxblood-soft);
+  }
+  .btn-oxblood:hover {
+    background: rgba(193, 86, 74, 0.12);
+  }
+  
+  .btn-line {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-medium border transition-colors;
+    background: transparent;
+    border-color: var(--line);
+    color: var(--parchment);
+  }
+  .btn-line:hover {
+    border-color: var(--gold);
+    color: var(--gold-soft);
   }
 }
