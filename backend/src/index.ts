@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
-import { initDb } from './db'
+import { initDb, db } from './db'
 import authRoutes from './routes/auth'
 import broadcastRoutes from './routes/broadcasts'
 import sermonRoutes from './routes/sermons'
@@ -30,17 +30,29 @@ app.get('/', (_req, res) => {
   res.json({ status: 'API is running' })
 })
 
+// DB health check
+app.get('/health', async (_req, res) => {
+  try {
+    const result = await db.get('SELECT NOW() as now')
+    res.json({ status: 'ok', db: 'connected', now: result?.now })
+  } catch (err: any) {
+    console.error('Health check failed:', err?.message)
+    res.status(500).json({ status: 'error', db: 'disconnected', error: err?.message })
+  }
+})
+
 // Global error handler
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('Server error:', err)
+  const message = typeof err === 'string' ? err : (err?.message || 'Internal Server Error')
   res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error',
+    error: message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   })
 })
 
 // Initialize database lazily — don't block Vercel cold start
-initDb().catch(err => console.error('DB init failed (non-blocking):', err.message))
+initDb().catch(err => console.error('DB init failed (non-blocking):', err?.message || err))
 
 // Export for Vercel serverless
 import serverless from 'serverless-http'

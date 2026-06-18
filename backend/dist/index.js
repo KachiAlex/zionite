@@ -30,16 +30,28 @@ app.use('/schedule', schedule_1.default);
 app.get('/', (_req, res) => {
     res.json({ status: 'API is running' });
 });
+// DB health check
+app.get('/health', async (_req, res) => {
+    try {
+        const result = await db_1.db.get('SELECT NOW() as now');
+        res.json({ status: 'ok', db: 'connected', now: result?.now });
+    }
+    catch (err) {
+        console.error('Health check failed:', err?.message);
+        res.status(500).json({ status: 'error', db: 'disconnected', error: err?.message });
+    }
+});
 // Global error handler
 app.use((err, _req, res, _next) => {
     console.error('Server error:', err);
+    const message = typeof err === 'string' ? err : (err?.message || 'Internal Server Error');
     res.status(err.status || 500).json({
-        error: err.message || 'Internal Server Error',
+        error: message,
         stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
 });
 // Initialize database lazily — don't block Vercel cold start
-(0, db_1.initDb)().catch(err => console.error('DB init failed (non-blocking):', err.message));
+(0, db_1.initDb)().catch(err => console.error('DB init failed (non-blocking):', err?.message || err));
 // Export for Vercel serverless
 const serverless_http_1 = __importDefault(require("serverless-http"));
 exports.default = (0, serverless_http_1.default)(app);

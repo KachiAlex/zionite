@@ -29,32 +29,38 @@ router.post('/register', async (req, res) => {
     res.json({ token, user: { id, email, name, role: 'listener' } });
 });
 router.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        res.status(400).json({ error: 'Email and password are required' });
-        return;
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            res.status(400).json({ error: 'Email and password are required' });
+            return;
+        }
+        const db = await (0, db_1.getDb)();
+        const user = await db.get('SELECT * FROM users WHERE email = $1', [email]);
+        if (!user) {
+            res.status(401).json({ error: 'Invalid credentials' });
+            return;
+        }
+        const valid = await bcryptjs_1.default.compare(password, user.password_hash);
+        if (!valid) {
+            res.status(401).json({ error: 'Invalid credentials' });
+            return;
+        }
+        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, auth_1.JWT_SECRET, { expiresIn: '7d' });
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+            },
+        });
     }
-    const db = await (0, db_1.getDb)();
-    const user = await db.get('SELECT * FROM users WHERE email = $1', [email]);
-    if (!user) {
-        res.status(401).json({ error: 'Invalid credentials' });
-        return;
+    catch (err) {
+        console.error('Login error:', err?.message || err);
+        res.status(500).json({ error: err?.message || 'Login failed' });
     }
-    const valid = await bcryptjs_1.default.compare(password, user.password_hash);
-    if (!valid) {
-        res.status(401).json({ error: 'Invalid credentials' });
-        return;
-    }
-    const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, auth_1.JWT_SECRET, { expiresIn: '7d' });
-    res.json({
-        token,
-        user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-        },
-    });
 });
 router.get('/verify', auth_1.authenticateToken, async (req, res) => {
     try {

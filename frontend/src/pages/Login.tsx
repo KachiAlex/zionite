@@ -39,7 +39,10 @@ export default function Login() {
           break
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Something went wrong')
+      const msg = err.response?.data?.error
+      const errorStr = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg) || 'Something went wrong')
+      console.error('Login failed:', err.response?.status, err.response?.data)
+      setError(errorStr)
     } finally {
       setLoading(false)
     }

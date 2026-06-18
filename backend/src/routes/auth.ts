@@ -33,39 +33,44 @@ router.post('/register', async (req, res) => {
 })
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email and password are required' })
-    return
-  }
+  try {
+    const { email, password } = req.body
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' })
+      return
+    }
 
-  const db = await getDb()
-  const user = await db.get('SELECT * FROM users WHERE email = $1', [email])
-  if (!user) {
-    res.status(401).json({ error: 'Invalid credentials' })
-    return
-  }
+    const db = await getDb()
+    const user = await db.get('SELECT * FROM users WHERE email = $1', [email])
+    if (!user) {
+      res.status(401).json({ error: 'Invalid credentials' })
+      return
+    }
 
-  const valid = await bcrypt.compare(password, user.password_hash)
-  if (!valid) {
-    res.status(401).json({ error: 'Invalid credentials' })
-    return
-  }
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) {
+      res.status(401).json({ error: 'Invalid credentials' })
+      return
+    }
 
-  const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  )
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    },
-  })
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    )
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    })
+  } catch (err: any) {
+    console.error('Login error:', err?.message || err)
+    res.status(500).json({ error: err?.message || 'Login failed' })
+  }
 })
 
 router.get('/verify', authenticateToken, async (req: AuthRequest, res) => {
