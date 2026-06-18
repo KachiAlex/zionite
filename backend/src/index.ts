@@ -11,6 +11,9 @@ import sermonRoutes from './routes/sermons'
 import statusRoutes from './routes/status'
 import streamRoutes from './routes/stream'
 import rtmpRoutes from './routes/rtmp'
+import chatRoutes from './routes/chat'
+import prayerRoutes from './routes/prayer'
+import scheduleRoutes from './routes/schedule'
 
 const app = express()
 const httpServer = createServer(app)
@@ -33,6 +36,9 @@ app.use('/sermons', sermonRoutes)
 app.use('/status', statusRoutes)
 app.use('/stream', streamRoutes)
 app.use('/rtmp', rtmpRoutes)
+app.use('/chat', chatRoutes)
+app.use('/prayer', prayerRoutes)
+app.use('/schedule', scheduleRoutes)
 
 // Health check
 app.get('/', (_req, res) => {
