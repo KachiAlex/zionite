@@ -10,6 +10,7 @@ import broadcastRoutes from './routes/broadcasts'
 import sermonRoutes from './routes/sermons'
 import statusRoutes from './routes/status'
 import streamRoutes from './routes/stream'
+import rtmpRoutes from './routes/rtmp'
 
 const app = express()
 const httpServer = createServer(app)
@@ -31,6 +32,7 @@ app.use('/broadcasts', broadcastRoutes)
 app.use('/sermons', sermonRoutes)
 app.use('/status', statusRoutes)
 app.use('/stream', streamRoutes)
+app.use('/rtmp', rtmpRoutes)
 
 // Health check
 app.get('/', (_req, res) => {

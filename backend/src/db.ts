@@ -71,9 +71,18 @@ export async function initDb() {
         ended_at TIMESTAMP,
         broadcaster_id TEXT NOT NULL,
         audio_path TEXT,
+        stream_key TEXT,
+        stream_type TEXT DEFAULT 'sse',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (broadcaster_id) REFERENCES users(id)
       )
+    `)
+
+    await db.query(`
+      ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_key TEXT
+    `)
+    await db.query(`
+      ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_type TEXT DEFAULT 'sse'
     `)
 
     await db.query(`
