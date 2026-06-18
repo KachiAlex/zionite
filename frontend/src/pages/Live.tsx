@@ -80,7 +80,7 @@ export default function Live() {
     const bid = broadcastId || broadcast?.id
     if (!bid) return
     try {
-      const { data } = await axios.get(`/api/chat/broadcast/${bid}`)
+      const { data } = await axios.get(`/api/chat/${bid}`)
       setChatMessages(data.messages || [])
       setOnlineCount(data.messages?.length || 0)
     } catch {
@@ -94,7 +94,7 @@ export default function Live() {
     if (!newMessage.trim() || !bid || !user) return
 
     try {
-      const { data } = await axios.post(`/api/chat/broadcast/${bid}`, {
+      const { data } = await axios.post(`/api/chat/${bid}`, {
         message: newMessage.trim()
       })
       setChatMessages(prev => [...prev, data.message])

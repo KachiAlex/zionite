@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
-import { Users, Radio, Headphones, LayoutDashboard, Signal } from 'lucide-react'
+import { Users, Radio, Headphones, LayoutDashboard, Signal, MessageSquare, Settings, Music } from 'lucide-react'
+import BroadcastManager from '../components/admin/BroadcastManager'
+import SermonManager from '../components/admin/SermonManager'
+import ChatSupervisor from '../components/admin/ChatSupervisor'
+import AdminSettings from '../components/admin/AdminSettings'
+import MusicManager from '../components/admin/MusicManager'
 
 interface Broadcast {
   id: string
   title: string
-  status: string
+  status: 'scheduled' | 'live' | 'ended'
   started_at?: string
-  ended_at?: string
-  broadcaster_id: string
+  created_at: string
 }
 
 interface User {
@@ -21,20 +25,56 @@ interface User {
   created_at: string
 }
 
+interface Sermon {
+  id: string
+  title: string
+  speaker: string
+  audio_url: string
+  date: string
+}
+
+interface ChatMessage {
+  id: string
+  broadcast_id?: string
+  user_name: string
+  message: string
+  created_at: string
+}
+
+interface MusicTrack {
+  id: string
+  title: string
+  artist: string
+  album: string
+  genre: string
+  audio_url: string
+  cover_url: string
+  duration: number
+  lyrics: string
+  file_format: string
+  file_size: number
+  created_at: string
+}
+
 interface Stats {
   total: number
   live: number
   ended: number
 }
 
+type Tab = 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music'
+
 export default function AdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [sermons, setSermons] = useState<Sermon[]>([])
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
   const [stats, setStats] = useState<Stats>({ total: 0, live: 0, ended: 0 })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'broadcasts' | 'users'>('broadcasts')
+  const [activeTab, setActiveTab] = useState<Tab>('broadcasts')
 
   useEffect(() => {
     if (!user || user.role !== 'admin') { navigate('/'); return }
@@ -42,15 +82,20 @@ export default function AdminDashboard() {
   }, [user, navigate])
 
   async function fetchData() {
+    setLoading(true)
     try {
-      const [broadcastsRes, statsRes, usersRes] = await Promise.all([
+      const [broadcastsRes, statsRes, usersRes, sermonsRes, musicRes] = await Promise.all([
         axios.get('/api/broadcasts'),
         axios.get('/api/broadcasts/stats/overview'),
-        axios.get('/api/auth/users')
+        axios.get('/api/auth/users', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+        axios.get('/api/sermons'),
+        axios.get('/api/music')
       ])
       setBroadcasts(broadcastsRes.data.broadcasts)
       setStats(statsRes.data)
       setUsers(usersRes.data.users)
+      setSermons(sermonsRes.data.sermons)
+      setMusicTracks(musicRes.data.music || [])
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err)
     } finally {
@@ -58,15 +103,42 @@ export default function AdminDashboard() {
     }
   }
 
-  async function updateUserRole(userId: string, newRole: string) {
+  async function fetchChat() {
     try {
-      await axios.put(`/api/auth/users/${userId}/role`, { role: newRole })
-      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole as any } : u))
+      // Fetch messages from all broadcasts - simplified approach
+      const res = await axios.get('/api/broadcasts')
+      const broadcasts = res.data.broadcasts as Broadcast[]
+      const allMessages: ChatMessage[] = []
+      for (const b of broadcasts.slice(0, 5)) {
+        try {
+          const msgRes = await axios.get(`/api/chat/${b.id}`)
+          allMessages.push(...msgRes.data.messages)
+        } catch {}
+      }
+      // Also get messages without broadcast_id (general chat)
+      try {
+        const general = await axios.get('/api/chat/general')
+        allMessages.push(...general.data.messages)
+      } catch {}
+      setChatMessages(allMessages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
     } catch (err) {
-      console.error('Failed to update user role:', err)
+      console.error('Failed to fetch chat:', err)
     }
   }
 
+  useEffect(() => {
+    if (activeTab === 'chat') fetchChat()
+  }, [activeTab])
+
+  async function updateUserRole(userId: string, newRole: string) {
+    const token = localStorage.getItem('token')
+    try {
+      await axios.patch(`/api/auth/users/${userId}/role`, { role: newRole }, { headers: { Authorization: `Bearer ${token}` } })
+      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u))
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update role')
+    }
+  }
 
   if (!user || user.role !== 'admin') return null
 
@@ -77,20 +149,14 @@ export default function AdminDashboard() {
       <div className="max-w-5xl mx-auto px-6">
         {/* Header */}
         <div className="text-center mb-10">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: 'var(--gold)' }}
-          >
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--gold)' }}>
             <LayoutDashboard className="w-8 h-8" style={{ color: '#1b1208' }} />
           </div>
-          <h1
-            className="text-3xl font-bold"
-            style={{ fontFamily: 'Cormorant Garamond, Georgia, serif' }}
-          >
+          <h1 className="text-3xl font-bold" style={{ fontFamily: 'Cormorant Garamond, Georgia, serif' }}>
             Admin Dashboard
           </h1>
           <p className="mt-2" style={{ color: 'var(--dim)' }}>
-            Manage broadcasts and monitor platform activity
+            Manage broadcasts, users, sermons, chat, and settings
           </p>
         </div>
 
@@ -124,88 +190,44 @@ export default function AdminDashboard() {
                 <Headphones className="w-6 h-6" style={{ color: 'var(--dim)' }} />
               </div>
               <div>
-                <p className="text-sm" style={{ color: 'var(--dim)' }}>Ended</p>
-                <p className="text-3xl font-bold">{stats.ended}</p>
+                <p className="text-sm" style={{ color: 'var(--dim)' }}>Sermons</p>
+                <p className="text-3xl font-bold">{sermons.length}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-2 mb-6">
-          <button
-            onClick={() => setActiveTab('broadcasts')}
-            className={tabBase}
-            style={activeTab === 'broadcasts' ? { background: 'var(--gold)', color: '#1b1208' } : { color: 'var(--dim)' }}
-            onMouseEnter={e => activeTab !== 'broadcasts' && (e.currentTarget.style.color = 'var(--parchment)')}
-            onMouseLeave={e => activeTab !== 'broadcasts' && (e.currentTarget.style.color = 'var(--dim)')}
-          >
-            <Radio className="w-4 h-4" />
-            Broadcasts
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={tabBase}
-            style={activeTab === 'users' ? { background: 'var(--gold)', color: '#1b1208' } : { color: 'var(--dim)' }}
-            onMouseEnter={e => activeTab !== 'users' && (e.currentTarget.style.color = 'var(--parchment)')}
-            onMouseLeave={e => activeTab !== 'users' && (e.currentTarget.style.color = 'var(--dim)')}
-          >
-            <Users className="w-4 h-4" />
-            Users ({users.length})
-          </button>
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {[
+            { key: 'broadcasts' as Tab, label: 'Broadcasts', icon: Radio },
+            { key: 'users' as Tab, label: 'Users', icon: Users },
+            { key: 'sermons' as Tab, label: 'Sermons', icon: Headphones },
+            { key: 'music' as Tab, label: 'Music', icon: Music },
+            { key: 'chat' as Tab, label: 'Chat', icon: MessageSquare },
+            { key: 'settings' as Tab, label: 'Settings', icon: Settings },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={tabBase}
+              style={activeTab === tab.key ? { background: 'var(--gold)', color: '#1b1208' } : { color: 'var(--dim)' }}
+              onMouseEnter={e => activeTab !== tab.key && (e.currentTarget.style.color = 'var(--parchment)')}
+              onMouseLeave={e => activeTab !== tab.key && (e.currentTarget.style.color = 'var(--dim)')}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Content */}
-        {activeTab === 'broadcasts' ? (
-          <div className="overflow-hidden rounded-2xl" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
-            <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--line)', background: 'rgba(243,238,228,0.03)' }}>
-              <h2 className="font-semibold">Recent Broadcasts</h2>
-            </div>
-            {loading ? (
-              <div className="p-12 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto" style={{ borderColor: 'var(--gold)' }} />
-                <p className="mt-4 text-sm" style={{ color: 'var(--dim)' }}>Loading broadcasts...</p>
-              </div>
-            ) : broadcasts.length === 0 ? (
-              <div className="p-12 text-center">
-                <Radio className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--line)' }} />
-                <p style={{ color: 'var(--dim)' }}>No broadcasts yet</p>
-              </div>
-            ) : (
-              <div>
-                {broadcasts.map(b => (
-                  <div
-                    key={b.id}
-                    className="px-6 py-4 flex items-center justify-between transition-colors"
-                    style={{ borderBottom: '1px solid var(--line)' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(243,238,228,0.03)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <div>
-                      <p className="font-medium">{b.title}</p>
-                      <p className="text-sm mt-0.5" style={{ color: 'var(--dim)' }}>
-                        {b.started_at ? new Date(b.started_at).toLocaleString() : 'Scheduled'}
-                      </p>
-                    </div>
-                    <span
-                      className="text-xs px-3 py-1 rounded-full font-medium"
-                      style={
-                        b.status === 'live'
-                          ? { background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }
-                          : b.status === 'ended'
-                            ? { background: 'rgba(243,238,228,0.06)', color: 'var(--dim)' }
-                            : { background: 'rgba(234,179,8,0.12)', color: '#eab308' }
-                      }
-                    >
-                      {b.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+        {activeTab === 'broadcasts' && (
+          <BroadcastManager broadcasts={broadcasts} onRefresh={fetchData} />
+        )}
+
+        {activeTab === 'users' && (
+          <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
             <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--line)', background: 'rgba(243,238,228,0.03)' }}>
               <h2 className="font-semibold">User Management</h2>
             </div>
@@ -220,12 +242,11 @@ export default function AdminDashboard() {
                 <p style={{ color: 'var(--dim)' }}>No users yet</p>
               </div>
             ) : (
-              <div>
+              <div className="divide-y" style={{ borderColor: 'var(--line)' }}>
                 {users.map(u => (
                   <div
                     key={u.id}
                     className="px-6 py-4 flex items-center justify-between transition-colors"
-                    style={{ borderBottom: '1px solid var(--line)' }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(243,238,228,0.03)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
@@ -235,13 +256,9 @@ export default function AdminDashboard() {
                     </div>
                     <select
                       value={u.role}
-                      onChange={(e) => updateUserRole(u.id, e.target.value)}
+                      onChange={e => updateUserRole(u.id, e.target.value)}
                       className="text-sm rounded-lg px-3 py-1.5 border"
-                      style={{
-                        background: 'var(--ink)',
-                        borderColor: 'var(--line)',
-                        color: 'var(--parchment)'
-                      }}
+                      style={{ background: 'var(--ink)', borderColor: 'var(--line)', color: 'var(--parchment)' }}
                     >
                       <option value="listener" style={{ background: 'var(--ink-2)' }}>Listener</option>
                       <option value="broadcaster" style={{ background: 'var(--ink-2)' }}>Broadcaster</option>
@@ -252,6 +269,22 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'sermons' && (
+          <SermonManager sermons={sermons} onRefresh={fetchData} />
+        )}
+
+        {activeTab === 'chat' && (
+          <ChatSupervisor messages={chatMessages} onRefresh={fetchChat} />
+        )}
+
+        {activeTab === 'settings' && (
+          <AdminSettings />
+        )}
+
+        {activeTab === 'music' && (
+          <MusicManager music={musicTracks} onRefresh={fetchData} />
         )}
       </div>
     </div>

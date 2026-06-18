@@ -4,6 +4,16 @@ import { neon } from '@neondatabase/serverless'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
+import multer from 'multer'
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/flac', 'audio/webm']
+    cb(null, allowed.includes(file.mimetype))
+  }
+})
 
 // ── Express setup ──────────────────────────────────────────────
 const app = express()
@@ -57,6 +67,11 @@ async function initDb() {
   await dbQuery(`CREATE TABLE IF NOT EXISTS schedule (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, day_of_week INTEGER NOT NULL,
     time TEXT NOT NULL, type TEXT DEFAULT 'service', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS music (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT, album TEXT, genre TEXT,
+    audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
+    file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
 
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
@@ -145,6 +160,21 @@ app.patch('/auth/users/:id/role', auth, requireRole('admin'), async (req, res) =
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
+app.post('/auth/change-password', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { currentPassword, newPassword } = req.body
+    if (!currentPassword || !newPassword) { res.status(400).json({ error: 'Missing passwords' }); return }
+    const user = await dbGet('SELECT * FROM users WHERE id=$1', [req.user.id])
+    if (!user || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+      res.status(401).json({ error: 'Current password incorrect' }); return
+    }
+    const hash = await bcrypt.hash(newPassword, 10)
+    await dbQuery('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, req.user.id])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
 // ── Broadcast routes ─────────────────────────────────────────
 app.get('/broadcasts', async (_req, res) => {
   try { await initDb(); const rows = await dbQuery('SELECT * FROM broadcasts ORDER BY created_at DESC'); res.json({ broadcasts: rows }) }
@@ -166,8 +196,8 @@ app.post('/broadcasts', auth, requireRole('admin'), async (req: AuthReq, res) =>
     await initDb()
     const { title, description, scripture_reference } = req.body
     const id = uuidv4()
-    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id])
+    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null])
     res.status(201).json({ id, title, status: 'scheduled' })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -176,6 +206,14 @@ app.patch('/broadcasts/:id/end', auth, requireRole('admin'), async (req, res) =>
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1", [req.params.id])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/broadcasts/:id/start', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1", [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -243,6 +281,56 @@ app.post('/chat/:broadcastId', auth, async (req: AuthReq, res) => {
     await dbQuery(`INSERT INTO chat_messages (id, broadcast_id, user_id, user_name, message) VALUES ($1,$2,$3,$4,$5)`,
       [id, req.params.broadcastId, req.user.id, req.user.email, message])
     res.status(201).json({ id, message })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/chat/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM chat_messages WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Music routes ─────────────────────────────────────────────
+app.get('/music', async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size, created_at FROM music ORDER BY created_at DESC')
+    res.json({ music: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/music', auth, requireRole('admin'), upload.single('audio'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { title, artist, album, genre, cover_url, duration, lyrics } = req.body
+    if (!title) { res.status(400).json({ error: 'Title required' }); return }
+
+    let audio_url = req.body.audio_url || ''
+    let file_format = req.body.file_format || ''
+    let file_size = 0
+
+    if (req.file) {
+      file_format = req.file.mimetype
+      file_size = req.file.size
+      const base64 = req.file.buffer.toString('base64')
+      audio_url = `data:${req.file.mimetype};base64,${base64}`
+    }
+    if (!audio_url) { res.status(400).json({ error: 'Audio file or URL required' }); return }
+
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO music (id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, title, artist || '', album || '', genre || '', audio_url, cover_url || '', parseInt(duration) || 0, lyrics || '', file_format, file_size])
+    res.status(201).json({ id, title })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/music/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM music WHERE id=$1', [req.params.id])
+    res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 

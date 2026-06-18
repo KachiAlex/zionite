@@ -196,7 +196,7 @@ export default function Home() {
       
       // If there's a live broadcast, fetch chat and stats
       if (broadcastRes.data.broadcast?.id) {
-        const chatRes = await axios.get(`/api/chat/broadcast/${broadcastRes.data.broadcast.id}`).catch(() => ({ data: { messages: [] } }))
+        const chatRes = await axios.get(`/api/chat/${broadcastRes.data.broadcast.id}`).catch(() => ({ data: { messages: [] } }))
         setChatMessages(chatRes.data.messages || [])
         setStats({
           listening: chatRes.data.messages?.length || 0,

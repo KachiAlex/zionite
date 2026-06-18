@@ -8,6 +8,7 @@ import Archive from './pages/Archive'
 import AdminDashboard from './pages/AdminDashboard'
 import Status from './pages/Status'
 import Live from './pages/Live'
+import Music from './pages/Music'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
             <Route path="/status" element={<Status />} />
             <Route path="/live" element={<Live />} />
             <Route path="/live/:broadcastId" element={<Live />} />
+            <Route path="/music" element={<Music />} />
           </Routes>
         </Layout>
       </BrowserRouter>

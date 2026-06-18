@@ -36,7 +36,7 @@ export default function Broadcast() {
         scripture_reference: scripture,
         church_online_url: churchOnlineUrl || undefined,
       })
-      setBroadcastId(data.broadcast.id)
+      setBroadcastId(data.id)
       setIsLive(true)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to start broadcast')
@@ -46,7 +46,7 @@ export default function Broadcast() {
   async function stopBroadcast() {
     if (broadcastId) {
       try {
-        await axios.post(`/api/broadcasts/${broadcastId}/end`)
+        await axios.patch(`/api/broadcasts/${broadcastId}/end`)
       } catch {
         // ignore
       }
