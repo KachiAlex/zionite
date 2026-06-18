@@ -8,11 +8,13 @@ dotenv.config()
 const rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_n9ep6PLNzBIS@ep-wandering-block-ahfs3q45-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require'
 const connectionString = rawUrl.replace('-pooler.', '.').replace(/\?.*$/, '')
 
-type NeonQueryFn = (query: string, params?: any[]) => Promise<{ rows: any[]; rowCount: number | null }>
+type SqlQuery = {
+  query: (sql: string, params?: any[]) => Promise<{ rows: any[]; rowCount: number | null }>
+}
 
 // neon() uses HTTP fetch — no WebSockets, no TCP pooling issues
-// Cast to callable function: runtime supports this, types are for tagged templates
-const sql = neon(connectionString, { fullResults: true }) as unknown as NeonQueryFn
+// Use .query() for conventional function calls with $1, $2 placeholders
+const sql = neon(connectionString, { fullResults: true }) as unknown as SqlQuery
 
 export interface DbClient {
   query(sqlStr: string, params?: any[]): Promise<{ rows: any[]; rowCount: number | null }>
@@ -24,18 +26,18 @@ export interface DbClient {
 // Serverless-safe db helper using neon HTTP API
 export const db: DbClient = {
   async query(sqlStr: string, params?: any[]) {
-    return sql(sqlStr, params)
+    return sql.query(sqlStr, params)
   },
   async get<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
-    const result = await sql(sqlStr, params)
+    const result = await sql.query(sqlStr, params)
     return result.rows[0] as T | undefined
   },
   async all<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
-    const result = await sql(sqlStr, params)
+    const result = await sql.query(sqlStr, params)
     return result.rows as T[]
   },
   async run(sqlStr: string, params?: any[]) {
-    const result = await sql(sqlStr, params)
+    const result = await sql.query(sqlStr, params)
     return { lastID: 0, changes: result.rowCount || 0 }
   }
 }
