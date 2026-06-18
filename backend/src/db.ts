@@ -8,11 +8,18 @@ dotenv.config()
 // Strip accidental 'psql ' prefix some clients copy
 const rawDbUrl = process.env.DATABASE_URL?.trim()
 const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl
+
+console.log('[DB] NODE_ENV:', process.env.NODE_ENV)
+console.log('[DB] VERCEL:', process.env.VERCEL || 'undefined')
+console.log('[DB] DATABASE_URL present:', !!process.env.DATABASE_URL)
+console.log('[DB] dbUrl present:', !!dbUrl)
 // Log the URL format (mask credentials)
 try {
   const u = new URL(dbUrl || '')
-  console.log(`DB host from env: ${u.hostname}, protocol: ${u.protocol}`)
-} catch { /* ignore */ }
+  console.log(`[DB] host: ${u.hostname}, protocol: ${u.protocol}, pathname: ${u.pathname}`)
+} catch (e: any) {
+  console.error('[DB] Failed to parse DATABASE_URL:', e.message)
+}
 const pool = createPool({ connectionString: dbUrl })
 
 export interface DbClient {
@@ -97,20 +104,20 @@ export async function initDb() {
 }
 
 async function _initDbInternal() {
-  console.log('DB init starting...')
+  console.log('[DB] init starting...')
   try {
-    console.log('Testing DB connection...')
+    console.log('[DB] testing connection with SELECT 1...')
     await db.query('SELECT 1 as test')
-    console.log('DB connection OK')
+    console.log('[DB] connection OK')
   } catch (e: any) {
-    console.error('DB connection test failed:', e.message)
+    console.error('[DB] connection test failed:', e.message)
     throw e
   }
 
   for (let i = 0; i < SCHEMA_QUERIES.length; i++) {
     await db.query(SCHEMA_QUERIES[i])
   }
-  console.log('DB schema OK')
+  console.log('[DB] schema OK')
 
   const existingSchedule = await db.get('SELECT * FROM schedule LIMIT 1')
   if (!existingSchedule) {
@@ -120,7 +127,7 @@ async function _initDbInternal() {
       ($2, 'Midweek Study', 3, '19:00', 'study'),
       ($3, 'Prayer Meeting', 5, '18:00', 'prayer')
     `, [uuidv4(), uuidv4(), uuidv4()])
-    console.log('DB schedule seeded')
+    console.log('[DB] schedule seeded')
   }
 
   const admin = await db.get('SELECT * FROM users WHERE role = $1', ['admin'])
@@ -131,11 +138,11 @@ async function _initDbInternal() {
       `INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)`,
       ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'admin']
     )
-    console.log('DB admin seeded')
+    console.log('[DB] admin seeded')
   } else if (admin.email === 'admin@zionitefm.com') {
     await db.run(`UPDATE users SET email = $1 WHERE id = $2`, ['admin@zionite.online', admin.id])
-    console.log('DB admin email updated')
+    console.log('[DB] admin email updated')
   }
-  console.log('DB init complete')
+  console.log('[DB] init complete')
   _dbInitDone = true
 }

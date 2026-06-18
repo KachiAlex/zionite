@@ -49,13 +49,19 @@ const prayer_1 = __importDefault(require("./routes/prayer"));
 const schedule_1 = __importDefault(require("./routes/schedule"));
 const app = (0, express_1.default)();
 // Vercel rewrites /api/* to this function; strip /api so routes match
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
+    const originalUrl = req.url;
+    const originalPath = req.path;
     if (req.url.startsWith('/api/')) {
         req.url = req.url.slice(4);
     }
     else if (req.url === '/api') {
         req.url = '/';
     }
+    console.log(`[REQ] ${req.method} original=${originalUrl} path=${originalPath} stripped=${req.url}`);
+    res.on('finish', () => {
+        console.log(`[RES] ${req.method} ${req.url} → ${res.statusCode}`);
+    });
     next();
 });
 app.use((0, cors_1.default)());
@@ -69,6 +75,22 @@ app.use('/status', status_1.default);
 app.use('/chat', chat_1.default);
 app.use('/prayer', prayer_1.default);
 app.use('/schedule', schedule_1.default);
+// Debug endpoint (no auth needed)
+app.get('/debug', (_req, res) => {
+    const router = app._router;
+    res.json({
+        env: {
+            nodeEnv: process.env.NODE_ENV,
+            vercel: process.env.VERCEL,
+            dbUrlPresent: !!process.env.DATABASE_URL,
+        },
+        routes: router?.stack?.map((layer) => ({
+            route: layer.route?.path,
+            name: layer.name,
+        })) || 'unavailable',
+        time: new Date().toISOString(),
+    });
+});
 // Health check
 app.get('/', (_req, res) => {
     res.json({ status: 'API is running' });

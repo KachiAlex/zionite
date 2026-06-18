@@ -22,7 +22,9 @@ export default function Login() {
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const payload = isRegister ? { email, password, name } : { email, password }
-      const { data } = await axios.post(endpoint, payload, { timeout: 10000 })
+      console.log('[AUTH] calling', endpoint, 'with', JSON.stringify(Object.keys(payload)))
+      const { data } = await axios.post(endpoint, payload, { timeout: 15000 })
+      console.log('[AUTH] success, role:', data.user?.role)
       login(data.token, data.user)
 
       switch (data.user.role) {
@@ -38,9 +40,14 @@ export default function Login() {
           break
       }
     } catch (err: any) {
+      console.error('[AUTH] raw error:', err)
+      console.error('[AUTH] err.message:', err.message)
+      console.error('[AUTH] err.code:', err.code)
+      console.error('[AUTH] err.response:', err.response)
+      console.error('[AUTH] err.request:', err.request ? 'request exists (no response)' : 'no request')
       const msg = err.response?.data?.error
-      const errorStr = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg) || 'Something went wrong')
-      console.error('Login failed:', err.response?.status, err.response?.data)
+      const errorStr = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg) || (err.message || 'Something went wrong'))
+      console.error('[AUTH] derived errorStr:', errorStr)
       setError(errorStr)
     } finally {
       setLoading(false)

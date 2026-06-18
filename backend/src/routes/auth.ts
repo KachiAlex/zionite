@@ -8,18 +8,23 @@ import { JWT_SECRET, authenticateToken, AuthRequest, requireRole } from '../midd
 const router = Router()
 
 router.post('/register', async (req, res) => {
+  console.log('[AUTH] /register hit, body keys:', Object.keys(req.body))
   try {
+    console.log('[AUTH] /register initDb start')
     await Promise.race([
       initDb(),
       new Promise<void>((_, reject) =>
         setTimeout(() => reject(new Error('Database initialization timed out')), 15000)
       )
     ])
+    console.log('[AUTH] /register initDb done')
   } catch (err: any) {
+    console.error('[AUTH] /register initDb failed:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Database unavailable' })
     return
   }
   const { email, password, name } = req.body
+  console.log('[AUTH] /register body email present:', !!email, 'password present:', !!password, 'name present:', !!name)
   if (!email || !password || !name) {
     res.status(400).json({ error: 'Email, password, and name are required' })
     return
@@ -44,38 +49,48 @@ router.post('/register', async (req, res) => {
 })
 
 router.post('/login', async (req, res) => {
+  console.log('[AUTH] /login hit, body keys:', Object.keys(req.body))
   try {
     // Time-out DB init to avoid Vercel cold-start hangs
+    console.log('[AUTH] /login initDb start')
     await Promise.race([
       initDb(),
       new Promise<void>((_, reject) =>
         setTimeout(() => reject(new Error('Database initialization timed out')), 15000)
       )
     ])
+    console.log('[AUTH] /login initDb done')
     const { email, password } = req.body
+    console.log('[AUTH] /login body email present:', !!email, 'password present:', !!password)
     if (!email || !password) {
       res.status(400).json({ error: 'Email and password are required' })
       return
     }
 
     const db = await getDb()
+    console.log('[AUTH] /login querying user for:', email)
     const user = await db.get('SELECT * FROM users WHERE email = $1', [email])
+    console.log('[AUTH] /login user found:', !!user)
     if (!user) {
       res.status(401).json({ error: 'Invalid credentials' })
       return
     }
 
+    console.log('[AUTH] /login comparing password')
     const valid = await bcrypt.compare(password, user.password_hash)
+    console.log('[AUTH] /login password valid:', valid)
     if (!valid) {
       res.status(401).json({ error: 'Invalid credentials' })
       return
     }
 
+    console.log('[AUTH] /login signing JWT')
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
+    console.log('[AUTH] /login success, returning token')
     res.json({
       token,
       user: {
@@ -86,7 +101,7 @@ router.post('/login', async (req, res) => {
       },
     })
   } catch (err: any) {
-    console.error('Login error:', err?.message || err)
+    console.error('[AUTH] /login catch error:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Login failed' })
   }
 })
