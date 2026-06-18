@@ -7,8 +7,12 @@ import path from 'path'
 import fs from 'fs'
 
 const uploadDir = './uploads/sermons'
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true })
+  }
+} catch {
+  // Vercel serverless has read-only filesystem; uploads won't persist
 }
 
 const storage = multer.diskStorage({

@@ -11,8 +11,13 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const uploadDir = './uploads/sermons';
-if (!fs_1.default.existsSync(uploadDir)) {
-    fs_1.default.mkdirSync(uploadDir, { recursive: true });
+try {
+    if (!fs_1.default.existsSync(uploadDir)) {
+        fs_1.default.mkdirSync(uploadDir, { recursive: true });
+    }
+}
+catch {
+    // Vercel serverless has read-only filesystem; uploads won't persist
 }
 const storage = multer_1.default.diskStorage({
     destination: (_req, _file, cb) => {
