@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
-import { db } from './db'
+import { db, dbReady } from './db'
 import authRoutes from './routes/auth'
 import broadcastRoutes from './routes/broadcasts'
 import sermonRoutes from './routes/sermons'
@@ -49,6 +49,7 @@ app.get('/debug', (_req, res) => {
       nodeEnv: process.env.NODE_ENV,
       vercel: process.env.VERCEL,
       dbUrlPresent: !!process.env.DATABASE_URL,
+      dbReady,
     },
     routes: router?.stack?.map((layer: any) => ({
       route: layer.route?.path,

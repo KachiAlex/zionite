@@ -12,6 +12,11 @@ const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 router.post('/register', async (req, res) => {
     console.log('[AUTH] /register hit, body keys:', Object.keys(req.body));
+    if (!db_1.dbReady) {
+        console.error('[AUTH] /register aborted: DATABASE_URL not configured');
+        res.status(503).json({ error: 'Database not configured. Please set DATABASE_URL in environment variables.' });
+        return;
+    }
     try {
         console.log('[AUTH] /register initDb start');
         await Promise.race([
@@ -45,6 +50,11 @@ router.post('/register', async (req, res) => {
 });
 router.post('/login', async (req, res) => {
     console.log('[AUTH] /login hit, body keys:', Object.keys(req.body));
+    if (!db_1.dbReady) {
+        console.error('[AUTH] /login aborted: DATABASE_URL not configured');
+        res.status(503).json({ error: 'Database not configured. Please set DATABASE_URL in environment variables.' });
+        return;
+    }
     try {
         // Time-out DB init to avoid Vercel cold-start hangs
         console.log('[AUTH] /login initDb start');

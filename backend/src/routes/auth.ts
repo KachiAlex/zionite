@@ -2,13 +2,18 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
-import { getDb, initDb } from '../db'
+import { getDb, initDb, dbReady } from '../db'
 import { JWT_SECRET, authenticateToken, AuthRequest, requireRole } from '../middleware/auth'
 
 const router = Router()
 
 router.post('/register', async (req, res) => {
   console.log('[AUTH] /register hit, body keys:', Object.keys(req.body))
+  if (!dbReady) {
+    console.error('[AUTH] /register aborted: DATABASE_URL not configured')
+    res.status(503).json({ error: 'Database not configured. Please set DATABASE_URL in environment variables.' })
+    return
+  }
   try {
     console.log('[AUTH] /register initDb start')
     await Promise.race([
@@ -50,6 +55,11 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   console.log('[AUTH] /login hit, body keys:', Object.keys(req.body))
+  if (!dbReady) {
+    console.error('[AUTH] /login aborted: DATABASE_URL not configured')
+    res.status(503).json({ error: 'Database not configured. Please set DATABASE_URL in environment variables.' })
+    return
+  }
   try {
     // Time-out DB init to avoid Vercel cold-start hangs
     console.log('[AUTH] /login initDb start')

@@ -83,6 +83,7 @@ app.get('/debug', (_req, res) => {
             nodeEnv: process.env.NODE_ENV,
             vercel: process.env.VERCEL,
             dbUrlPresent: !!process.env.DATABASE_URL,
+            dbReady: db_1.dbReady,
         },
         routes: router?.stack?.map((layer) => ({
             route: layer.route?.path,
