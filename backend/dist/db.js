@@ -44,7 +44,10 @@ const uuid_1 = require("uuid");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 // Direct endpoint for Neon's HTTP API (pooler is TCP-only)
-const rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_n9ep6PLNzBIS@ep-wandering-block-ahfs3q45-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require';
+const rawUrl = process.env.DATABASE_URL;
+if (!rawUrl) {
+    throw new Error('DATABASE_URL environment variable is required');
+}
 const connectionString = rawUrl.replace('-pooler.', '.').replace(/\?.*$/, '');
 // Debug: log which host we're connecting to (no credentials)
 try {

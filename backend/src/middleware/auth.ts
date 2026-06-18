@@ -1,7 +1,18 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
+const JWT_SECRET = process.env.JWT_SECRET
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET
+
+if (!JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET not set. Using fallback - INSECURE for production!')
+}
+if (!JWT_REFRESH_SECRET) {
+  console.warn('WARNING: JWT_REFRESH_SECRET not set. Using fallback - INSECURE for production!')
+}
+
+const secret = JWT_SECRET || 'fallback-jwt-secret-change-me-immediately'
+const refreshSecret = JWT_REFRESH_SECRET || 'fallback-refresh-secret-change-me-immediately'
 
 export interface AuthRequest extends Request {
   user?: { id: string; email: string; role: string }
@@ -17,7 +28,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string }
+    const decoded = jwt.verify(token, secret) as { id: string; email: string; role: string }
     req.user = decoded
     next()
   } catch {
@@ -35,4 +46,4 @@ export function requireRole(...roles: string[]) {
   }
 }
 
-export { JWT_SECRET }
+export { secret as JWT_SECRET, refreshSecret as JWT_REFRESH_SECRET }
