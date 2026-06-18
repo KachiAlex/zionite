@@ -1,4 +1,4 @@
-import { createPool, sql } from '@vercel/postgres'
+import { neon } from '@neondatabase/serverless'
 import { v4 as uuidv4 } from 'uuid'
 import dotenv from 'dotenv'
 
@@ -13,23 +13,23 @@ console.log('[DB] DATABASE_URL present:', !!process.env.DATABASE_URL)
 console.log('[DB] dbUrl present:', !!dbUrl)
 
 export let dbReady = !!dbUrl
-let _poolInitError: string | null = null
-let _pool: ReturnType<typeof createPool> | null = null
+let _sqlInitError: string | null = null
+let _sql: ReturnType<typeof neon> | null = null
 
-function getPool(): ReturnType<typeof createPool> {
-  if (_pool) return _pool
+function getSql(): ReturnType<typeof neon> {
+  if (_sql) return _sql
   if (!dbReady) throw new Error('DATABASE_URL not configured')
   try {
     const u = new URL(dbUrl!)
     console.log(`[DB] host: ${u.hostname}, protocol: ${u.protocol}, pathname: ${u.pathname}`)
-    _pool = createPool()
-    console.log('[DB] pool created OK')
-    return _pool
+    _sql = neon(dbUrl!)
+    console.log('[DB] neon client created OK')
+    return _sql
   } catch (e: any) {
-    console.error('[DB] Failed to create pool:', e?.message || e)
-    _poolInitError = e?.message || String(e)
+    console.error('[DB] Failed to create neon client:', e?.message || e)
+    _sqlInitError = e?.message || String(e)
     dbReady = false
-    throw new Error('Failed to create database pool: ' + _poolInitError)
+    throw new Error('Failed to create database client: ' + _sqlInitError)
   }
 }
 
@@ -43,23 +43,23 @@ export interface DbClient {
 export const db: DbClient = {
   async query(sqlStr: string, params?: any[]) {
     if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const result = await getPool().query(sqlStr, params)
-    return { rows: result.rows as any[], rowCount: result.rowCount }
+    const rows = await getSql().query(sqlStr, params)
+    return { rows: rows as any[], rowCount: (rows as any[]).length }
   },
   async get<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
     if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const result = await getPool().query(sqlStr, params)
-    return result.rows[0] as T | undefined
+    const rows = await getSql().query(sqlStr, params)
+    return (rows as unknown as T[])[0] as T | undefined
   },
   async all<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
     if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const result = await getPool().query(sqlStr, params)
-    return result.rows as T[]
+    const rows = await getSql().query(sqlStr, params)
+    return rows as T[]
   },
   async run(sqlStr: string, params?: any[]) {
     if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const result = await getPool().query(sqlStr, params)
-    return { lastID: 0, changes: result.rowCount || 0 }
+    const rows = await getSql().query(sqlStr, params)
+    return { lastID: 0, changes: (rows as any[]).length }
   }
 }
 
