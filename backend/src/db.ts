@@ -5,7 +5,15 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 // @vercel/postgres reads DATABASE_URL automatically from env vars
-const pool = createPool({ connectionString: process.env.DATABASE_URL })
+// Strip accidental 'psql ' prefix some clients copy
+const rawDbUrl = process.env.DATABASE_URL?.trim()
+const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl
+// Log the URL format (mask credentials)
+try {
+  const u = new URL(dbUrl || '')
+  console.log(`DB host from env: ${u.hostname}, protocol: ${u.protocol}`)
+} catch { /* ignore */ }
+const pool = createPool({ connectionString: dbUrl })
 
 export interface DbClient {
   query(sqlStr: string, params?: any[]): Promise<{ rows: any[]; rowCount: number | null }>

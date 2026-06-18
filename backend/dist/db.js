@@ -44,7 +44,16 @@ const uuid_1 = require("uuid");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 // @vercel/postgres reads DATABASE_URL automatically from env vars
-const pool = (0, postgres_1.createPool)({ connectionString: process.env.DATABASE_URL });
+// Strip accidental 'psql ' prefix some clients copy
+const rawDbUrl = process.env.DATABASE_URL?.trim();
+const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl;
+// Log the URL format (mask credentials)
+try {
+    const u = new URL(dbUrl || '');
+    console.log(`DB host from env: ${u.hostname}, protocol: ${u.protocol}`);
+}
+catch { /* ignore */ }
+const pool = (0, postgres_1.createPool)({ connectionString: dbUrl });
 exports.db = {
     async query(sqlStr, params) {
         const result = await pool.query(sqlStr, params);
