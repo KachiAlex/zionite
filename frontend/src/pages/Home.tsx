@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useSocket } from '../hooks/useSocket'
 import { 
   Radio, Play, Pause, Volume2, VolumeX, Headphones, Mic, BookOpen, 
-  Wifi, Shield, Heart, Globe, Clock, Users, ArrowRight, CheckCircle2 
+  Wifi, Shield, Heart, Globe, Clock, ArrowRight, CheckCircle2 
 } from 'lucide-react'
 
 interface Broadcast {
