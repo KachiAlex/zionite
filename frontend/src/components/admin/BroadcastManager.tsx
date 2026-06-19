@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { Radio, Play, Square, Plus, Loader2 } from 'lucide-react'
+import { Radio, Play, Square, Plus, Loader2, Monitor } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 interface Broadcast {
   id: string
@@ -140,14 +141,23 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                     </button>
                   )}
                   {b.status === 'live' && (
-                    <button
-                      onClick={() => endBroadcast(b.id)}
-                      disabled={!!actionLoading}
-                      className="p-1.5 rounded-lg hover:bg-red-900/30 transition-colors"
-                      title="End Broadcast"
-                    >
-                      <Square className="w-4 h-4 text-red-400" />
-                    </button>
+                    <>
+                      <Link
+                        to="/broadcast"
+                        className="p-1.5 rounded-lg hover:bg-green-900/30 transition-colors flex items-center"
+                        title="Open Studio"
+                      >
+                        <Monitor className="w-4 h-4 text-green-400" />
+                      </Link>
+                      <button
+                        onClick={() => endBroadcast(b.id)}
+                        disabled={!!actionLoading}
+                        className="p-1.5 rounded-lg hover:bg-red-900/30 transition-colors"
+                        title="End Broadcast"
+                      >
+                        <Square className="w-4 h-4 text-red-400" />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

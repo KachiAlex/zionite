@@ -29,36 +29,74 @@ const CHURCH_ONLINE_ID = 'zionitefm'
 function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [bufferedChunks, setBufferedChunks] = useState(0)
+  const [latestChunk, setLatestChunk] = useState(-1)
   const mseRef = useRef<MediaSource | null>(null)
   const sourceBufferRef = useRef<SourceBuffer | null>(null)
   const nextChunkRef = useRef(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const queueRef = useRef<ArrayBuffer[]>([])
+
+  // Query stream info and set starting point
+  useEffect(() => {
+    async function init() {
+      try {
+        const res = await fetch(`/api/stream/${broadcastId}/info`)
+        if (res.ok) {
+          const data = await res.json()
+          const startFrom = Math.max(0, (data.latestChunk ?? -1) - 2)
+          nextChunkRef.current = startFrom
+          setLatestChunk(data.latestChunk ?? -1)
+        }
+      } catch {}
+    }
+    init()
+  }, [broadcastId])
 
   useEffect(() => {
-    if (!window.MediaSource) return
+    if (!window.MediaSource || latestChunk < 0) return
     const ms = new MediaSource()
     mseRef.current = ms
     if (audioRef.current) {
       audioRef.current.src = URL.createObjectURL(ms)
     }
 
+    function appendNext() {
+      const sb = sourceBufferRef.current
+      if (!sb || sb.updating || queueRef.current.length === 0) return
+      try {
+        sb.appendBuffer(queueRef.current.shift()!)
+      } catch {
+        // MSE error, skip this chunk
+        queueRef.current.shift()
+      }
+    }
+
     ms.addEventListener('sourceopen', () => {
       const sb = ms.addSourceBuffer('audio/webm;codecs=opus')
       sourceBufferRef.current = sb
       sb.mode = 'sequence'
+      sb.addEventListener('updateend', appendNext)
 
       // Fetch chunks periodically
+      let consecutive404s = 0
       intervalRef.current = setInterval(async () => {
         try {
           const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextChunkRef.current}`)
           if (res.ok) {
+            consecutive404s = 0
             const buf = await res.arrayBuffer()
             if (buf.byteLength > 0) {
-              if (!sb.updating) {
-                sb.appendBuffer(buf)
-                nextChunkRef.current++
-                setBufferedChunks(c => c + 1)
-              }
+              queueRef.current.push(buf)
+              setBufferedChunks(c => c + 1)
+              appendNext()
+            }
+            nextChunkRef.current++
+          } else if (res.status === 404) {
+            consecutive404s++
+            // Skip missing chunks after 2 consecutive 404s to avoid stalling
+            if (consecutive404s >= 2) {
+              nextChunkRef.current++
+              consecutive404s = 0
             }
           }
         } catch {}
@@ -71,8 +109,9 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
         try { ms.removeSourceBuffer(sourceBufferRef.current) } catch {}
       }
       if (ms.readyState === 'open') { try { ms.endOfStream() } catch {} }
+      queueRef.current = []
     }
-  }, [broadcastId])
+  }, [broadcastId, latestChunk])
 
   return (
     <div className="mx-4 mt-4 rounded-xl p-4" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>

@@ -88,6 +88,7 @@ export default function RadioStudio({
   const [listenerCount, setListenerCount] = useState(0)
   const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
   const [uploadError, setUploadError] = useState('')
+  const [micStream, setMicStream] = useState<MediaStream | null>(null)
 
   const isLive = status === 'live'
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -107,6 +108,7 @@ export default function RadioStudio({
         audio: selectedDevice ? { deviceId: { exact: selectedDevice } } : true
       })
       streamRef.current = stream
+      setMicStream(stream)
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus' : 'audio/webm'
       const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 })
@@ -154,6 +156,7 @@ export default function RadioStudio({
       mediaRecorderRef.current.stop()
     }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    setMicStream(null)
     if (statsIntervalRef.current) { clearInterval(statsIntervalRef.current); statsIntervalRef.current = null }
     mediaRecorderRef.current = null
     chunkTimesRef.current = []
@@ -254,13 +257,13 @@ export default function RadioStudio({
             <label className="block text-xs font-medium mb-2" style={{ color: 'var(--dim)' }}>
               <Activity className="w-3.5 h-3.5 inline mr-1" /> VU Meter
             </label>
-            <VUMeter active={isLive && !micMuted} deviceId={selectedDevice} />
+            <VUMeter active={isLive && !micMuted} deviceId={selectedDevice} stream={micStream || undefined} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-2" style={{ color: 'var(--dim)' }}>
               <Activity className="w-3.5 h-3.5 inline mr-1" /> Waveform
             </label>
-            <AudioWaveVisualizer active={isLive && !micMuted} micMuted={micMuted} />
+            <AudioWaveVisualizer active={isLive && !micMuted} micMuted={micMuted} stream={micStream || undefined} />
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export default function AudioWaveVisualizer({ active, micMuted }: { active: boolean; micMuted: boolean }) {
+export default function AudioWaveVisualizer({ active, micMuted, stream: externalStream }: { active: boolean; micMuted: boolean; stream?: MediaStream }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const dataRef = useRef<Uint8Array | null>(null)
@@ -34,10 +34,15 @@ export default function AudioWaveVisualizer({ active, micMuted }: { active: bool
     }
 
     let running = true
+    let ownStream = false
     async function init() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        if (!running) { stream.getTracks().forEach(t => t.stop()); return }
+        let stream = externalStream || null
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          ownStream = true
+        }
+        if (!running) { if (ownStream && stream) stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
         const ctx = new AudioContext()
         ctxRef.current = ctx
@@ -62,7 +67,7 @@ export default function AudioWaveVisualizer({ active, micMuted }: { active: bool
       if (!canvas || !analyser || !data) return
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      analyser.getByteFrequencyData(data)
+      ;(analyser as any).getByteFrequencyData(data)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       const barCount = 32
       const barW = (canvas.width / barCount) * 0.6
@@ -113,10 +118,10 @@ export default function AudioWaveVisualizer({ active, micMuted }: { active: bool
     return () => {
       running = false
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+      if (ownStream && streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
       if (ctxRef.current && ctxRef.current.state !== 'closed') { ctxRef.current.close(); ctxRef.current = null }
     }
-  }, [active, micMuted])
+  }, [active, micMuted, externalStream])
 
   return (
     <canvas

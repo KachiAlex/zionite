@@ -22,9 +22,6 @@ export default function AudioTestPanel({ onDeviceSelect, onTestStateChange }: Au
   const [hasAudio, setHasAudio] = useState(false)
   const [audioCheckTime, setAudioCheckTime] = useState(0)
 
-  const ctxRef = useRef<AudioContext | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const loopbackNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Enumerate devices
@@ -82,43 +79,40 @@ export default function AudioTestPanel({ onDeviceSelect, onTestStateChange }: Au
 
   // Loopback audio
   useEffect(() => {
-    if (!isTesting || !loopbackEnabled) {
-      if (loopbackNodeRef.current) { loopbackNodeRef.current = null }
-      return
-    }
+    if (!isTesting || !loopbackEnabled) return
+    let cancelled = false
+    let localStream: MediaStream | null = null
+    let localCtx: AudioContext | null = null
+    let audioEl: HTMLAudioElement | null = null
 
-    async function setupLoopback() {
+    async function setup() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: selectedDevice ? { deviceId: { exact: selectedDevice } } : true
         })
-        streamRef.current = stream
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        localStream = stream
         const ctx = new AudioContext()
-        ctxRef.current = ctx
+        localCtx = ctx
         const src = ctx.createMediaStreamSource(stream)
         const dest = ctx.createMediaStreamDestination()
         src.connect(dest)
-        loopbackNodeRef.current = dest
-
-        // Play the loopback stream
         const audio = new Audio()
         audio.srcObject = dest.stream
         audio.play().catch(() => {})
-
-        return () => {
-          audio.pause()
-          audio.srcObject = null
-        }
+        audioEl = audio
       } catch {
-        setLoopbackEnabled(false)
+        if (!cancelled) setLoopbackEnabled(false)
       }
     }
 
-    const cleanup = setupLoopback()
+    setup()
+
     return () => {
-      cleanup?.then?.(fn => fn?.())
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
-      if (ctxRef.current && ctxRef.current.state !== 'closed') { ctxRef.current.close(); ctxRef.current = null }
+      cancelled = true
+      if (audioEl) { audioEl.pause(); audioEl.srcObject = null }
+      if (localStream) { localStream.getTracks().forEach(t => t.stop()) }
+      if (localCtx && localCtx.state !== 'closed') { localCtx.close() }
     }
   }, [isTesting, loopbackEnabled, selectedDevice])
 

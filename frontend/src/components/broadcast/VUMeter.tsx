@@ -6,9 +6,10 @@ interface VUMeterProps {
   onLevelChange?: (level: number) => void
   width?: number
   height?: number
+  stream?: MediaStream
 }
 
-export default function VUMeter({ active, deviceId, onLevelChange, width = 280, height = 120 }: VUMeterProps) {
+export default function VUMeter({ active, deviceId, onLevelChange, width = 280, height = 120, stream: externalStream }: VUMeterProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const dataRef = useRef<Uint8Array | null>(null)
@@ -34,13 +35,18 @@ export default function VUMeter({ active, deviceId, onLevelChange, width = 280, 
     }
 
     let running = true
+    let ownStream = false
     async function init() {
       try {
-        const constraints: MediaStreamConstraints = {
-          audio: deviceId ? { deviceId: { exact: deviceId } } : true
+        let stream = externalStream || null
+        if (!stream) {
+          const constraints: MediaStreamConstraints = {
+            audio: deviceId ? { deviceId: { exact: deviceId } } : true
+          }
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
+          ownStream = true
         }
-        const stream = await navigator.mediaDevices.getUserMedia(constraints)
-        if (!running) { stream.getTracks().forEach(t => t.stop()); return }
+        if (!running) { if (ownStream && stream) stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
         const ctx = new AudioContext()
         ctxRef.current = ctx
@@ -94,10 +100,10 @@ export default function VUMeter({ active, deviceId, onLevelChange, width = 280, 
     return () => {
       running = false
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+      if (ownStream && streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
       if (ctxRef.current && ctxRef.current.state !== 'closed') { ctxRef.current.close(); ctxRef.current = null }
     }
-  }, [active, deviceId, onLevelChange])
+  }, [active, deviceId, onLevelChange, externalStream])
 
   return (
     <canvas

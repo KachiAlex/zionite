@@ -32,6 +32,30 @@ export default function Broadcast() {
     }
   }, [user, navigate])
 
+  // Auto-detect existing live broadcast on mount
+  useEffect(() => {
+    async function checkActiveBroadcast() {
+      try {
+        const { data } = await axios.get('/api/broadcasts/active')
+        if (data.broadcast && data.broadcast.status === 'live') {
+          const b = data.broadcast
+          setBroadcastId(b.id)
+          setTitle(b.title || '')
+          setDescription(b.description || '')
+          setScripture(b.scripture_reference || '')
+          setChurchOnlineUrl(b.church_online_url || '')
+          setRtmpUrl(b.rtmp_url || '')
+          setStreamKey(b.stream_key || '')
+          setStatus('live')
+          setStartTime(b.started_at ? new Date(b.started_at) : new Date())
+        }
+      } catch { /* no active broadcast */ }
+    }
+    if (user && (user.role === 'broadcaster' || user.role === 'admin')) {
+      checkActiveBroadcast()
+    }
+  }, [user])
+
   async function startBroadcast() {
     if (!title.trim()) { setError('Please enter a broadcast title'); return }
     setError('')
