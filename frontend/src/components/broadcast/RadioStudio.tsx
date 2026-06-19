@@ -155,9 +155,12 @@ export default function RadioStudio({
   const chunkIndexRef = useRef(0)
   const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const chunkTimesRef = useRef<number[]>([])
+  const chunkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shouldRecordRef = useRef(false)
 
   useEffect(() => {
-    if (isLive && selectedDevice) { startStreaming() } else { stopStreaming() }
+    shouldRecordRef.current = isLive && !!selectedDevice
+    if (shouldRecordRef.current) { startStreaming() } else { stopStreaming() }
     return () => stopStreaming()
   }, [isLive, selectedDevice, broadcastId])
 
@@ -168,30 +171,7 @@ export default function RadioStudio({
       })
       streamRef.current = stream
       setMicStream(stream)
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus' : 'audio/webm'
-      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 })
-
-      recorder.ondataavailable = async (e) => {
-        if (e.data.size > 0 && broadcastId) {
-          const reader = new FileReader()
-          reader.onloadend = async () => {
-            const base64 = (reader.result as string).split(',')[1]
-            chunkTimesRef.current.push(Date.now())
-            if (chunkTimesRef.current.length > 10) chunkTimesRef.current.shift()
-            try {
-              await axios.post(`/api/stream/${broadcastId}/chunk`, {
-                chunkIndex: chunkIndexRef.current++,
-                chunkData: base64
-              }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-              setUploadError('')
-            } catch { setUploadError('Upload failed - check connection') }
-          }
-          reader.readAsDataURL(e.data)
-        }
-      }
-      recorder.start(2000)
-      mediaRecorderRef.current = recorder
+      recordNextChunk()
 
       statsIntervalRef.current = setInterval(async () => {
         try {
@@ -210,7 +190,48 @@ export default function RadioStudio({
     }
   }
 
+  function recordNextChunk() {
+    if (!shouldRecordRef.current || !streamRef.current || !broadcastId) return
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm'
+    const recorder = new MediaRecorder(streamRef.current, { mimeType, audioBitsPerSecond: 128000 })
+
+    recorder.ondataavailable = async (e) => {
+      if (e.data.size > 0 && broadcastId) {
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1]
+          chunkTimesRef.current.push(Date.now())
+          if (chunkTimesRef.current.length > 10) chunkTimesRef.current.shift()
+          try {
+            await axios.post(`/api/stream/${broadcastId}/chunk`, {
+              chunkIndex: chunkIndexRef.current++,
+              chunkData: base64
+            }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+            setUploadError('')
+          } catch { setUploadError('Upload failed - check connection') }
+        }
+        reader.readAsDataURL(e.data)
+      }
+    }
+
+    recorder.onstop = () => {
+      if (shouldRecordRef.current && streamRef.current) {
+        recordNextChunk()
+      }
+    }
+
+    mediaRecorderRef.current = recorder
+    recorder.start()
+
+    chunkTimeoutRef.current = setTimeout(() => {
+      if (recorder.state !== 'inactive') recorder.stop()
+    }, 2000)
+  }
+
   function stopStreaming() {
+    shouldRecordRef.current = false
+    if (chunkTimeoutRef.current) { clearTimeout(chunkTimeoutRef.current); chunkTimeoutRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }

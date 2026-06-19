@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeft, Send, Users, Radio, BookOpen, Play } from 'lucide-react'
+import { ArrowLeft, Send, Users, Radio, BookOpen, Play, Pause, Volume2, Volume1, VolumeX } from 'lucide-react'
 
 interface Broadcast {
   id: string
@@ -25,16 +25,35 @@ interface ChatMessage {
 // Church Online Platform Church ID
 const CHURCH_ONLINE_ID = 'zionitefm'
 
+/* ── AudioBars (visualizer) ───────────────────────── */
+function AudioBars({ active }: { active: boolean }) {
+  return (
+    <div className="flex items-end gap-[3px] h-8">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="w-[3px] rounded-full transition-all duration-150"
+          style={{
+            background: active ? 'var(--gold)' : 'var(--line)',
+            height: active ? `${20 + Math.random() * 40}%` : '20%',
+            animation: active ? `barPulse 0.6s ease-in-out ${i * 0.05}s infinite alternate` : 'none'
+          }} />
+      ))}
+    </div>
+  )
+}
+
 /* ── StreamPlayer ─────────────────────────────────── */
 function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const [started, setStarted] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [bufferedCount, setBufferedCount] = useState(0)
+  const [volume, setVolume] = useState(80)
+  const [statusText, setStatusText] = useState('Waiting...')
   const audioRef = useRef<HTMLAudioElement>(null)
   const queueRef = useRef<Blob[]>([])
-  const nextFetchRef = useRef(-1) // next chunk index to fetch
+  const nextFetchRef = useRef(-1)
   const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [bufferedCount, setBufferedCount] = useState(0)
-  const [statusText, setStatusText] = useState('Waiting...')
   const playingRef = useRef(false)
+  const volRef = useRef(0.8)
 
   async function fetchChunk(index: number): Promise<Blob | null> {
     try {
@@ -46,31 +65,22 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
 
   useEffect(() => {
     if (!started) return
-
     fetchIntervalRef.current = setInterval(async () => {
       try {
-        // 1. Ask backend what exists
         const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
         if (!infoRes.ok) { setStatusText('Info error'); return }
         const info = await infoRes.json()
         const latest = info.latestChunk ?? -1
         if (latest < 0) { setStatusText('No stream'); return }
-
-        // 2. Initialise position from latest available chunk
         if (nextFetchRef.current < 0) {
           nextFetchRef.current = Math.max(0, latest - 1)
           setStatusText(`Joined at chunk ${nextFetchRef.current}`)
         }
-
-        // 3. Batch-fetch every confirmed chunk we haven't got yet
         let fetched = 0
         while (nextFetchRef.current <= latest) {
           const blob = await fetchChunk(nextFetchRef.current)
-          if (!blob) break // Not on this instance yet, wait next tick
-          if (blob.size > 0) {
-            queueRef.current.push(blob)
-            fetched++
-          }
+          if (!blob) break
+          if (blob.size > 0) { queueRef.current.push(blob); fetched++ }
           nextFetchRef.current++
         }
         if (fetched > 0) {
@@ -80,16 +90,16 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
         }
       } catch {}
     }, 2500)
-
     return () => { if (fetchIntervalRef.current) clearInterval(fetchIntervalRef.current) }
   }, [broadcastId, started])
 
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volRef.current
+  }, [])
+
   async function playNext() {
-    if (queueRef.current.length === 0) {
-      playingRef.current = false
-      return
-    }
-    playingRef.current = true
+    if (queueRef.current.length === 0) { playingRef.current = false; setIsPlaying(false); return }
+    playingRef.current = true; setIsPlaying(true)
     const blob = queueRef.current.shift()!
     const url = URL.createObjectURL(blob)
     const audio = audioRef.current
@@ -100,26 +110,71 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
     try { await audio.play() } catch { URL.revokeObjectURL(url); playNext() }
   }
 
+  function togglePlay() {
+    const audio = audioRef.current
+    if (!audio) return
+    if (audio.paused) { audio.play().catch(() => {}) }
+    else { audio.pause(); setIsPlaying(false); playingRef.current = false }
+  }
+
   function handleStart() {
     setStarted(true)
   }
 
+  const VolumeIcon = volume === 0 ? VolumeX : volume > 50 ? Volume2 : Volume1
+
   return (
-    <div className="mx-4 mt-4 rounded-xl p-4" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium flex items-center gap-2">
-          <Radio className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Audio Stream
-        </span>
-        <span className="text-xs" style={{ color: 'var(--dim)' }}>{bufferedCount} buffered · {statusText}</span>
+    <div className="mx-4 mt-4 rounded-xl p-5" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#ef4444' }} />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: '#ef4444' }} />
+          </span>
+          <span className="text-sm font-medium tracking-wide">LIVE AUDIO</span>
+        </div>
+        <span className="text-xs font-mono" style={{ color: 'var(--dim)' }}>{bufferedCount} chunks · {statusText}</span>
       </div>
+
+      {/* Main Player */}
       {!started ? (
         <button onClick={handleStart}
-          className="w-full py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+          className="w-full py-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: 'var(--gold)', color: 'var(--ink)' }}>
-          <Play className="w-4 h-4" /> Click to Listen
+          <Play className="w-5 h-5 fill-current" /> Tap to Start Listening
         </button>
       ) : (
-        <audio ref={audioRef} className="w-full" controls style={{ height: 40 }} />
+        <div className="flex items-center gap-4">
+          {/* Hidden audio element */}
+          <audio ref={audioRef} className="hidden" />
+
+          {/* Play/Pause */}
+          <button onClick={togglePlay}
+            className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
+            style={{ background: isPlaying ? 'var(--gold)' : 'var(--ink)', border: `2px solid ${isPlaying ? 'var(--gold)' : 'var(--line)'}` }}>
+            {isPlaying ? <Pause className="w-5 h-5" style={{ color: 'var(--ink)' }} /> : <Play className="w-5 h-5" style={{ color: 'var(--gold)' }} />}
+          </button>
+
+          {/* Visualizer */}
+          <div className="flex-1">
+            <AudioBars active={isPlaying} />
+          </div>
+
+          {/* Volume */}
+          <div className="flex items-center gap-2 shrink-0 w-24">
+            <VolumeIcon className="w-4 h-4" style={{ color: 'var(--dim)' }} />
+            <input type="range" min={0} max={100} value={volume}
+              onChange={e => {
+                const v = parseInt(e.target.value)
+                setVolume(v)
+                volRef.current = v / 100
+                if (audioRef.current) audioRef.current.volume = v / 100
+              }}
+              className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+              style={{ background: `linear-gradient(to right, var(--gold) ${volume}%, var(--line) ${volume}%)` }} />
+          </div>
+        </div>
       )}
     </div>
   )
