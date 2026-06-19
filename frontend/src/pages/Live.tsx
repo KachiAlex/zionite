@@ -48,12 +48,14 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const [bufferedCount, setBufferedCount] = useState(0)
   const [volume, setVolume] = useState(80)
   const [statusText, setStatusText] = useState('Waiting...')
-  const audioRef = useRef<HTMLAudioElement>(null)
   const queueRef = useRef<Blob[]>([])
   const nextFetchRef = useRef(-1)
   const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const playingRef = useRef(false)
-  const volRef = useRef(0.8)
+  const userPausedRef = useRef(false)
+  const ctxRef = useRef<AudioContext | null>(null)
+  const gainRef = useRef<GainNode | null>(null)
+  const nextStartRef = useRef(0)
 
   async function fetchChunk(index: number): Promise<Blob | null> {
     try {
@@ -86,7 +88,7 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
         if (fetched > 0) {
           setBufferedCount(c => c + fetched)
           setStatusText(`Buffered ${queueRef.current.length} chunks`)
-          if (!playingRef.current) playNext()
+          if (!playingRef.current && !userPausedRef.current) playNext()
         }
       } catch {}
     }, 2500)
@@ -94,30 +96,66 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   }, [broadcastId, started])
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volRef.current
+    if (gainRef.current) gainRef.current.gain.value = volume / 100
+  }, [volume])
+
+  useEffect(() => {
+    return () => { if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null } }
   }, [])
 
   async function playNext() {
     if (queueRef.current.length === 0) { playingRef.current = false; setIsPlaying(false); return }
-    playingRef.current = true; setIsPlaying(true)
+    if (userPausedRef.current) { playingRef.current = false; setIsPlaying(false); return }
+    if (!ctxRef.current) {
+      const ctx = new AudioContext()
+      ctxRef.current = ctx
+      const g = ctx.createGain()
+      g.gain.value = volume / 100
+      g.connect(ctx.destination)
+      gainRef.current = g
+    }
+    const ctx = ctxRef.current
+    if (ctx.state === 'suspended') await ctx.resume()
+    playingRef.current = true
+    setIsPlaying(true)
     const blob = queueRef.current.shift()!
-    const url = URL.createObjectURL(blob)
-    const audio = audioRef.current
-    if (!audio) { URL.revokeObjectURL(url); playNext(); return }
-    audio.src = url
-    audio.onended = () => { URL.revokeObjectURL(url); playNext() }
-    audio.onerror = () => { URL.revokeObjectURL(url); playNext() }
-    try { await audio.play() } catch { URL.revokeObjectURL(url); playNext() }
+    const ab = await blob.arrayBuffer()
+    try {
+      const buf = await ctx.decodeAudioData(ab)
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(gainRef.current!)
+      const when = Math.max(nextStartRef.current, ctx.currentTime + 0.02)
+      src.start(when)
+      nextStartRef.current = when + buf.duration
+      src.onended = () => { playNext() }
+    } catch { playNext() }
   }
 
   function togglePlay() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (audio.paused) { audio.play().catch(() => {}) }
-    else { audio.pause(); setIsPlaying(false); playingRef.current = false }
+    const ctx = ctxRef.current
+    if (!ctx) { handleStart(); return }
+    if (playingRef.current) {
+      userPausedRef.current = true
+      playingRef.current = false
+      setIsPlaying(false)
+      ctx.suspend().catch(() => {})
+    } else {
+      userPausedRef.current = false
+      ctx.resume().catch(() => {})
+      if (queueRef.current.length > 0) playNext()
+    }
   }
 
   function handleStart() {
+    if (!ctxRef.current) {
+      const ctx = new AudioContext()
+      ctxRef.current = ctx
+      const g = ctx.createGain()
+      g.gain.value = volume / 100
+      g.connect(ctx.destination)
+      gainRef.current = g
+    }
     setStarted(true)
   }
 
@@ -146,9 +184,6 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
         </button>
       ) : (
         <div className="flex items-center gap-4">
-          {/* Hidden audio element */}
-          <audio ref={audioRef} className="hidden" />
-
           {/* Play/Pause */}
           <button onClick={togglePlay}
             className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
@@ -165,12 +200,7 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
           <div className="flex items-center gap-2 shrink-0 w-24">
             <VolumeIcon className="w-4 h-4" style={{ color: 'var(--dim)' }} />
             <input type="range" min={0} max={100} value={volume}
-              onChange={e => {
-                const v = parseInt(e.target.value)
-                setVolume(v)
-                volRef.current = v / 100
-                if (audioRef.current) audioRef.current.volume = v / 100
-              }}
+              onChange={e => setVolume(parseInt(e.target.value))}
               className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
               style={{ background: `linear-gradient(to right, var(--gold) ${volume}%, var(--line) ${volume}%)` }} />
           </div>
