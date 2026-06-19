@@ -28,70 +28,44 @@ const CHURCH_ONLINE_ID = 'zionitefm'
 /* ── StreamPlayer ─────────────────────────────────── */
 function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [bufferedChunks, setBufferedChunks] = useState(0)
-  const [latestChunk, setLatestChunk] = useState(-1)
-  const nextChunkRef = useRef(0)
+  const lastPlayedRef = useRef(-1)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const queueRef = useRef<Blob[]>([])
-  const playingRef = useRef(false)
-
-  // Query stream info and set starting point
-  useEffect(() => {
-    async function init() {
-      try {
-        const res = await fetch(`/api/stream/${broadcastId}/info`)
-        if (res.ok) {
-          const data = await res.json()
-          const startFrom = Math.max(0, (data.latestChunk ?? -1) - 2)
-          nextChunkRef.current = startFrom
-          setLatestChunk(data.latestChunk ?? -1)
-        }
-      } catch {}
-    }
-    init()
-  }, [broadcastId])
+  const [bufferedChunks, setBufferedChunks] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(() => {
-    if (latestChunk < 0) return
+    lastPlayedRef.current = -1
 
-    async function fetchNext() {
+    async function tick() {
       try {
-        const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextChunkRef.current}`)
-        if (res.ok) {
-          const blob = await res.blob()
-          queueRef.current.push(blob)
+        const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
+        if (!infoRes.ok) return
+        const info = await infoRes.json()
+        const target = info.latestChunk ?? -1
+        if (target <= lastPlayedRef.current) return // nothing new
+
+        const res = await fetch(`/api/stream/${broadcastId}/chunk/${target}`)
+        if (!res.ok) return
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const audio = audioRef.current
+        if (!audio) { URL.revokeObjectURL(url); return }
+        audio.src = url
+        audio.onended = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
+        audio.onerror = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
+        try {
+          await audio.play()
+          setIsPlaying(true)
+          lastPlayedRef.current = target
           setBufferedChunks(c => c + 1)
-          nextChunkRef.current++
-          if (!playingRef.current) playNext()
-        } else if (res.status === 404) {
-          // Chunk not ready yet — wait for broadcaster
-        }
+        } catch { setIsPlaying(false) }
       } catch {}
     }
 
-    async function playNext() {
-      if (queueRef.current.length === 0) {
-        playingRef.current = false
-        return
-      }
-      playingRef.current = true
-      const blob = queueRef.current.shift()!
-      const url = URL.createObjectURL(blob)
-      const audio = audioRef.current
-      if (!audio) { URL.revokeObjectURL(url); return }
-      audio.src = url
-      audio.onended = () => { URL.revokeObjectURL(url); playNext() }
-      audio.onerror = () => { URL.revokeObjectURL(url); playNext() }
-      try { await audio.play() } catch { playNext() }
-    }
-
-    intervalRef.current = setInterval(fetchNext, 2500)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      queueRef.current = []
-      playingRef.current = false
-    }
-  }, [broadcastId, latestChunk])
+    tick()
+    intervalRef.current = setInterval(tick, 2500)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [broadcastId])
 
   return (
     <div className="mx-4 mt-4 rounded-xl p-4" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>

@@ -80,12 +80,10 @@ interface Props {
 /* ── MonitorPlayer (feedback loop) ─────────────────── */
 function MonitorPlayer({ broadcastId, enabled, volume }: { broadcastId: string; enabled: boolean; volume: number }) {
   const audioRef = useRef<HTMLAudioElement>(null)
-  const nextChunkRef = useRef(0)
+  const lastPlayedRef = useRef(-1)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const queueRef = useRef<Blob[]>([])
-  const playingRef = useRef(false)
-  const [latestChunk, setLatestChunk] = useState(-1)
   const [bufferedCount, setBufferedCount] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100
@@ -93,71 +91,50 @@ function MonitorPlayer({ broadcastId, enabled, volume }: { broadcastId: string; 
 
   useEffect(() => {
     if (!enabled) return
-    async function init() {
+    lastPlayedRef.current = -1
+
+    async function tick() {
       try {
-        const res = await fetch(`/api/stream/${broadcastId}/info`)
-        if (res.ok) {
-          const data = await res.json()
-          // Start from the latest chunk (real-time, not lagging behind)
-          const startFrom = Math.max(0, data.latestChunk ?? 0)
-          nextChunkRef.current = startFrom
-          setLatestChunk(data.latestChunk ?? -1)
-        }
+        const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
+        if (!infoRes.ok) return
+        const info = await infoRes.json()
+        const target = info.latestChunk ?? -1
+        if (target <= lastPlayedRef.current) return // nothing new
+
+        const res = await fetch(`/api/stream/${broadcastId}/chunk/${target}`)
+        if (!res.ok) return
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const audio = audioRef.current
+        if (!audio) { URL.revokeObjectURL(url); return }
+        audio.src = url
+        audio.onended = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
+        audio.onerror = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
+        try {
+          await audio.play()
+          setIsPlaying(true)
+          lastPlayedRef.current = target
+          setBufferedCount(c => c + 1)
+        } catch { setIsPlaying(false) }
       } catch {}
     }
-    init()
+
+    tick()
+    intervalRef.current = setInterval(tick, 2500)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [broadcastId, enabled])
 
-  useEffect(() => {
-    if (!enabled || latestChunk < 0) return
-
-    async function fetchNext() {
-      try {
-        const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextChunkRef.current}`)
-        if (res.ok) {
-          const blob = await res.blob()
-          queueRef.current.push(blob)
-          setBufferedCount(c => c + 1)
-          nextChunkRef.current++
-          if (!playingRef.current) playNext()
-        } else if (res.status === 404) {
-          // Chunk not uploaded yet — broadcaster is ahead of monitor, wait
-        }
-      } catch {}
-    }
-
-    async function playNext() {
-      if (queueRef.current.length === 0) {
-        playingRef.current = false
-        return
-      }
-      playingRef.current = true
-      const blob = queueRef.current.shift()!
-      const url = URL.createObjectURL(blob)
-      const audio = audioRef.current
-      if (!audio) { URL.revokeObjectURL(url); return }
-      audio.src = url
-      audio.onended = () => {
-        URL.revokeObjectURL(url)
-        playNext()
-      }
-      audio.onerror = () => {
-        URL.revokeObjectURL(url)
-        playNext()
-      }
-      try { await audio.play() } catch { playNext() }
-    }
-
-    intervalRef.current = setInterval(fetchNext, 2500)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      queueRef.current = []
-      playingRef.current = false
-    }
-  }, [broadcastId, enabled, latestChunk])
-
   return (
-    <audio ref={audioRef} className="w-full" controls style={{ height: 36 }} />
+    <div className="flex items-center gap-2">
+      <audio ref={audioRef} className="flex-1" controls style={{ height: 36 }} />
+      {isPlaying && (
+        <span className="text-xs font-mono" style={{ color: 'var(--gold)' }}>
+          <span className="w-2 h-2 rounded-full inline-block mr-1 animate-pulse" style={{ background: '#4ade80' }} />
+          Playing
+        </span>
+      )}
+      <span className="text-xs font-mono" style={{ color: 'var(--dim)' }}>{bufferedCount} chunks</span>
+    </div>
   )
 }
 
