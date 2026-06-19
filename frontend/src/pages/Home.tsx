@@ -6,33 +6,23 @@ import {
   Play, Pause, Volume2, Maximize2, MessageSquare, Search, Heart,
   Users, BookOpen, Headphones, ChevronRight,
   Download, Smartphone, Facebook, Instagram, Youtube, Twitter,
-  Send, Mic2, Cross, MapPin, Mail, ArrowRight, Radio
+  Mic2, Cross, MapPin, Mail, Radio
 } from "lucide-react"
 
 interface Broadcast { id: string; title: string; description?: string; scripture_reference?: string; status: string; started_at?: string; broadcaster_id: string }
 interface ScheduleItem { id: string; title: string; day_of_week: number; time: string; type: string; days_until: number }
 interface ChatMessage { id: string; user_name?: string; guest_name?: string; message: string; created_at: string }
 interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string }
-interface PrayerReq { id: string; name: string; initials: string; request: string; time: string; prayers: number }
-
-const PRAYERS: PrayerReq[] = [
-  { id:"1", name:"Sarah J.", initials:"SJ", request:"Please pray for my family's healing and financial breakthrough. Thank you.", time:"2 mins ago", prayers:12 },
-  { id:"2", name:"David M.", initials:"DM", request:"Praying for deliverance from anxiety and depression. I trust God for complete peace.", time:"5 mins ago", prayers:8 },
-  { id:"3", name:"Blessing K.", initials:"BK", request:"Thank God for His faithfulness in my life! He has been so good.", time:"8 mins ago", prayers:15 },
-]
 const PODCASTS = [
   { id:"1", title:"Kingdom Principles", speaker:"Pastor Samuel Adeyemi", duration:"42:15" },
   { id:"2", title:"The Power of Worship", speaker:"Pastor Michael O.", duration:"38:20" },
   { id:"3", title:"Faith for Everyday Living", speaker:"Pastor Grace IE", duration:"45:10" },
 ]
 const SCHEDULE = [
-  { time:"08:00 AM", title:"Morning Devotion", live:false },
   { time:"09:00 AM", title:"Worship Experience", live:true },
   { time:"12:00 PM", title:"Midday Prayer", live:false },
   { time:"03:00 PM", title:"Kingdom Teachings", live:false },
   { time:"06:00 PM", title:"Evening Encounter", live:true },
-  { time:"09:00 PM", title:"Night Worship", live:false },
-  { time:"11:00 PM", title:"Gospel Music Session", live:false },
 ]
 const FEATURED = [
   { title:"Walking in Divine Purpose", speaker:"Pastor Samuel Adeyemi", duration:"48:23" },
@@ -68,30 +58,10 @@ function SermonCard({ s }:{ s:Sermon }) {
   )
 }
 
-function PrayerCard({ p }:{ p:PrayerReq }) {
-  return (
-    <div className="flex gap-3 p-3 rounded-xl border border-[rgba(243,238,228,0.08)] hover:border-[rgba(201,162,39,0.3)] transition-colors">
-      <img src={`https://ui-avatars.com/api/?name=${p.initials}&background=c9a227&color=1b1208&size=40`} alt={p.name} className="w-10 h-10 rounded-full flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-white">{p.name}</span>
-          <span className="text-[10px] text-[#9c958a]">{p.time}</span>
-        </div>
-        <p className="text-xs text-[#9c958a] mt-1 leading-relaxed line-clamp-2">{p.request}</p>
-        <div className="flex items-center gap-3 mt-2">
-          <button className="flex items-center gap-1 text-[11px] text-[#9c958a] hover:text-[#c9a227] transition-colors">
-            <Heart className="w-3.5 h-3.5" /> Pray {p.prayers}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function Home() {
   const [broadcast, setBroadcast] = useState<Broadcast|null>(null)
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
-  const [chat, setChat] = useState<ChatMessage[]>([])
+  const [chat] = useState<ChatMessage[]>([])
   const [sermons, setSermons] = useState<Sermon[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(70)
@@ -114,10 +84,6 @@ export default function Home() {
       setBroadcast(br.data.broadcast)
       setSchedule(sc.data.schedule||[])
       setSermons(sr.data.sermons||[])
-      if(br.data.broadcast?.id){
-        const ch = await axios.get(`/api/chat/${br.data.broadcast.id}`).catch(()=>({data:{messages:[]}}))
-        setChat(ch.data.messages||[])
-      }
     } catch {}
   }
 
@@ -189,7 +155,6 @@ export default function Home() {
               <Link to={isLive?`/live/${broadcast.id}`:"/live"} className="btn-gold text-sm">
                 <Headphones className="w-4 h-4" /> Listen Live
               </Link>
-              <Link to="/archive" className="btn-line text-sm">Explore Sermons</Link>
             </div>
 
             <div className="flex items-center gap-3 mt-8">
@@ -354,85 +319,10 @@ export default function Home() {
                 <button className="btn-gold w-full text-xs"><Heart className="w-3.5 h-3.5" /> Give Now</button>
               </section>
             </div>
-
-            {/* Testimony + Podcast + App (inside left column to avoid gap) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Testimony Corner */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-                <SectionHeader title="Testimony Corner" action="View All" to="/testimonies" />
-                <div className="relative">
-                  <p className="text-sm text-[#9c958a] leading-relaxed italic">
-                    "ZioniteFM has been a blessing to me. I started listening during a difficult season, and the messages brought hope, healing, and direction."
-                  </p>
-                  <div className="flex items-center gap-3 mt-4">
-                    <img src="https://ui-avatars.com/api/?name=Gloria+A&background=c9a227&color=1b1208&size=36" className="w-9 h-9 rounded-full" alt="" />
-                    <div>
-                      <p className="text-sm font-medium text-white">Gloria A.</p>
-                      <p className="text-[10px] text-[#9c958a]">Lagos, Nigeria</p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Podcast Archive */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-                <SectionHeader title="Podcast Archive" action="View All" to="/podcasts" />
-                <div className="space-y-3">
-                  {PODCASTS.map((pod,i)=>{
-                    const colors = ["from-amber-900/20","from-emerald-900/20","from-blue-900/20"]
-                    return (
-                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[rgba(243,238,228,0.03)] transition-colors cursor-pointer">
-                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${colors[i]} to-[#14141a] flex items-center justify-center flex-shrink-0`}>
-                          <Play className="w-5 h-5 text-white fill-white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{pod.title}</p>
-                          <p className="text-[11px] text-[#9c958a]">{pod.speaker}</p>
-                        </div>
-                        <span className="text-[10px] text-[#9c958a] font-mono">{pod.duration}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-                <button className="btn-gold w-full text-xs mt-3">Browse All Episodes</button>
-              </section>
-
-              {/* Get the App */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-                <SectionHeader title="Get the ZioniteFM App" action="" to="#" />
-                <p className="text-xs text-[#9c958a] mb-3">Take ZioniteFM with you anywhere you go.</p>
-                <div className="space-y-2 mb-4">
-                  {["Listen Live","Sermons & Podcasts","Prayer Wall","Push Notifications"].map(item=>{
-                    return (
-                      <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
-                        <ChevronRight className="w-3 h-3 text-[#c9a227]" /> {item}
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <button className="flex-1 flex items-center justify-center gap-1.5 bg-[#21222c] hover:bg-[#2a2b36] text-white text-[10px] font-medium px-3 py-2 rounded-lg border border-[rgba(243,238,228,0.08)] transition-colors">
-                    <Smartphone className="w-3.5 h-3.5" /> App Store
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-1.5 bg-[#21222c] hover:bg-[#2a2b36] text-white text-[10px] font-medium px-3 py-2 rounded-lg border border-[rgba(243,238,228,0.08)] transition-colors">
-                    <Smartphone className="w-3.5 h-3.5" /> Google Play
-                  </button>
-                </div>
-              </section>
-            </div>
           </div>
 
           {/* RIGHT COLUMN (4/12) */}
           <div className="lg:col-span-4 space-y-5">
-
-            {/* Live Prayer Wall */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-              <SectionHeader title="Live Prayer Wall" action="View All" to="/prayer" />
-              <div className="space-y-3">
-                {PRAYERS.map(p=><PrayerCard key={p.id} p={p} />)}
-              </div>
-              <Link to="/prayer" className="btn-gold w-full text-xs mt-4">Submit Prayer Request</Link>
-            </section>
 
             {/* Today's Schedule */}
             <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
@@ -451,55 +341,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Community Chat */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-              <SectionHeader title="Community Chat" action="View Full Chat" to={isLive?`/live/${broadcast?.id||""}`:"/live"} />
-              <div className="space-y-3 mb-4">
-                {(chat.length>0 ? chat.slice(0,4) : []).map((msg,i)=>{
-                  const names = ["Michael O.","Grace IE","Victor A.","Blessing K."]
-                  const msgs = ["Amen! This message is powerful","Thank you Jesus!","Glory to God!","So blessed by this broadcast."]
-                  const displayName = msg.user_name||msg.guest_name||names[i]||"User"
-                  const displayMsg = msg.message||msgs[i]||""
-                  return (
-                    <div key={msg.id} className="flex gap-2.5">
-                      <img src={`https://ui-avatars.com/api/?name=${displayName}&background=21222c&color=f3eee4&size=28`} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-white">{displayName}</span>
-                          <span className="text-[9px] text-[#9c958a]">{i+2} min ago</span>
-                        </div>
-                        <p className="text-[11px] text-[#9c958a] leading-relaxed">{displayMsg}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-                {chat.length===0 && (
-                  <>
-                    {["Michael O.","Grace IE","Victor A.","Blessing K."].map((name,i)=>{
-                      const msgs=["Amen! This message is powerful","Thank you Jesus!","Glory to God!","So blessed by this broadcast."]
-                      return (
-                        <div key={i} className="flex gap-2.5">
-                          <img src={`https://ui-avatars.com/api/?name=${name}&background=21222c&color=f3eee4&size=28`} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-medium text-white">{name}</span>
-                              <span className="text-[9px] text-[#9c958a]">{i+2} min ago</span>
-                            </div>
-                            <p className="text-[11px] text-[#9c958a] leading-relaxed">{msgs[i]}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-2 bg-[#14141a] rounded-full px-3 py-2 border border-[rgba(243,238,228,0.06)]">
-                <input type="text" placeholder="Type a message..." className="flex-1 bg-transparent text-xs text-white placeholder-[#9c958a] outline-none" />
-                <button className="text-[#c9a227] hover:text-[#e0bd5a] transition-colors">
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </section>
           </div>
         </div>
       </div>

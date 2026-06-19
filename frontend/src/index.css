@@ -6,9 +6,9 @@
 
 @layer base {
   :root {
-    --ink: #14141a;
-    --ink-2: #1c1d24;
-    --panel: #21222c;
+    --ink: #0c0c12;
+    --ink-2: #15161c;
+    --panel: #1e1f28;
     --line: rgba(243, 238, 228, 0.10);
     --parchment: #f3eee4;
     --dim: #9c958a;
