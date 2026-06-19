@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeft, Send, Users } from 'lucide-react'
+import { ArrowLeft, Send, Users, Radio } from 'lucide-react'
 
 interface Broadcast {
   id: string
@@ -24,6 +24,68 @@ interface ChatMessage {
 
 // Church Online Platform Church ID
 const CHURCH_ONLINE_ID = 'zionitefm'
+
+/* ── StreamPlayer ─────────────────────────────────── */
+function StreamPlayer({ broadcastId }: { broadcastId: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [bufferedChunks, setBufferedChunks] = useState(0)
+  const mseRef = useRef<MediaSource | null>(null)
+  const sourceBufferRef = useRef<SourceBuffer | null>(null)
+  const nextChunkRef = useRef(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!window.MediaSource) return
+    const ms = new MediaSource()
+    mseRef.current = ms
+    if (audioRef.current) {
+      audioRef.current.src = URL.createObjectURL(ms)
+    }
+
+    ms.addEventListener('sourceopen', () => {
+      const sb = ms.addSourceBuffer('audio/webm;codecs=opus')
+      sourceBufferRef.current = sb
+      sb.mode = 'sequence'
+
+      // Fetch chunks periodically
+      intervalRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextChunkRef.current}`)
+          if (res.ok) {
+            const buf = await res.arrayBuffer()
+            if (buf.byteLength > 0) {
+              if (!sb.updating) {
+                sb.appendBuffer(buf)
+                nextChunkRef.current++
+                setBufferedChunks(c => c + 1)
+              }
+            }
+          }
+        } catch {}
+      }, 2500)
+    })
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (sourceBufferRef.current) {
+        try { ms.removeSourceBuffer(sourceBufferRef.current) } catch {}
+      }
+      if (ms.readyState === 'open') { try { ms.endOfStream() } catch {} }
+    }
+  }, [broadcastId])
+
+  return (
+    <div className="mx-4 mt-4 rounded-xl p-4" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium flex items-center gap-2">
+          <Radio className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Audio Stream
+        </span>
+        <span className="text-xs" style={{ color: 'var(--dim)' }}>{bufferedChunks} chunks buffered</span>
+      </div>
+      <audio ref={audioRef} className="w-full" controls style={{ height: 40 }} />
+    </div>
+  )
+}
 
 export default function Live() {
   const { broadcastId } = useParams()
@@ -176,9 +238,12 @@ export default function Live() {
             />
           </div>
           
+          {/* Stream Audio Player */}
+          {broadcast.status === 'live' && <StreamPlayer broadcastId={broadcast.id} />}
+
           {/* Scripture */}
           {broadcast.scripture_reference && (
-            <div 
+            <div
               className="mx-4 mt-4 mb-4 rounded-xl p-4 text-center"
               style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
             >

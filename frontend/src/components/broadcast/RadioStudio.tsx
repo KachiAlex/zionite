@@ -2,15 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import {
   Radio, Pause, Play, Square, Mic, MicOff, Volume2, Volume1, VolumeX,
-  Copy, CheckCircle, Activity, Share2, Headphones, Wifi, WifiOff
+  Copy, CheckCircle, Activity, Share2, Headphones, Wifi, Zap, HardDrive
 } from 'lucide-react'
 import AudioWaveVisualizer from './AudioWaveVisualizer'
+import VUMeter from './VUMeter'
 
-/* ── NetworkIndicator ──────────────────────────────── */
 function NetworkIndicator() {
   const [strength, setStrength] = useState(4)
   const [latency, setLatency] = useState(0)
-
   useEffect(() => {
     const interval = setInterval(async () => {
       const start = Date.now()
@@ -19,26 +18,18 @@ function NetworkIndicator() {
         const ms = Date.now() - start
         setLatency(ms)
         setStrength(ms < 100 ? 4 : ms < 200 ? 3 : ms < 400 ? 2 : 1)
-      } catch {
-        setStrength(0)
-        setLatency(999)
-      }
+      } catch { setStrength(0); setLatency(999) }
     }, 3000)
     return () => clearInterval(interval)
   }, [])
-
   const bars = [1, 2, 3, 4]
   const color = strength === 0 ? '#ef4444' : strength <= 2 ? '#f59e0b' : '#22c55e'
-
   return (
     <div className="flex items-center gap-2" title={`Latency: ${latency}ms`}>
       <div className="flex items-end gap-0.5 h-4">
         {bars.map(b => (
-          <div
-            key={b}
-            className="w-1 rounded-sm transition-all"
-            style={{ height: `${b * 4}px`, background: b <= strength ? color : 'var(--line)' }}
-          />
+          <div key={b} className="w-1 rounded-sm transition-all"
+            style={{ height: `${b * 4}px`, background: b <= strength ? color : 'var(--line)' }} />
         ))}
       </div>
       <span className="text-xs" style={{ color: strength === 0 ? '#ef4444' : 'var(--dim)' }}>
@@ -48,30 +39,29 @@ function NetworkIndicator() {
   )
 }
 
-/* ── BroadcastTimer ────────────────────────────────── */
 function BroadcastTimer({ startTime }: { startTime: Date | null }) {
   const [elapsed, setElapsed] = useState(0)
-
   useEffect(() => {
     if (!startTime) return
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime.getTime()) / 1000))
-    }, 1000)
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startTime.getTime()) / 1000)), 1000)
     return () => clearInterval(id)
   }, [startTime])
+  const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60), s = elapsed % 60
+  return <span className="font-mono text-lg">{String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}</span>
+}
 
-  const h = Math.floor(elapsed / 3600)
-  const m = Math.floor((elapsed % 3600) / 60)
-  const s = elapsed % 60
-
+function StatCard({ icon: Icon, label, value, color }: { icon: any, label: string, value: string | number, color?: string }) {
   return (
-    <div className="flex items-center gap-2 font-mono text-lg">
-      <span>{String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}</span>
+    <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+      <Icon className="w-5 h-5 shrink-0" style={{ color: color || 'var(--gold)' }} />
+      <div>
+        <p className="text-xs" style={{ color: 'var(--dim)' }}>{label}</p>
+        <p className="text-lg font-bold">{value}</p>
+      </div>
     </div>
   )
 }
 
-/* ── Main BroadcastStudio ─────────────────────────── */
 interface Props {
   broadcastId: string
   title: string
@@ -80,24 +70,103 @@ interface Props {
   churchOnlineUrl: string
   status: 'live' | 'paused'
   startTime: Date | null
+  selectedDevice: string
   onPause: () => void
   onResume: () => void
   onEnd: () => void
   actionLoading: boolean
 }
 
-export default function BroadcastStudio({
+export default function RadioStudio({
   broadcastId, title, description, scripture,
-  churchOnlineUrl, status, startTime,
+  churchOnlineUrl, status, startTime, selectedDevice,
   onPause, onResume, onEnd, actionLoading
 }: Props) {
   const [micMuted, setMicMuted] = useState(false)
   const [micGain, setMicGain] = useState(80)
   const [copied, setCopied] = useState(false)
   const [listenerCount, setListenerCount] = useState(0)
+  const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
+  const [uploadError, setUploadError] = useState('')
 
   const isLive = status === 'live'
-  const isPaused = status === 'paused'
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunkIndexRef = useRef(0)
+  const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const chunkTimesRef = useRef<number[]>([])
+
+  useEffect(() => {
+    if (isLive && selectedDevice) { startStreaming() } else { stopStreaming() }
+    return () => stopStreaming()
+  }, [isLive, selectedDevice, broadcastId])
+
+  async function startStreaming() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedDevice ? { deviceId: { exact: selectedDevice } } : true
+      })
+      streamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : 'audio/webm'
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 })
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size > 0 && broadcastId) {
+          const reader = new FileReader()
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1]
+            chunkTimesRef.current.push(Date.now())
+            if (chunkTimesRef.current.length > 10) chunkTimesRef.current.shift()
+            try {
+              await axios.post(`/api/stream/${broadcastId}/chunk`, {
+                chunkIndex: chunkIndexRef.current++,
+                chunkData: base64
+              }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+              setUploadError('')
+            } catch { setUploadError('Upload failed - check connection') }
+          }
+          reader.readAsDataURL(e.data)
+        }
+      }
+      recorder.start(2000)
+      mediaRecorderRef.current = recorder
+
+      statsIntervalRef.current = setInterval(async () => {
+        try {
+          const { data } = await axios.get(`/api/stream/${broadcastId}/info`)
+          const times = chunkTimesRef.current
+          let bitrate = 0
+          if (times.length >= 2) {
+            const span = (times[times.length - 1] - times[0]) / 1000
+            bitrate = span > 0 ? Math.round((times.length * 32) / span) : 0
+          }
+          setStreamStats({ chunkCount: data.totalChunks, bitrate, latestChunk: data.latestChunk })
+        } catch {}
+      }, 3000)
+    } catch {
+      setUploadError('Could not access microphone for streaming')
+    }
+  }
+
+  function stopStreaming() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    if (statsIntervalRef.current) { clearInterval(statsIntervalRef.current); statsIntervalRef.current = null }
+    mediaRecorderRef.current = null
+    chunkTimesRef.current = []
+  }
+
+  useEffect(() => {
+    if (!broadcastId) return
+    return () => {
+      axios.delete(`/api/stream/${broadcastId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }).catch(() => {})
+    }
+  }, [broadcastId])
 
   useEffect(() => {
     if (!isLive) return
@@ -105,7 +174,7 @@ export default function BroadcastStudio({
       try {
         const { data } = await axios.get('/api/broadcasts/stats/overview')
         setListenerCount(data.live || 0)
-      } catch { /* ignore */ }
+      } catch {}
     }, 5000)
     return () => clearInterval(interval)
   }, [isLive])
@@ -171,23 +240,36 @@ export default function BroadcastStudio({
         </div>
       </div>
 
-      {/* Studio Body */}
-      <div className="p-6 space-y-6">
+      {uploadError && (
+        <div className="mx-6 mt-4 p-3 rounded-xl text-sm flex items-center gap-2"
+          style={{ background: 'rgba(220,38,38,0.1)', color: '#fca5a5', border: '1px solid rgba(220,38,38,0.2)' }}>
+          <Wifi className="w-4 h-4" /> {uploadError}
+        </div>
+      )}
 
-        {/* Audio Wave + Listener Count */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
+      <div className="p-6 space-y-6">
+        {/* Audio Meters */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
             <label className="block text-xs font-medium mb-2" style={{ color: 'var(--dim)' }}>
-              <Activity className="w-3.5 h-3.5 inline mr-1" /> Audio Signal
+              <Activity className="w-3.5 h-3.5 inline mr-1" /> VU Meter
+            </label>
+            <VUMeter active={isLive && !micMuted} deviceId={selectedDevice} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-2" style={{ color: 'var(--dim)' }}>
+              <Activity className="w-3.5 h-3.5 inline mr-1" /> Waveform
             </label>
             <AudioWaveVisualizer active={isLive && !micMuted} micMuted={micMuted} />
           </div>
-          <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2"
-            style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
-            <Headphones className="w-6 h-6" style={{ color: 'var(--gold)' }} />
-            <span className="text-2xl font-bold">{listenerCount}</span>
-            <span className="text-xs" style={{ color: 'var(--dim)' }}>Listeners</span>
-          </div>
+        </div>
+
+        {/* Stream Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard icon={HardDrive} label="Chunks" value={streamStats.chunkCount} />
+          <StatCard icon={Zap} label="Bitrate" value={`${streamStats.bitrate} kbps`} />
+          <StatCard icon={Headphones} label="Listeners" value={listenerCount} />
+          <StatCard icon={Wifi} label="Status" value={isLive ? 'Streaming' : 'Paused'} color={isLive ? '#4ade80' : '#f59e0b'} />
         </div>
 
         {/* Mic Controls */}
@@ -195,7 +277,7 @@ export default function BroadcastStudio({
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium flex items-center gap-2">
               {micMuted ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4" style={{ color: 'var(--gold)' }} />}
-              Microphone
+              Microphone Input
             </span>
             <button onClick={() => setMicMuted(!micMuted)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
@@ -213,31 +295,21 @@ export default function BroadcastStudio({
               micGain > 20 ? <Volume1 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> :
               <VolumeX className="w-4 h-4" style={{ color: 'var(--dim)' }} />
             )}
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={micGain}
+            <input type="range" min={0} max={100} value={micGain}
               onChange={e => setMicGain(parseInt(e.target.value))}
               disabled={micMuted}
               className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
-              style={{
-                background: `linear-gradient(to right, var(--gold) ${micGain}%, var(--line) ${micGain}%)`,
-                opacity: micMuted ? 0.4 : 1
-              }}
-            />
+              style={{ background: `linear-gradient(to right, var(--gold) ${micGain}%, var(--line) ${micGain}%)`, opacity: micMuted ? 0.4 : 1 }} />
             <span className="text-xs font-mono w-8 text-right">{micGain}%</span>
           </div>
         </div>
 
-        {/* Stream URL + Share */}
+        {/* Stream URL */}
         <div className="rounded-xl p-4" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium flex items-center gap-2">
-              <Share2 className="w-4 h-4" style={{ color: 'var(--gold)' }} />
-              Stream URL
+              <Share2 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Stream URL
             </span>
-            <span className="text-xs" style={{ color: 'var(--dim)' }}>Share with viewers</span>
           </div>
           <div className="flex gap-2">
             <input type="text" readOnly value={streamUrl}
@@ -262,16 +334,6 @@ export default function BroadcastStudio({
             <span className="text-xs font-medium block mb-1" style={{ color: 'var(--dim)' }}>Scripture</span>
             <p className="text-sm">{scripture || 'No scripture reference'}</p>
           </div>
-        </div>
-
-        {/* Status Details */}
-        <div className="rounded-xl p-4 text-sm" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
-          <p style={{ color: 'var(--dim)' }}>
-            <span className="font-semibold" style={{ color: 'var(--parchment)' }}>Broadcast ID:</span> {broadcastId}
-          </p>
-          <p className="mt-1" style={{ color: 'var(--dim)' }}>
-            <span className="font-semibold" style={{ color: 'var(--parchment)' }}>How to stream:</span> Use OBS, StreamYard, or Church Online Platform directly. Share the link above with your team.
-          </p>
         </div>
       </div>
     </div>

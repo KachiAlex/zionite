@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import { Radio, BookOpen, AlertCircle, ExternalLink } from 'lucide-react'
-import BroadcastStudio from '../components/broadcast/BroadcastStudio'
+import RadioStudio from '../components/broadcast/RadioStudio'
+import AudioTestPanel from '../components/broadcast/AudioTestPanel'
 
 export default function Broadcast() {
   const { user } = useAuth()
@@ -14,6 +15,9 @@ export default function Broadcast() {
   const [description, setDescription] = useState('')
   const [scripture, setScripture] = useState('')
   const [churchOnlineUrl, setChurchOnlineUrl] = useState('')
+  const [rtmpUrl, setRtmpUrl] = useState('')
+  const [streamKey, setStreamKey] = useState('')
+  const [selectedDevice, setSelectedDevice] = useState('')
   const [error, setError] = useState('')
 
   // Broadcast state
@@ -36,6 +40,8 @@ export default function Broadcast() {
       const { data } = await axios.post('/api/broadcasts', {
         title, description, scripture_reference: scripture,
         church_online_url: churchOnlineUrl || undefined,
+        rtmp_url: rtmpUrl || undefined,
+        stream_key: streamKey || undefined,
       })
       await axios.patch(`/api/broadcasts/${data.id}/start`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -146,6 +152,29 @@ export default function Broadcast() {
                     style={{ background: 'var(--ink)', borderColor: 'var(--line)', color: 'var(--parchment)' }} />
                   <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>Leave empty to use default: https://online.church/zionitefm</p>
                 </div>
+
+                {/* Stream Config */}
+                <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+                  <h4 className="text-sm font-medium">Stream Configuration</h4>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--dim)' }}>RTMP Ingest URL</label>
+                    <input type="text" value={rtmpUrl} onChange={e => setRtmpUrl(e.target.value)}
+                      placeholder="rtmp://live.churchonline.com/live"
+                      className="w-full rounded-lg px-3 py-2 text-sm border"
+                      style={{ background: 'var(--ink-2)', borderColor: 'var(--line)', color: 'var(--parchment)' }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--dim)' }}>Stream Key</label>
+                    <input type="password" value={streamKey} onChange={e => setStreamKey(e.target.value)}
+                      placeholder="Your Church Online stream key"
+                      className="w-full rounded-lg px-3 py-2 text-sm border"
+                      style={{ background: 'var(--ink-2)', borderColor: 'var(--line)', color: 'var(--parchment)' }} />
+                  </div>
+                </div>
+
+                {/* Mic Test */}
+                <AudioTestPanel onDeviceSelect={setSelectedDevice} />
+
                 <div className="pt-2">
                   <button onClick={startBroadcast} disabled={actionLoading}
                     className="w-full py-4 text-lg font-medium rounded-xl disabled:opacity-50"
@@ -157,7 +186,7 @@ export default function Broadcast() {
             </div>
           ) : (
             /* ── LIVE STUDIO ── */
-            <BroadcastStudio
+            <RadioStudio
               broadcastId={broadcastId}
               title={title}
               description={description}
@@ -165,6 +194,7 @@ export default function Broadcast() {
               churchOnlineUrl={churchOnlineUrl}
               status={status}
               startTime={startTime}
+              selectedDevice={selectedDevice}
               onPause={pauseBroadcast}
               onResume={resumeBroadcast}
               onEnd={stopBroadcast}

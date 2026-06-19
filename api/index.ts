@@ -73,6 +73,13 @@ async function initDb() {
     audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
     file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS stream_chunks (
+    id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
+    chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  // Add stream config columns if missing (safe for existing tables)
+  try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS rtmp_url TEXT`) } catch {}
+  try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_key TEXT`) } catch {}
 
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
@@ -194,10 +201,10 @@ app.get('/broadcasts/:id', async (req, res) => {
 app.post('/broadcasts', auth, requireRole('admin'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    const { title, description, scripture_reference } = req.body
+    const { title, description, scripture_reference, rtmp_url, stream_key } = req.body
     const id = uuidv4()
-    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null])
+    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url, rtmp_url, stream_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null, rtmp_url || null, stream_key || null])
     res.status(201).json({ id, title, status: 'scheduled' })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -346,6 +353,58 @@ app.delete('/music/:id', auth, requireRole('admin'), async (req, res) => {
   try {
     await initDb()
     await dbQuery('DELETE FROM music WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Streaming endpoints ──────────────────────────────────────
+app.post('/stream/:id/chunk', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { chunkIndex, chunkData } = req.body
+    if (typeof chunkData !== 'string' || chunkData.length === 0) {
+      res.status(400).json({ error: 'Invalid chunk data' }); return
+    }
+    const chunkId = uuidv4()
+    await dbQuery(`INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)`,
+      [chunkId, req.params.id, chunkIndex, chunkData])
+    // Keep only last 30 chunks (~60 seconds at 2s interval)
+    await dbQuery(`DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2`,
+      [req.params.id, chunkIndex - 30])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/stream/:id/chunk/:index', async (req, res) => {
+  try {
+    await initDb()
+    const row = await dbGet(`SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=$2`,
+      [req.params.id, req.params.index])
+    if (!row) { res.status(404).json({ error: 'Chunk not found' }); return }
+    const buffer = (globalThis as any).Buffer.from(row.chunk_data, 'base64')
+    res.setHeader('Content-Type', 'audio/webm')
+    res.send(buffer)
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/stream/:id/info', async (req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery(`SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 1`,
+      [req.params.id])
+    const count = await dbGet(`SELECT COUNT(*) as count FROM stream_chunks WHERE broadcast_id=$1`, [req.params.id])
+    res.json({
+      latestChunk: rows[0]?.chunk_index ?? -1,
+      totalChunks: Number(count?.count || 0),
+      isLive: rows.length > 0
+    })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/stream/:id', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    await dbQuery(`DELETE FROM stream_chunks WHERE broadcast_id=$1`, [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
