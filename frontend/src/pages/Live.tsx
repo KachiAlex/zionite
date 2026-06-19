@@ -30,32 +30,43 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const [started, setStarted] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const queueRef = useRef<Blob[]>([])
-  const nextFetchRef = useRef(0)
+  const nextFetchRef = useRef(-1) // -1 = position unknown
   const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const alignIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [bufferedCount, setBufferedCount] = useState(0)
   const playingRef = useRef(false)
-  const startedRef = useRef(false)
+  const consecutive404sRef = useRef(0)
 
-  // Discover starting point and begin fetching
+  // Align: query /info to find a valid starting chunk
+  async function align() {
+    try {
+      const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
+      if (!infoRes.ok) return
+      const info = await infoRes.json()
+      const latest = info.latestChunk ?? -1
+      if (latest < 0) return
+      if (nextFetchRef.current < 0) {
+        // First alignment: start 1 chunk behind latest
+        nextFetchRef.current = Math.max(0, latest - 1)
+      } else if (nextFetchRef.current > latest + 2) {
+        // We've raced too far ahead (missed chunks), realign
+        nextFetchRef.current = Math.max(0, latest - 1)
+        consecutive404sRef.current = 0
+      }
+    } catch {}
+  }
+
   useEffect(() => {
     if (!started) return
-    startedRef.current = true
-    async function init() {
-      try {
-        const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
-        if (infoRes.ok) {
-          const info = await infoRes.json()
-          const startFrom = Math.max(0, (info.latestChunk ?? -1) - 1)
-          nextFetchRef.current = startFrom
-        }
-      } catch {}
-    }
-    init()
+    align()
+    alignIntervalRef.current = setInterval(align, 8000)
 
     fetchIntervalRef.current = setInterval(async () => {
+      if (nextFetchRef.current < 0) return // not aligned yet
       try {
         const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextFetchRef.current}`)
         if (res.ok) {
+          consecutive404sRef.current = 0
           const blob = await res.blob()
           if (blob.size > 0) {
             queueRef.current.push(blob)
@@ -64,12 +75,20 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
           }
           nextFetchRef.current++
         } else if (res.status === 404) {
-          // Not uploaded yet, wait
+          consecutive404sRef.current++
+          if (consecutive404sRef.current >= 3) {
+            // Chunk is missing — skip it and move on
+            nextFetchRef.current++
+            consecutive404sRef.current = 0
+          }
         }
       } catch {}
     }, 2000)
 
-    return () => { if (fetchIntervalRef.current) clearInterval(fetchIntervalRef.current) }
+    return () => {
+      if (fetchIntervalRef.current) clearInterval(fetchIntervalRef.current)
+      if (alignIntervalRef.current) clearInterval(alignIntervalRef.current)
+    }
   }, [broadcastId, started])
 
   async function playNext() {
@@ -90,8 +109,6 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
 
   function handleStart() {
     setStarted(true)
-    // Give fetch effect time to init, then attempt first play
-    setTimeout(() => { if (queueRef.current.length > 0 && !playingRef.current) playNext() }, 500)
   }
 
   return (
