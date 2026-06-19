@@ -77,63 +77,59 @@ interface Props {
   actionLoading: boolean
 }
 
-/* ── MonitorPlayer (feedback loop) ─────────────────── */
-function MonitorPlayer({ broadcastId, enabled, volume }: { broadcastId: string; enabled: boolean; volume: number }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const lastPlayedRef = useRef(-1)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [bufferedCount, setBufferedCount] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
+/* ── MonitorPlayer (real-time local monitor via Web Audio API) ─────────── */
+function MonitorPlayer({ stream, enabled, volume }: { stream: MediaStream | null; enabled: boolean; volume: number }) {
+  const ctxRef = useRef<AudioContext | null>(null)
+  const gainRef = useRef<GainNode | null>(null)
+  const [active, setActive] = useState(false)
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume / 100
-  }, [volume])
-
-  useEffect(() => {
-    if (!enabled) return
-    lastPlayedRef.current = -1
-
-    async function tick() {
-      try {
-        const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
-        if (!infoRes.ok) return
-        const info = await infoRes.json()
-        const target = info.latestChunk ?? -1
-        if (target <= lastPlayedRef.current) return // nothing new
-
-        const res = await fetch(`/api/stream/${broadcastId}/chunk/${target}`)
-        if (!res.ok) return
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const audio = audioRef.current
-        if (!audio) { URL.revokeObjectURL(url); return }
-        audio.src = url
-        audio.onended = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
-        audio.onerror = () => { URL.revokeObjectURL(url); setIsPlaying(false) }
-        try {
-          await audio.play()
-          setIsPlaying(true)
-          lastPlayedRef.current = target
-          setBufferedCount(c => c + 1)
-        } catch { setIsPlaying(false) }
-      } catch {}
+    if (!enabled || !stream) {
+      if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null }
+      gainRef.current = null
+      setActive(false)
+      return
     }
 
-    tick()
-    intervalRef.current = setInterval(tick, 2500)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [broadcastId, enabled])
+    const ctx = new AudioContext()
+    ctxRef.current = ctx
+    const source = ctx.createMediaStreamSource(stream)
+    const gain = ctx.createGain()
+    gain.gain.value = volume / 100
+    gainRef.current = gain
+    source.connect(gain)
+    gain.connect(ctx.destination)
+
+    // Resume in case browser suspended it (user gesture from clicking "On" allows this)
+    if (ctx.state === 'suspended') { ctx.resume().catch(() => {}) }
+    setActive(true)
+
+    return () => {
+      source.disconnect()
+      gain.disconnect()
+      ctx.close().catch(() => {})
+      ctxRef.current = null
+      gainRef.current = null
+      setActive(false)
+    }
+  }, [stream, enabled])
+
+  useEffect(() => {
+    if (gainRef.current) { gainRef.current.gain.value = volume / 100 }
+  }, [volume])
 
   return (
     <div className="flex items-center gap-2">
-      <audio ref={audioRef} className="flex-1" controls style={{ height: 36 }} />
-      {isPlaying && (
+      {active ? (
         <span className="text-xs font-mono" style={{ color: 'var(--gold)' }}>
           <span className="w-2 h-2 rounded-full inline-block mr-1 animate-pulse" style={{ background: '#4ade80' }} />
-          Playing
+          Monitoring
         </span>
+      ) : enabled && !stream ? (
+        <span className="text-xs font-mono" style={{ color: '#fca5a5' }}>No mic stream</span>
+      ) : (
+        <span className="text-xs font-mono" style={{ color: 'var(--dim)' }}>Off</span>
       )}
-      <span className="text-xs font-mono" style={{ color: 'var(--dim)' }}>{bufferedCount} chunks</span>
     </div>
   )
 }
@@ -343,7 +339,7 @@ export default function RadioStudio({
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium flex items-center gap-2">
               <Headphones className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Feedback Monitor
-              <span className="text-xs font-normal" style={{ color: 'var(--dim)' }}>(hear what listeners hear)</span>
+              <span className="text-xs font-normal" style={{ color: 'var(--dim)' }}>(real-time mic monitor)</span>
             </span>
             <button onClick={() => setMonitorEnabled(!monitorEnabled)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
@@ -357,7 +353,7 @@ export default function RadioStudio({
           </div>
           {monitorEnabled && (
             <>
-              <MonitorPlayer broadcastId={broadcastId} enabled={isLive && monitorEnabled} volume={monitorVolume} />
+              <MonitorPlayer stream={micStream} enabled={isLive && monitorEnabled} volume={monitorVolume} />
               <div className="flex items-center gap-3 mt-3">
                 {monitorVolume === 0 ? <VolumeX className="w-4 h-4" style={{ color: 'var(--dim)' }} /> :
                   monitorVolume > 60 ? <Volume2 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> :
