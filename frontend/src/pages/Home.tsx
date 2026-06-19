@@ -1,640 +1,589 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import axios from 'axios'
-import { useAuth } from '../contexts/AuthContext'
+import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
+import axios from "axios"
+import { useAuth } from "../contexts/AuthContext"
 import {
-  ArrowRight, HomeIcon, Archive, Heart, MessageSquare, LogIn
-} from 'lucide-react'
+  Play, Pause, Volume2, Maximize2, MessageSquare, Search, Heart,
+  Users, BookOpen, Headphones, ChevronRight,
+  Download, Smartphone, Facebook, Instagram, Youtube, Twitter,
+  Send, Mic2, Cross, MapPin, Mail, ArrowRight, Radio
+} from "lucide-react"
 
-interface Broadcast {
-  id: string
-  title: string
-  description?: string
-  scripture_reference?: string
-  status: string
-  started_at?: string
-  broadcaster_id: string
-}
+interface Broadcast { id: string; title: string; description?: string; scripture_reference?: string; status: string; started_at?: string; broadcaster_id: string }
+interface ScheduleItem { id: string; title: string; day_of_week: number; time: string; type: string; days_until: number }
+interface ChatMessage { id: string; user_name?: string; guest_name?: string; message: string; created_at: string }
+interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string }
+interface PrayerReq { id: string; name: string; initials: string; request: string; time: string; prayers: number }
 
-interface ScheduleItem {
-  id: string
-  title: string
-  day_of_week: number
-  time: string
-  type: string
-  next_occurrence: string
-  days_until: number
-}
+const PRAYERS: PrayerReq[] = [
+  { id:"1", name:"Sarah J.", initials:"SJ", request:"Please pray for my family's healing and financial breakthrough. Thank you.", time:"2 mins ago", prayers:12 },
+  { id:"2", name:"David M.", initials:"DM", request:"Praying for deliverance from anxiety and depression. I trust God for complete peace.", time:"5 mins ago", prayers:8 },
+  { id:"3", name:"Blessing K.", initials:"BK", request:"Thank God for His faithfulness in my life! He has been so good.", time:"8 mins ago", prayers:15 },
+]
+const PODCASTS = [
+  { id:"1", title:"Kingdom Principles", speaker:"Pastor Samuel Adeyemi", duration:"42:15" },
+  { id:"2", title:"The Power of Worship", speaker:"Pastor Michael O.", duration:"38:20" },
+  { id:"3", title:"Faith for Everyday Living", speaker:"Pastor Grace IE", duration:"45:10" },
+]
+const SCHEDULE = [
+  { time:"08:00 AM", title:"Morning Devotion", live:false },
+  { time:"09:00 AM", title:"Worship Experience", live:true },
+  { time:"12:00 PM", title:"Midday Prayer", live:false },
+  { time:"03:00 PM", title:"Kingdom Teachings", live:false },
+  { time:"06:00 PM", title:"Evening Encounter", live:true },
+  { time:"09:00 PM", title:"Night Worship", live:false },
+  { time:"11:00 PM", title:"Gospel Music Session", live:false },
+]
+const FEATURED = [
+  { title:"Walking in Divine Purpose", speaker:"Pastor Samuel Adeyemi", duration:"48:23" },
+  { title:"The Power of Consistent Prayer", speaker:"Pastor Grace IE", duration:"36:11" },
+  { title:"Jesus: The Way, The Truth & The Life", speaker:"Pastor Michael O.", duration:"52:17" },
+  { title:"Overcoming Life's Challenges", speaker:"Pastor Sarah O.", duration:"43:02" },
+]
 
-interface ChatMessage {
-  id: string
-  user_name: string
-  message: string
-  created_at: string
-}
+function LiveDot() { return <span className="inline-block w-[7px] h-[7px] rounded-full bg-[#ef4444] animate-pulse mr-1.5" /> }
 
-interface Sermon {
-  id: string
-  title: string
-  scripture_reference?: string
-  speaker?: string
-  series?: string
-  duration?: number
-  date: string
-}
-
-interface Stats {
-  listening: number
-  peak: number
-  avg: number
-}
-
-// Waveform component for live audio visualization
-function Waveform({ isLive }: { isLive: boolean }) {
+function SectionHeader({ title, action, to }:{ title:string; action:string; to:string }) {
   return (
-    <div className="flex items-center gap-[3px] h-11 justify-center">
-      {[30, 60, 90, 45, 70, 35, 80, 50, 65, 40, 85, 55, 30, 75, 45].map((height, i) => (
-        <span
-          key={i}
-          className="w-[3px] rounded-sm"
-          style={{
-            height: `${height}%`,
-            background: 'var(--gold-soft)',
-            animation: isLive && i % 3 === 0 ? 'bob 1.2s ease-in-out infinite' : undefined,
-            animationDelay: `${i * 0.1}s`
-          }}
-        />
-      ))}
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="font-serif text-lg md:text-xl font-medium text-white">{title}</h3>
+      <Link to={to} className="text-xs font-medium text-[#9c958a] hover:text-[#c9a227] transition-colors">{action}</Link>
     </div>
   )
 }
 
-// Live dot with pulse animation
-function LiveDot() {
+function SermonCard({ s }:{ s:Sermon }) {
   return (
-    <span 
-      className="w-[7px] h-[7px] rounded-full inline-block"
-      style={{
-        background: 'var(--oxblood-soft)',
-        animation: 'pulse 1.6s ease-in-out infinite'
-      }}
-    />
-  )
-}
-
-// Mark icon (logo)
-function MarkIcon({ size = 26 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 28 28" width={String(size)} height={String(size)} aria-hidden="true">
-      <circle cx="14" cy="14" r="12" fill="none" stroke="#48433a" strokeWidth="1"/>
-      <path 
-        d="M4 11 L11 14 L9 18 L17 13 L15 17 L24 16" 
-        fill="none" 
-        stroke="#c9a227" 
-        strokeWidth="1.6" 
-        strokeLinecap="round" 
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-// Phone mockup component
-function PhoneMockup({ 
-  children, 
-  caption, 
-  index 
-}: { 
-  children: React.ReactNode
-  caption: string
-  index: string
-}) {
-  return (
-    <div className="flex flex-col items-center gap-4 w-72 transition-transform duration-250 hover:-translate-y-1.5">
-      <div 
-        className="w-full rounded-[34px] p-2.5"
-        style={{
-          background: 'var(--panel)',
-          border: '1px solid var(--line)',
-          boxShadow: '0 40px 70px -30px rgba(0,0,0,.7)'
-        }}
-      >
-        <div 
-          className="w-12 h-1 rounded-full mx-auto mb-2"
-          style={{ background: 'var(--line)' }}
-        />
-        <div 
-          className="rounded-[26px] overflow-hidden min-h-[560px] flex flex-col"
-          style={{ background: 'var(--ink)' }}
-        >
-          <div className="p-4 flex flex-col gap-3.5 flex-1">
-            {children}
-          </div>
+    <Link to={`/archive/${s.id}`} className="group block">
+      <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
+          <Play className="w-3 h-3 text-white fill-white" />
+          <span className="text-[10px] text-white">{s.duration ? Math.round(s.duration/60)+" min" : "45 min"}</span>
         </div>
       </div>
-      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--dim)' }}>
-        <span className="font-mono" style={{ color: 'var(--gold-soft)' }}>{index}</span>
-        {caption}
+      <h4 className="text-sm font-medium text-white group-hover:text-[#c9a227] transition-colors leading-snug">{s.title}</h4>
+      <p className="text-xs text-[#9c958a] mt-0.5">{s.speaker || "Pastor"}</p>
+    </Link>
+  )
+}
+
+function PrayerCard({ p }:{ p:PrayerReq }) {
+  return (
+    <div className="flex gap-3 p-3 rounded-xl border border-[rgba(243,238,228,0.08)] hover:border-[rgba(201,162,39,0.3)] transition-colors">
+      <img src={`https://ui-avatars.com/api/?name=${p.initials}&background=c9a227&color=1b1208&size=40`} alt={p.name} className="w-10 h-10 rounded-full flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-white">{p.name}</span>
+          <span className="text-[10px] text-[#9c958a]">{p.time}</span>
+        </div>
+        <p className="text-xs text-[#9c958a] mt-1 leading-relaxed line-clamp-2">{p.request}</p>
+        <div className="flex items-center gap-3 mt-2">
+          <button className="flex items-center gap-1 text-[11px] text-[#9c958a] hover:text-[#c9a227] transition-colors">
+            <Heart className="w-3.5 h-3.5" /> Pray {p.prayers}
+          </button>
+        </div>
       </div>
-    </div>
-  )
-}
-
-// Card component
-function Card({ children, className = '' }: { children: React.ReactNode, className?: string }) {
-  return (
-    <div 
-      className={`rounded-[14px] p-3.5 ${className}`}
-      style={{
-        background: 'var(--panel)',
-        border: '1px solid var(--line)'
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
-// Eyebrow text
-function Eyebrow({ children, color = 'gold', className = '' }: { children: React.ReactNode, color?: 'gold' | 'dim', className?: string }) {
-  return (
-    <div 
-      className={`font-mono text-[10.5px] tracking-widest uppercase flex items-center gap-1.5 mb-1.5 ${className}`}
-      style={{ color: color === 'gold' ? 'var(--gold)' : 'var(--dim)', justifyContent: className.includes('justify-center') ? 'center' : undefined }}
-    >
-      {children}
     </div>
   )
 }
 
 export default function Home() {
-  const [broadcast, setBroadcast] = useState<Broadcast | null>(null)
+  const [broadcast, setBroadcast] = useState<Broadcast|null>(null)
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chat, setChat] = useState<ChatMessage[]>([])
   const [sermons, setSermons] = useState<Sermon[]>([])
-  const [stats, setStats] = useState<Stats>({ listening: 0, peak: 0, avg: 0 })
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [volume, setVolume] = useState(70)
+  const [searchQ, setSearchQ] = useState("")
   const { user } = useAuth()
 
-  useEffect(() => {
+  useEffect(()=>{
     fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    const iv = setInterval(fetchData, 30000)
+    return ()=>clearInterval(iv)
+  },[])
 
-  async function fetchData() {
+  async function fetchData(){
     try {
-      // Fetch all data in parallel
-      const [broadcastRes, scheduleRes, sermonsRes] = await Promise.all([
-        axios.get('/api/broadcasts/active').catch(() => ({ data: { broadcast: null } })),
-        axios.get('/api/schedule').catch(() => ({ data: { schedule: [] } })),
-        axios.get('/api/sermons?limit=3').catch(() => ({ data: { sermons: [] } }))
+      const [br, sc, sr] = await Promise.all([
+        axios.get("/api/broadcasts/active").catch(()=>({data:{broadcast:null}})),
+        axios.get("/api/schedule").catch(()=>({data:{schedule:[]}})),
+        axios.get("/api/sermons?limit=4").catch(()=>({data:{sermons:[]}})),
       ])
-      
-      setBroadcast(broadcastRes.data.broadcast)
-      setSchedule(scheduleRes.data.schedule || [])
-      setSermons(sermonsRes.data.sermons || [])
-      
-      // If there's a live broadcast, fetch chat and stats
-      if (broadcastRes.data.broadcast?.id) {
-        const chatRes = await axios.get(`/api/chat/${broadcastRes.data.broadcast.id}`).catch(() => ({ data: { messages: [] } }))
-        setChatMessages(chatRes.data.messages || [])
-        setStats({
-          listening: chatRes.data.messages?.length || 0,
-          peak: 214,
-          avg: 186
-        })
+      setBroadcast(br.data.broadcast)
+      setSchedule(sc.data.schedule||[])
+      setSermons(sr.data.sermons||[])
+      if(br.data.broadcast?.id){
+        const ch = await axios.get(`/api/chat/${br.data.broadcast.id}`).catch(()=>({data:{messages:[]}}))
+        setChat(ch.data.messages||[])
       }
-    } catch {
-      // Silent fail - keep existing data
-    }
+    } catch {}
   }
 
-  const isLive = broadcast?.status === 'live'
+  const isLive = broadcast?.status==="live"
+  const listenerCount = 2543
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--ink)', color: 'var(--parchment)' }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-        @keyframes bob {
-          0%, 100% { transform: scaleY(1); }
-          50% { transform: scaleY(0.5); }
-        }
-      `}</style>
-
-      {/* Hero Section */}
-      <header className="text-center pt-16 pb-8 px-6">
-        <div className="flex items-center justify-center gap-2.5 mb-6">
-          <MarkIcon size={26} />
-          <span 
-            className="text-xs tracking-[0.16em] uppercase"
-            style={{ color: 'var(--dim)' }}
-          >
-            Zionitefm
-          </span>
-          {!user ? (
-            <Link to="/login" className="ml-2 text-xs tracking-wider uppercase flex items-center gap-1 transition-colors hover:opacity-80"
-              style={{ color: 'var(--gold)' }}>
-              <LogIn className="w-3.5 h-3.5" /> Staff login
-            </Link>
-          ) : (
-            <Link to="/admin" className="ml-2 text-xs tracking-wider uppercase flex items-center gap-1 transition-colors hover:opacity-80"
-              style={{ color: 'var(--gold)' }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--gold)' }} />
-              Dashboard
-            </Link>
-          )}
-        </div>
-        
-        <div 
-          className="text-[11px] tracking-[0.14em] uppercase mb-3.5"
-          style={{ color: 'var(--gold)' }}
-        >
-          Live every Sunday · saved for later
-        </div>
-        
-        <h1 
-          className="font-serif text-3xl md:text-5xl leading-tight max-w-3xl mx-auto mb-4"
-          style={{ fontWeight: 500 }}
-        >
-          You don't have to miss church again.
-        </h1>
-        
-        <p 
-          className="max-w-xl mx-auto text-base leading-relaxed mb-4"
-          style={{ color: 'var(--dim)' }}
-        >
-          Listen live to every gathering, follow along as the verse is read, and come back anytime to a sermon that stayed with you. One app, made only for our church family.
-        </p>
-        
-        <Link to={isLive ? "/" : "/archive"} className="btn-gold mt-1.5">
-          {isLive ? 'Start listening live' : 'Browse the archive'}
-        </Link>
-      </header>
-
-      {/* Seam Divider */}
-      <div className="relative h-px my-16 mx-6" style={{ background: 'var(--line)' }}>
-        <div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-6 px-4"
-          style={{ background: 'var(--ink)' }}
-        >
-          {[1,2,3].map(i => (
-            <span 
-              key={i}
-              className="w-1.5 h-1.5"
-              style={{ 
-                background: 'var(--gold)', 
-                transform: 'rotate(45deg)' 
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Phone Mockups Section */}
-      <section className="px-6 pb-16">
-        <div className="flex items-baseline justify-between max-w-6xl mx-auto mb-8 flex-wrap gap-2">
-          <h2 className="font-serif text-2xl" style={{ fontWeight: 500 }}>Never miss a Sunday</h2>
-          <span className="font-mono text-[11px] tracking-widest uppercase" style={{ color: 'var(--dim)' }}>
-            Live now, yours to keep after
-          </span>
-        </div>
-
-        <div className="flex gap-8 justify-center flex-wrap items-start max-w-6xl mx-auto">
-          
-          {/* HOME Phone */}
-          <PhoneMockup caption="Home" index="01">
-            <Card>
-              <Eyebrow>NEXT GATHERING</Eyebrow>
-              <div className="font-serif text-xl my-0.5" style={{ fontWeight: 500 }}>
-                {schedule[0]?.title || 'Sunday Gathering'}
-              </div>
-              <div className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
-                {schedule[0]?.time || '10:00 AM'} · {schedule[0]?.days_until === 0 ? 'Today' : `in ${schedule[0]?.days_until || 0} days`}
-              </div>
-              <Link to="/status" className="btn-gold w-full text-sm py-2 inline-block text-center">View Schedule</Link>
-            </Card>
-            
-            <div>
-              <Eyebrow color="dim">THIS WEEK</Eyebrow>
-              {schedule.slice(0, 3).map((item) => (
-                <div key={item.id} className="py-2 border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
-                  <div className="flex justify-between text-sm">
-                    <span>{item.title}</span>
-                    <span className="font-mono text-xs" style={{ color: item.days_until === 0 ? 'var(--gold-soft)' : 'var(--dim)' }}>
-                      {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][item.day_of_week]} · {item.time}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {schedule.length === 0 && (
-                <div className="py-2 text-sm" style={{ color: 'var(--dim)' }}>No upcoming events</div>
-              )}
+    <div className="min-h-screen" style={{background:"var(--ink)",color:"var(--parchment)"}}>
+      {/* ====== NAVBAR ====== */}
+      <nav className="sticky top-0 z-50 border-b border-[rgba(243,238,228,0.08)] bg-[#14141a]/95 backdrop-blur-md">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-full border border-[#c9a227]/40 flex items-center justify-center">
+              <Mic2 className="w-4 h-4 text-[#c9a227]" />
             </div>
-
-            {/* Tab Bar */}
-            <div 
-              className="flex justify-around pt-3 pb-2 -mx-4 -mb-4 mt-auto"
-              style={{ 
-                borderTop: '1px solid var(--line)',
-                background: 'var(--ink)'
-              }}
-            >
-              <div className="flex flex-col items-center gap-1 text-[10px]" style={{ color: 'var(--gold-soft)' }}>
-                <HomeIcon size={18} />
-                <span>Home</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 text-[10px]" style={{ color: 'var(--dim)' }}>
-                <Archive size={18} />
-                <span>Archive</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 text-[10px]" style={{ color: 'var(--dim)' }}>
-                <Heart size={18} />
-                <span>Give</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 text-[10px]" style={{ color: 'var(--dim)' }}>
-                <MessageSquare size={18} />
-                <span>Prayer</span>
-              </div>
+            <div className="leading-tight">
+              <div className="text-sm font-medium text-white tracking-wide">ZIONITEFM</div>
+              <div className="text-[9px] text-[#9c958a] tracking-widest uppercase">The Voice of Redemption</div>
             </div>
-          </PhoneMockup>
+          </Link>
 
-          {/* LIVE Phone */}
-          <PhoneMockup caption="Live" index="02">
-            <div className="flex items-center gap-2.5">
-              <ArrowRight size={18} style={{ color: 'var(--dim)', transform: 'rotate(180deg)' }} />
-              <div>
-                <Eyebrow><LiveDot /> LIVE NOW</Eyebrow>
-                <div className="font-serif text-base" style={{ fontWeight: 500 }}>
-                  {broadcast?.title || 'Sunday Gathering'}
-                </div>
-              </div>
-            </div>
-
-            <Waveform isLive={isLive} />
-
-            <div className="flex justify-center">
-              <Link
-                to={broadcast?.id ? `/live/${broadcast.id}` : '/live'}
-                className="w-14 h-14 rounded-full flex items-center justify-center border-0 no-underline"
-                style={{ background: 'var(--gold)', color: '#1b1208' }}
-              >
-                <span className="text-xs font-medium">Watch</span>
-              </Link>
-            </div>
-
-            <Card className="text-center">
-              <Eyebrow className="justify-center">NOW READING</Eyebrow>
-              <div className="font-serif text-lg" style={{ fontWeight: 500 }}>
-                {broadcast?.scripture_reference || 'Romans 8:28'}
-              </div>
-            </Card>
-
-            <div className="flex gap-2">
-              <Link to={`/live?chat=1`} className="px-3.5 py-1.5 rounded-full text-xs border no-underline" style={{ borderColor: 'var(--gold)', color: 'var(--gold-soft)', background: 'rgba(201,162,39,.08)' }}>
-                Chat
-              </Link>
-              <Link to="/prayer" className="px-3.5 py-1.5 rounded-full text-xs border no-underline" style={{ borderColor: 'var(--line)', color: 'var(--dim)' }}>
-                Prayer
-              </Link>
-            </div>
-
-            <Card className="flex-1">
-              {chatMessages.slice(0, 3).map((msg) => (
-                <div key={msg.id} className="py-2 border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
-                  <span className="font-mono text-[11px] block" style={{ color: 'var(--gold-soft)' }}>{msg.user_name}</span>
-                  <span className="text-sm">{msg.message}</span>
-                </div>
-              ))}
-              {chatMessages.length === 0 && (
-                <div className="py-4 text-center text-sm" style={{ color: 'var(--dim)' }}>No messages yet. Be the first!</div>
-              )}
-            </Card>
-
-            <Link to={broadcast?.id ? `/live/${broadcast.id}` : '#'} className="btn-line w-full text-sm inline-block text-center no-underline">Join the conversation</Link>
-          </PhoneMockup>
-
-          {/* ARCHIVE Phone */}
-          <PhoneMockup caption="Archive" index="03">
-            <div className="font-serif text-xl" style={{ fontWeight: 500 }}>Archive</div>
-            
-            <input 
-              type="text"
-              placeholder="Search sermons, series, or a verse"
-              className="w-full rounded-lg px-3 py-2.5 text-sm border"
-              style={{ 
-                background: 'var(--ink-2)', 
-                borderColor: 'var(--line)',
-                color: 'var(--parchment)'
-              }}
-            />
-            
-            <div className="flex gap-2 flex-wrap">
-              <Link to="/archive" className="px-3 py-1.5 rounded-full text-xs border no-underline" style={{ borderColor: 'var(--gold)', color: 'var(--gold-soft)' }}>
-                All
-              </Link>
-              <Link to="/archive?filter=series" className="px-3 py-1.5 rounded-full text-xs border no-underline" style={{ borderColor: 'var(--line)', color: 'var(--dim)' }}>
-                By series
-              </Link>
-              <Link to="/archive?filter=date" className="px-3 py-1.5 rounded-full text-xs border no-underline" style={{ borderColor: 'var(--line)', color: 'var(--dim)' }}>
-                By date
-              </Link>
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              {sermons.map((sermon) => (
-                <Link key={sermon.id} to={`/archive/${sermon.id}`} className="no-underline">
-                  <Card className="py-3 px-3.5 hover:border-[var(--gold)] transition-colors">
-                    {sermon.series && <Eyebrow>{sermon.series}</Eyebrow>}
-                    <div className="font-serif text-sm my-0.5" style={{ fontWeight: 500, color: 'var(--parchment)' }}>{sermon.title}</div>
-                    <div className="flex justify-between text-xs" style={{ color: 'var(--dim)' }}>
-                      <span>{sermon.speaker || 'Pastor'} · {sermon.duration ? `${Math.round(sermon.duration/60)} min` : '45 min'}</span>
-                      {sermon.scripture_reference && (
-                        <span className="font-mono" style={{ color: 'var(--gold-soft)' }}>{sermon.scripture_reference}</span>
-                      )}
-                    </div>
-                  </Card>
+          <div className="hidden md:flex items-center gap-6">
+            {["Home","Live Radio","Sermons","Podcasts","Prayer Wall","Events","About Us"].map((item,i)=>{
+              const path = ["/", isLive?"/live":"/live", "/archive", "/podcasts", "/prayer", "/events", "/about"][i]
+              const active = i===0
+              return (
+                <Link key={item} to={path} className={`text-xs font-medium transition-colors ${active?"text-[#c9a227]":"text-[#9c958a] hover:text-white"}`}>
+                  {item}
                 </Link>
-              ))}
-              {sermons.length === 0 && (
-                <div className="py-4 text-center text-sm" style={{ color: 'var(--dim)' }}>
-                  No sermons yet. Check back soon!
-                </div>
-              )}
-            </div>
-          </PhoneMockup>
-        </div>
-      </section>
+              )
+            })}
+          </div>
 
-      {/* Staff Console Section */}
-      {user?.role === 'admin' || user?.role === 'broadcaster' ? (
-        <>
-          <div className="relative h-px my-16 mx-6" style={{ background: 'var(--line)' }}>
-            <div 
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-6 px-4"
-              style={{ background: 'var(--ink)' }}
-            >
-              {[1,2,3].map(i => (
-                <span 
-                  key={i}
-                  className="w-1.5 h-1.5"
-                  style={{ 
-                    background: 'var(--gold)', 
-                    transform: 'rotate(45deg)' 
-                  }}
-                />
-              ))}
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center bg-[#1c1d24] rounded-full px-3 py-1.5 border border-[rgba(243,238,228,0.08)]">
+              <Search className="w-3.5 h-3.5 text-[#9c958a] mr-2" />
+              <input type="text" placeholder="Search sermons, topics, speakers..." value={searchQ} onChange={e=>setSearchQ(e.target.value)}
+                className="bg-transparent text-xs text-white placeholder-[#9c958a] outline-none w-44" />
+            </div>
+            {user ? (
+              <Link to="/admin" className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] text-xs font-bold">
+                {user.name?.[0]?.toUpperCase()||"A"}
+              </Link>
+            ) : (
+              <Link to="/login" className="flex items-center gap-1 text-[#c9a227] hover:text-[#e0bd5a] transition-colors">
+                <Users className="w-4 h-4" />
+              </Link>
+            )}
+            <button className="hidden md:flex items-center gap-1.5 bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-1.5 rounded-full transition-colors">
+              <Heart className="w-3.5 h-3.5" /> Donate
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* ====== HERO + LIVE PLAYER ====== */}
+      <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-8 md:py-12">
+        <div className="grid lg:grid-cols-2 gap-8 items-start">
+          {/* Left: Welcome */}
+          <div>
+            <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-1">Welcome to</p>
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-medium text-white leading-tight mb-4">
+              ZioniteFM –<br />The Voice of Redemption
+            </h1>
+            <p className="text-sm text-[#9c958a] max-w-md leading-relaxed mb-6">
+              The official digital radio ministry of The Redemption Project. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
+            </p>
+            <div className="flex items-center gap-4">
+              <Link to={isLive?`/live/${broadcast.id}`:"/live"} className="btn-gold text-sm">
+                <Headphones className="w-4 h-4" /> Listen Live
+              </Link>
+              <Link to="/archive" className="btn-line text-sm">Explore Sermons</Link>
+            </div>
+
+            <div className="flex items-center gap-3 mt-8">
+              <div className="flex -space-x-2">
+                {["SJ","DM","BK","AO","GO"].map((init,i)=>{
+                  const bg = ["c9a227","8a3326","21222c","1c1d24","48433a"][i]
+                  return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} className="w-8 h-8 rounded-full border-2 border-[#14141a]" alt="" />
+                })}
+              </div>
+              <div>
+                <p className="text-xs text-white">Join the Community</p>
+                <p className="text-[10px] text-[#9c958a]">{listenerCount.toLocaleString()}+ listeners online</p>
+              </div>
             </div>
           </div>
 
-          <section className="px-6 pb-20">
-            <div className="flex items-baseline justify-between max-w-5xl mx-auto mb-8 flex-wrap gap-3">
-              <h2 className="font-serif text-2xl" style={{ fontWeight: 500 }}>Run entirely by our own team</h2>
-              <span className="font-mono text-[11px] tracking-widest uppercase" style={{ color: 'var(--dim)' }}>
-                No technical experience needed
-              </span>
-            </div>
-
-            <div 
-              className="max-w-5xl mx-auto rounded-3xl p-7"
-              style={{
-                background: 'var(--panel)',
-                border: '1px solid var(--line)',
-                boxShadow: '0 40px 80px -40px rgba(0,0,0,.7)'
-              }}
-            >
-              <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                <div className="flex items-center gap-2.5">
-                  <MarkIcon size={24} />
-                  <div>
-                    <div className="font-serif text-[15px]" style={{ fontWeight: 500 }}>Zionitefm</div>
-                    <div className="font-mono text-[10.5px]" style={{ color: 'var(--dim)' }}>Staff console</div>
+          {/* Right: Live Player */}
+          <div className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] overflow-hidden">
+            {isLive && (
+              <div className="relative">
+                <div className="aspect-square bg-gradient-to-br from-[#2a2518] to-[#14141a] flex items-center justify-center">
+                  <div className="w-48 h-48 rounded-xl bg-gradient-to-br from-[#3a3218] to-[#1a1810] flex items-center justify-center border border-[#c9a227]/20">
+                    <Cross className="w-16 h-16 text-[#c9a227]/40" />
                   </div>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="font-mono text-xs" style={{ color: 'var(--dim)' }}>{user?.email || 'Media team'}</span>
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs"
-                    style={{
-                      background: 'var(--ink-2)',
-                      border: '1px solid var(--line)',
-                      color: 'var(--gold-soft)'
-                    }}
-                  >
-                    {user?.email?.[0]?.toUpperCase() || 'M'}
-                  </div>
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1">
+                  <LiveDot /> <span className="text-[10px] font-medium text-white uppercase tracking-wider">Live</span>
                 </div>
               </div>
-
-              <Link 
-                to="/broadcast"
-                className="flex items-center justify-between rounded-[18px] px-6 py-5 mb-5 transition-colors border"
-                style={{
-                  background: 'var(--ink-2)',
-                  borderColor: isLive ? 'var(--oxblood-soft)' : 'var(--line)'
-                }}
-              >
+            )}
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
                 <div>
-                  <Eyebrow>
-                    {isLive && <LiveDot />}
-                    {isLive ? 'Live now' : (broadcast ? 'Ready to broadcast' : 'Next: Sunday gathering, 10:00 AM')}
-                  </Eyebrow>
-                  {isLive && (
-                    <div className="font-serif text-[22px]" style={{ fontWeight: 500 }}>00:00:00</div>
-                  )}
+                  <span className="text-[10px] font-medium text-[#c9a227] uppercase tracking-wider block mb-1">Now Streaming Live</span>
+                  <h3 className="font-serif text-lg font-medium text-white">{broadcast?.title||"Faith That Moves Mountains"}</h3>
+                  <p className="text-xs text-[#9c958a] mt-0.5">Pastor Samuel Adeyemi · The Redemption Project</p>
                 </div>
-                <span className="btn-gold">Go live</span>
-              </Link>
-
-              <div 
-                className="grid grid-cols-3 gap-px rounded-[14px] overflow-hidden mb-5"
-                style={{ background: 'var(--line)' }}
-              >
-                <div className="p-4" style={{ background: 'var(--ink-2)' }}>
-                  <div className="font-mono text-2xl">{isLive ? '—' : '—'}</div>
-                  <div className="text-[10.5px] uppercase tracking-wider mt-1" style={{ color: 'var(--dim)' }}>Listening now</div>
-                </div>
-                <div className="p-4" style={{ background: 'var(--ink-2)' }}>
-                  <div className="font-mono text-2xl">{stats.peak}</div>
-                  <div className="text-[10.5px] uppercase tracking-wider mt-1" style={{ color: 'var(--dim)' }}>Peak today</div>
-                </div>
-                <div className="p-4" style={{ background: 'var(--ink-2)' }}>
-                  <div className="font-mono text-2xl">{stats.avg}</div>
-                  <div className="text-[10.5px] uppercase tracking-wider mt-1" style={{ color: 'var(--dim)' }}>Avg. this month</div>
-                </div>
+                <span className="text-[10px] text-[#9c958a]">32:45</span>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4 mb-5">
-                <div 
-                  className="rounded-2xl p-4"
-                  style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
-                >
-                  <h3 className="font-serif text-[15.5px] mb-0.5" style={{ fontWeight: 500 }}>Chat</h3>
-                  <div className="text-xs mb-3" style={{ color: 'var(--dim)' }}>Visible to listeners · moderated</div>
-                  {chatMessages.slice(0, 5).map((msg) => (
-                    <div key={msg.id} className="py-2 border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
-                      <span className="font-mono text-[11.5px]" style={{ color: 'var(--gold-soft)' }}>{msg.user_name}</span>
-                      <div className="text-sm">{msg.message}</div>
+              <div className="flex items-center gap-[2px] h-8 justify-center my-3">
+                {[20,45,70,35,85,50,65,40,75,30,60,45,80,55,35,70,40,85,50,60,30,55,75,45,65].map((h,i)=>{
+                  const active = isLive && i%3===0
+                  return (
+                    <span key={i} className="w-[3px] rounded-full bg-[#c9a227]/60" style={{
+                      height: active?`${h}%`:"40%",
+                      animation: active?"pulse 1.2s ease-in-out infinite":undefined,
+                      animationDelay: active?`${i*0.05}s`:undefined
+                    }} />
+                  )
+                })}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button onClick={()=>setIsPlaying(!isPlaying)} className="w-10 h-10 rounded-full bg-[#c9a227] hover:bg-[#e0bd5a] flex items-center justify-center transition-colors">
+                    {isPlaying ? <Pause className="w-4 h-4 text-[#1b1208] fill-current" /> : <Play className="w-4 h-4 text-[#1b1208] fill-current ml-0.5" />}
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <Volume2 className="w-4 h-4 text-[#9c958a]" />
+                    <div className="w-20 h-1 bg-[rgba(243,238,228,0.1)] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#c9a227] rounded-full" style={{width:volume+"%"}} />
                     </div>
-                  ))}
-                  {chatMessages.length === 0 && (
-                    <div className="py-4 text-center text-sm" style={{ color: 'var(--dim)' }}>No chat messages</div>
-                  )}
+                  </div>
                 </div>
-                
-                <div 
-                  className="rounded-2xl p-4"
-                  style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
-                >
-                  <h3 className="font-serif text-[15.5px] mb-0.5" style={{ fontWeight: 500 }}>Prayer requests</h3>
-                  <div className="text-xs mb-3" style={{ color: 'var(--dim)' }}>Pastoral only · private</div>
-                  <div className="py-2 border-b" style={{ borderColor: 'var(--line)' }}>
-                    <span className="font-mono text-[10.5px]" style={{ color: 'var(--gold-soft)' }}>Sarah</span>
-                    <div className="text-sm">Please pray for my mother&apos;s surgery next week.</div>
-                  </div>
-                  <div className="py-2">
-                    <span className="font-mono text-[10.5px]" style={{ color: 'var(--gold-soft)' }}>Michael</span>
-                    <div className="text-sm">Pray for wisdom on a job decision.</div>
-                  </div>
+                <div className="flex items-center gap-3">
+                  <Link to={isLive?`/live/${broadcast?.id||""}`:"/live"} className="flex items-center gap-1.5 text-xs text-[#c9a227] hover:text-[#e0bd5a] transition-colors">
+                    <MessageSquare className="w-3.5 h-3.5" /> Join Live Chat
+                  </Link>
+                  <button className="text-[#9c958a] hover:text-white transition-colors">
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-              <div>
-                <Eyebrow color="dim">UPCOMING</Eyebrow>
-                <div className="flex gap-3.5 overflow-x-auto pb-1">
-                  {schedule.slice(0, 5).map((item) => (
-                    <div 
-                      key={item.id}
-                      className="flex-shrink-0 min-w-[170px] rounded-xl p-3.5"
-                      style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
-                    >
-                      <div className="font-mono text-[10.5px]" style={{ color: 'var(--dim)' }}>
-                        {['SUN','MON','TUE','WED','THU','FRI','SAT'][item.day_of_week]} · {item.time}
+      {/* ====== MAIN DASHBOARD GRID ====== */}
+      <div className="max-w-[1440px] mx-auto px-4 md:px-6 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+          {/* LEFT COLUMN (8/12) */}
+          <div className="lg:col-span-8 space-y-5">
+
+            {/* Featured Sermons */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {sermons.length>0 ? sermons.map(s=><SermonCard key={s.id} s={s} />) :
+                  FEATURED.map((f,i)=>{
+                    const colors = ["from-amber-900/30","from-emerald-900/30","from-blue-900/30","from-rose-900/30"]
+                    return (
+                      <div key={i}>
+                        <div className={`relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-gradient-to-br ${colors[i]} to-[#14141a]`}>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                          <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
+                            <Play className="w-3 h-3 text-white fill-white" />
+                            <span className="text-[10px] text-white">{f.duration}</span>
+                          </div>
+                        </div>
+                        <h4 className="text-sm font-medium text-white leading-snug">{f.title}</h4>
+                        <p className="text-xs text-[#9c958a] mt-0.5">{f.speaker}</p>
                       </div>
-                      <div className="font-serif text-sm mt-1" style={{ fontWeight: 500 }}>{item.title}</div>
+                    )
+                  })
+                }
+              </div>
+            </section>
+
+            {/* Bottom row: 3 cards */}
+            <div className="grid md:grid-cols-3 gap-5">
+              {/* Sermon Transcripts */}
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+                <SectionHeader title="Sermon Transcripts" action="View All" to="/archive" />
+                <p className="text-xs text-[#9c958a] mb-3">Read, study and download sermon transcripts.</p>
+                <div className="space-y-2">
+                  {["Search by topic","Download PDF","Study offline"].map((item,i)=>{
+                    const icons = [Search, Download, BookOpen]
+                    const Icon = icons[i]
+                    return (
+                      <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
+                        <Icon className="w-3.5 h-3.5 text-[#c9a227]" /> {item}
+                      </div>
+                    )
+                  })}
+                </div>
+                <Link to="/archive" className="btn-gold w-full text-xs mt-4">Browse Transcripts</Link>
+              </section>
+
+              {/* Guest Speaker Spotlight */}
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+                <SectionHeader title="Guest Speaker Spotlight" action="View All" to="/events" />
+                <div className="flex gap-3">
+                  <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
+                    <Users className="w-8 h-8 text-[#c9a227]/40" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Dr. John Mark</p>
+                    <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
+                    <p className="text-xs text-[#9c958a] mt-1">Special Conference</p>
+                    <p className="text-[10px] text-[#9c958a]">May 24 - 26, 2025</p>
+                  </div>
+                </div>
+                <Link to="/events" className="btn-gold w-full text-xs mt-3">View Event Details</Link>
+              </section>
+
+              {/* Giving & Donations */}
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+                <SectionHeader title="Giving & Donations" action="" to="#" />
+                <p className="text-xs text-[#9c958a] mb-3">Your giving makes ministry and impact possible.</p>
+                <div className="space-y-2 mb-4">
+                  {["Gospel Broadcasting","Outreach Programs","Missions","Ministry Support"].map(item=>{
+                    return (
+                      <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
+                        <ChevronRight className="w-3 h-3 text-[#c9a227]" /> {item}
+                      </div>
+                    )
+                  })}
+                </div>
+                <button className="btn-gold w-full text-xs"><Heart className="w-3.5 h-3.5" /> Give Now</button>
+              </section>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN (4/12) */}
+          <div className="lg:col-span-4 space-y-5">
+
+            {/* Live Prayer Wall */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <SectionHeader title="Live Prayer Wall" action="View All" to="/prayer" />
+              <div className="space-y-3">
+                {PRAYERS.map(p=><PrayerCard key={p.id} p={p} />)}
+              </div>
+              <Link to="/prayer" className="btn-gold w-full text-xs mt-4">Submit Prayer Request</Link>
+            </section>
+
+            {/* Today's Schedule */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <SectionHeader title="Today's Schedule" action="View Full Schedule" to="/status" />
+              <div className="space-y-0">
+                {SCHEDULE.map((item,i)=>{
+                  const isNow = item.live
+                  return (
+                    <div key={i} className={`flex items-center gap-3 py-2.5 ${i<SCHEDULE.length-1?"border-b border-[rgba(243,238,228,0.06)]":""}`}>
+                      <span className={`text-[11px] font-mono w-16 flex-shrink-0 ${isNow?"text-[#c9a227]":"text-[#9c958a]"}`}>{item.time}</span>
+                      <span className={`text-xs flex-1 ${isNow?"text-white font-medium":"text-[#9c958a]"}`}>{item.title}</span>
+                      {isNow && <span className="text-[10px] text-[#ef4444] font-medium">LIVE</span>}
                     </div>
-                  ))}
-                  {schedule.length === 0 && (
-                    <div className="text-sm" style={{ color: 'var(--dim)' }}>No upcoming events scheduled</div>
-                  )}
+                  )
+                })}
+              </div>
+            </section>
+
+            {/* Community Chat */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <SectionHeader title="Community Chat" action="View Full Chat" to={isLive?`/live/${broadcast?.id||""}`:"/live"} />
+              <div className="space-y-3 mb-4">
+                {(chat.length>0 ? chat.slice(0,4) : []).map((msg,i)=>{
+                  const names = ["Michael O.","Grace IE","Victor A.","Blessing K."]
+                  const msgs = ["Amen! This message is powerful","Thank you Jesus!","Glory to God!","So blessed by this broadcast."]
+                  const displayName = msg.user_name||msg.guest_name||names[i]||"User"
+                  const displayMsg = msg.message||msgs[i]||""
+                  return (
+                    <div key={msg.id} className="flex gap-2.5">
+                      <img src={`https://ui-avatars.com/api/?name=${displayName}&background=21222c&color=f3eee4&size=28`} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-medium text-white">{displayName}</span>
+                          <span className="text-[9px] text-[#9c958a]">{i+2} min ago</span>
+                        </div>
+                        <p className="text-[11px] text-[#9c958a] leading-relaxed">{displayMsg}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+                {chat.length===0 && (
+                  <>
+                    {["Michael O.","Grace IE","Victor A.","Blessing K."].map((name,i)=>{
+                      const msgs=["Amen! This message is powerful","Thank you Jesus!","Glory to God!","So blessed by this broadcast."]
+                      return (
+                        <div key={i} className="flex gap-2.5">
+                          <img src={`https://ui-avatars.com/api/?name=${name}&background=21222c&color=f3eee4&size=28`} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-medium text-white">{name}</span>
+                              <span className="text-[9px] text-[#9c958a]">{i+2} min ago</span>
+                            </div>
+                            <p className="text-[11px] text-[#9c958a] leading-relaxed">{msgs[i]}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2 bg-[#14141a] rounded-full px-3 py-2 border border-[rgba(243,238,228,0.06)]">
+                <input type="text" placeholder="Type a message..." className="flex-1 bg-transparent text-xs text-white placeholder-[#9c958a] outline-none" />
+                <button className="text-[#c9a227] hover:text-[#e0bd5a] transition-colors">
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      {/* ====== TESTIMONY + PODCAST + APP ROW ====== */}
+      <div className="max-w-[1440px] mx-auto px-4 md:px-6 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* Testimony Corner */}
+          <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <SectionHeader title="Testimony Corner" action="View All" to="/testimonies" />
+            <div className="relative">
+              <p className="text-sm text-[#9c958a] leading-relaxed italic">
+                "ZioniteFM has been a blessing to me. I started listening during a difficult season, and the messages brought hope, healing, and direction."
+              </p>
+              <div className="flex items-center gap-3 mt-4">
+                <img src="https://ui-avatars.com/api/?name=Gloria+A&background=c9a227&color=1b1208&size=36" className="w-9 h-9 rounded-full" alt="" />
+                <div>
+                  <p className="text-sm font-medium text-white">Gloria A.</p>
+                  <p className="text-[10px] text-[#9c958a]">Lagos, Nigeria</p>
                 </div>
               </div>
             </div>
           </section>
-        </>
-      ) : null}
 
-      {/* Footer */}
-      <footer 
-        className="text-center py-6 px-6 border-t"
-        style={{ borderColor: 'var(--line)', color: 'var(--dim)' }}
-      >
-        <p className="font-mono text-xs tracking-wider">
-          Zionitefm — live every Sunday, and waiting for you whenever you&apos;re ready.
-        </p>
+          {/* Podcast Archive */}
+          <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <SectionHeader title="Podcast Archive" action="View All" to="/podcasts" />
+            <div className="space-y-3">
+              {PODCASTS.map((pod,i)=>{
+                const colors = ["from-amber-900/20","from-emerald-900/20","from-blue-900/20"]
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[rgba(243,238,228,0.03)] transition-colors cursor-pointer">
+                    <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${colors[i]} to-[#14141a] flex items-center justify-center flex-shrink-0`}>
+                      <Play className="w-5 h-5 text-white fill-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{pod.title}</p>
+                      <p className="text-[11px] text-[#9c958a]">{pod.speaker}</p>
+                    </div>
+                    <span className="text-[10px] text-[#9c958a] font-mono">{pod.duration}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <button className="btn-gold w-full text-xs mt-3">Browse All Episodes</button>
+          </section>
+
+          {/* Get the App */}
+          <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <SectionHeader title="Get the ZioniteFM App" action="" to="#" />
+            <p className="text-xs text-[#9c958a] mb-3">Take ZioniteFM with you anywhere you go.</p>
+            <div className="space-y-2 mb-4">
+              {["Listen Live","Sermons & Podcasts","Prayer Wall","Push Notifications"].map(item=>{
+                const icon = item==="Listen Live"?Headphones:item==="Sermons & Podcasts"?BookOpen:item==="Prayer Wall"?MessageSquare:Send
+                return (
+                  <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
+                    <ChevronRight className="w-3 h-3 text-[#c9a227]" /> {item}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-2">
+              <button className="flex-1 flex items-center justify-center gap-1.5 bg-[#21222c] hover:bg-[#2a2b36] text-white text-[10px] font-medium px-3 py-2 rounded-lg border border-[rgba(243,238,228,0.08)] transition-colors">
+                <Smartphone className="w-3.5 h-3.5" /> App Store
+              </button>
+              <button className="flex-1 flex items-center justify-center gap-1.5 bg-[#21222c] hover:bg-[#2a2b36] text-white text-[10px] font-medium px-3 py-2 rounded-lg border border-[rgba(243,238,228,0.08)] transition-colors">
+                <Smartphone className="w-3.5 h-3.5" /> Google Play
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* ====== FOOTER ====== */}
+      <footer className="border-t border-[rgba(243,238,228,0.08)] bg-[#14141a]">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-10">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            {/* Brand */}
+            <div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-8 h-8 rounded-full border border-[#c9a227]/40 flex items-center justify-center">
+                  <Mic2 className="w-3.5 h-3.5 text-[#c9a227]" />
+                </div>
+                <div className="leading-tight">
+                  <div className="text-sm font-medium text-white tracking-wide">ZIONITEFM</div>
+                  <div className="text-[9px] text-[#9c958a] tracking-widest uppercase">The Voice of Redemption</div>
+                </div>
+              </div>
+              <p className="text-xs text-[#9c958a] leading-relaxed">
+                A Digital Ministry of<br />The Redemption Project
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Quick Links</h4>
+              <div className="space-y-2">
+                {["Home","Live Radio","Sermons","Podcasts","Prayer Wall","Events","About Us"].map(item=>{
+                  const paths = ["/","/live","/archive","/podcasts","/prayer","/events","/about"]
+                  const i = ["Home","Live Radio","Sermons","Podcasts","Prayer Wall","Events","About Us"].indexOf(item)
+                  return (
+                    <Link key={item} to={paths[i]} className="block text-xs text-[#9c958a] hover:text-[#c9a227] transition-colors">{item}</Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Contact</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><MapPin className="w-3.5 h-3.5 text-[#c9a227]" /> Lagos, Nigeria</div>
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Mail className="w-3.5 h-3.5 text-[#c9a227]" /> hello@zionitefm.com</div>
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Radio className="w-3.5 h-3.5 text-[#c9a227]" /> 24/7 Live Streaming</div>
+              </div>
+            </div>
+
+            {/* Subscribe */}
+            <div>
+              <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Subscribe to Updates</h4>
+              <div className="flex gap-2">
+                <input type="email" placeholder="Enter your email" className="flex-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white placeholder-[#9c958a] outline-none" />
+                <button className="bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-2 rounded-lg transition-colors">Subscribe</button>
+              </div>
+              <div className="flex items-center gap-3 mt-4">
+                <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Facebook className="w-4 h-4" /></a>
+                <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Instagram className="w-4 h-4" /></a>
+                <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Youtube className="w-4 h-4" /></a>
+                <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Twitter className="w-4 h-4" /></a>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-[rgba(243,238,228,0.06)] pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-[10px] text-[#9c958a]">© 2025 ZioniteFM. All Rights Reserved.</p>
+            <div className="flex items-center gap-4">
+              <Link to="/privacy" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Terms of Use</Link>
+            </div>
+          </div>
+        </div>
       </footer>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scaleY(1); }
+          50% { opacity: 0.6; transform: scaleY(0.7); }
+        }
+      `}</style>
     </div>
   )
 }
