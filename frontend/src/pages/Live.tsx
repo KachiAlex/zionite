@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeft, Send, Users, Radio } from 'lucide-react'
+import { ArrowLeft, Send, Users, Radio, BookOpen } from 'lucide-react'
 
 interface Broadcast {
   id: string
@@ -206,13 +206,12 @@ export default function Live() {
   }
 
   // Get Church Online Platform embed URL
-  function getChurchOnlineUrl(): string {
-    // If broadcast has custom URL, use it
-    if (broadcast?.church_online_url) {
+  function getChurchOnlineUrl(): string | null {
+    // Only return URL if broadcast has a configured one
+    if (broadcast?.church_online_url && broadcast.church_online_url.trim().length > 0) {
       return broadcast.church_online_url
     }
-    // Otherwise use default Church Online Platform URL
-    return `https://online.church/${CHURCH_ONLINE_ID}`
+    return null
   }
 
   if (loading) {
@@ -264,18 +263,38 @@ export default function Live() {
       <div className="flex-1 flex">
         {/* Player Section - Church Online Platform Embed */}
         <div className={`flex-1 flex flex-col ${showChat ? 'hidden md:block' : ''}`}>
-          {/* Church Online Platform iframe */}
-          <div className="flex-1 relative">
-            <iframe
-              ref={iframeRef}
-              src={getChurchOnlineUrl()}
-              className="absolute inset-0 w-full h-full"
-              style={{ border: 'none' }}
-              allow="autoplay; fullscreen"
-              allowFullScreen
-              title="Live Broadcast"
-            />
-          </div>
+          {getChurchOnlineUrl() ? (
+            /* Church Online Platform iframe */
+            <div className="flex-1 relative">
+              <iframe
+                ref={iframeRef}
+                src={getChurchOnlineUrl()!}
+                className="absolute inset-0 w-full h-full"
+                style={{ border: 'none' }}
+                allow="autoplay; fullscreen"
+                allowFullScreen
+                title="Live Broadcast"
+              />
+            </div>
+          ) : (
+            /* Audio-only placeholder when no Church Online URL configured */
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center"
+              style={{ background: 'var(--ink-2)' }}>
+              <Radio className="w-12 h-12 mb-4" style={{ color: 'var(--gold)' }} />
+              <h2 className="text-lg font-medium mb-2">{broadcast.title}</h2>
+              <p className="text-sm mb-1" style={{ color: 'var(--dim)' }}>{broadcast.description}</p>
+              {broadcast.scripture_reference && (
+                <p className="text-xs mt-2" style={{ color: 'var(--gold)' }}>
+                  <BookOpen className="w-3 h-3 inline mr-1" />{broadcast.scripture_reference}
+                </p>
+              )}
+              <div className="mt-4 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full"
+                style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ef4444' }} />
+                Listening via audio stream
+              </div>
+            </div>
+          )}
           
           {/* Stream Audio Player */}
           {broadcast.status === 'live' && <StreamPlayer broadcastId={broadcast.id} />}
