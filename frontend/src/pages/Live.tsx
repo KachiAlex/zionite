@@ -30,65 +30,58 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
   const [started, setStarted] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const queueRef = useRef<Blob[]>([])
-  const nextFetchRef = useRef(-1) // -1 = position unknown
+  const nextFetchRef = useRef(-1) // next chunk index to fetch
   const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const alignIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [bufferedCount, setBufferedCount] = useState(0)
+  const [statusText, setStatusText] = useState('Waiting...')
   const playingRef = useRef(false)
-  const consecutive404sRef = useRef(0)
 
-  // Align: query /info to find a valid starting chunk
-  async function align() {
+  async function fetchChunk(index: number): Promise<Blob | null> {
     try {
-      const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
-      if (!infoRes.ok) return
-      const info = await infoRes.json()
-      const latest = info.latestChunk ?? -1
-      if (latest < 0) return
-      if (nextFetchRef.current < 0) {
-        // First alignment: start 1 chunk behind latest
-        nextFetchRef.current = Math.max(0, latest - 1)
-      } else if (nextFetchRef.current > latest + 2) {
-        // We've raced too far ahead (missed chunks), realign
-        nextFetchRef.current = Math.max(0, latest - 1)
-        consecutive404sRef.current = 0
-      }
+      const res = await fetch(`/api/stream/${broadcastId}/chunk/${index}`)
+      if (res.ok) return await res.blob()
     } catch {}
+    return null
   }
 
   useEffect(() => {
     if (!started) return
-    align()
-    alignIntervalRef.current = setInterval(align, 8000)
 
     fetchIntervalRef.current = setInterval(async () => {
-      if (nextFetchRef.current < 0) return // not aligned yet
       try {
-        const res = await fetch(`/api/stream/${broadcastId}/chunk/${nextFetchRef.current}`)
-        if (res.ok) {
-          consecutive404sRef.current = 0
-          const blob = await res.blob()
+        // 1. Ask backend what exists
+        const infoRes = await fetch(`/api/stream/${broadcastId}/info`)
+        if (!infoRes.ok) { setStatusText('Info error'); return }
+        const info = await infoRes.json()
+        const latest = info.latestChunk ?? -1
+        if (latest < 0) { setStatusText('No stream'); return }
+
+        // 2. Initialise position from latest available chunk
+        if (nextFetchRef.current < 0) {
+          nextFetchRef.current = Math.max(0, latest - 1)
+          setStatusText(`Joined at chunk ${nextFetchRef.current}`)
+        }
+
+        // 3. Batch-fetch every confirmed chunk we haven't got yet
+        let fetched = 0
+        while (nextFetchRef.current <= latest) {
+          const blob = await fetchChunk(nextFetchRef.current)
+          if (!blob) break // Not on this instance yet, wait next tick
           if (blob.size > 0) {
             queueRef.current.push(blob)
-            setBufferedCount(c => c + 1)
-            if (!playingRef.current) playNext()
+            fetched++
           }
           nextFetchRef.current++
-        } else if (res.status === 404) {
-          consecutive404sRef.current++
-          if (consecutive404sRef.current >= 3) {
-            // Chunk is missing — skip it and move on
-            nextFetchRef.current++
-            consecutive404sRef.current = 0
-          }
+        }
+        if (fetched > 0) {
+          setBufferedCount(c => c + fetched)
+          setStatusText(`Buffered ${queueRef.current.length} chunks`)
+          if (!playingRef.current) playNext()
         }
       } catch {}
-    }, 2000)
+    }, 2500)
 
-    return () => {
-      if (fetchIntervalRef.current) clearInterval(fetchIntervalRef.current)
-      if (alignIntervalRef.current) clearInterval(alignIntervalRef.current)
-    }
+    return () => { if (fetchIntervalRef.current) clearInterval(fetchIntervalRef.current) }
   }, [broadcastId, started])
 
   async function playNext() {
@@ -117,7 +110,7 @@ function StreamPlayer({ broadcastId }: { broadcastId: string }) {
         <span className="text-sm font-medium flex items-center gap-2">
           <Radio className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Audio Stream
         </span>
-        <span className="text-xs" style={{ color: 'var(--dim)' }}>{bufferedCount} chunks buffered</span>
+        <span className="text-xs" style={{ color: 'var(--dim)' }}>{bufferedCount} buffered · {statusText}</span>
       </div>
       {!started ? (
         <button onClick={handleStart}
