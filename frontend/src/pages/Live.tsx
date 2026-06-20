@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import {
   ArrowLeft, Send, Users, Radio, BookOpen, Play, Pause, Volume2, Volume1, VolumeX,
-  Lock, Globe, MessageSquare, Clock, User, ChevronDown, Headphones
+  Lock, Globe, MessageSquare, Clock, User, ChevronDown, Headphones, X
 } from 'lucide-react'
 
 interface Broadcast {
@@ -409,7 +409,10 @@ export default function Live() {
                 <h3 className="flex items-center gap-2 text-sm font-medium text-white">
                   <MessageSquare className="w-3.5 h-3.5 text-[#c9a227]" /> Chat
                 </h3>
-                <span className="text-[10px] font-mono text-[#9c958a]">{onlineCount} active</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-[#9c958a]">{onlineCount} active</span>
+                  <Link to={`/live/${broadcast?.id || ''}`} className="md:hidden text-[#9c958a] p-0.5"><X className="w-4 h-4" /></Link>
+                </div>
               </div>
               {user && (
                 <div className="flex gap-1 rounded-lg p-0.5 bg-[#0f1016]">

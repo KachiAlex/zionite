@@ -4,7 +4,8 @@ import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Podcast, Heart, Calendar,
-  Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, StopCircle, BarChart3, Shield, Sparkles
+  Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, StopCircle, BarChart3, Shield, Sparkles,
+  Menu, X
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import BroadcastManager from '../components/admin/BroadcastManager'
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
   const [listenerChart, setListenerChart] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
     if (!user || user.role !== 'admin') { navigate('/'); return }
@@ -117,11 +119,17 @@ export default function AdminDashboard() {
   function SL({t}:{t:string}){return<p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
   return(
     <div className="min-h-screen flex" style={{background:'#0c0c12',color:'#f3eee4'}}>
-      <aside className="w-56 flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto">
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={()=>setMobileSidebarOpen(false)} />
+      )}
+      <aside className={`${mobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 translate-x-0' : 'hidden lg:flex'} flex-col w-56 flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto transition-transform duration-300 ${mobileSidebarOpen ? '' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-4">
-          <div className="flex items-center gap-2.5 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-[#c9a227] flex items-center justify-center flex-shrink-0"><Radio className="w-4 h-4 text-[#1b1208]"/></div>
-            <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#c9a227] flex items-center justify-center flex-shrink-0"><Radio className="w-4 h-4 text-[#1b1208]"/></div>
+              <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>
+            </div>
+            <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
           </div>
           <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>
           <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
@@ -144,12 +152,13 @@ export default function AdminDashboard() {
         </div>
       </aside>
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-[rgba(243,238,228,0.06)] bg-[#111118]/80 backdrop-blur-md flex items-center justify-between px-5 flex-shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="h-14 border-b border-[rgba(243,238,228,0.06)] bg-[#111118]/80 backdrop-blur-md flex items-center justify-between px-3 sm:px-5 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button onClick={()=>setMobileSidebarOpen(true)} className="lg:hidden text-[#9c958a] p-1"><Menu className="w-5 h-5" /></button>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white font-medium">Welcome back,</span>
+              <span className="hidden sm:inline text-sm text-white font-medium">Welcome back,</span>
               <span className="text-sm font-bold text-white">{user.name||'Admin'}</span>
-              <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#c9a227]/10 text-[#c9a227] border border-[#c9a227]/20">System Administrator</span>
+              <span className="hidden sm:inline text-[9px] px-2 py-0.5 rounded-full bg-[#c9a227]/10 text-[#c9a227] border border-[#c9a227]/20">System Administrator</span>
             </div>
             <div className="hidden xl:block text-xs text-[#9c958a] italic border-l border-[rgba(243,238,228,0.1)] pl-4">"Go into all the world and preach the gospel to all creation." — Mark 16:15</div>
           </div>
@@ -164,7 +173,7 @@ export default function AdminDashboard() {
             <div className="hidden md:flex items-center gap-1.5 text-[11px] text-[#9c958a] border-l border-[rgba(243,238,228,0.1)] pl-3"><Calendar className="w-3 h-3"/><span>May 20, 2025</span></div>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5">
           {activeTab==='dashboard'?(
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -261,7 +270,8 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">RECENT SERMONS</h3><button onClick={()=>setActiveTab('sermons')} className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
-                  <table className="w-full text-[10px]">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] min-w-[320px]">
                     <thead><tr className="text-[#9c958a] border-b border-[rgba(243,238,228,0.06)]"><th className="text-left pb-2 font-normal">Title</th><th className="text-left pb-2 font-normal">Speaker</th><th className="text-left pb-2 font-normal">Date</th><th className="text-left pb-2 font-normal">Status</th></tr></thead>
                     <tbody>
                       {(sermons.length?sermons:[]).slice(0,5).map((s:any)=>(
@@ -270,6 +280,7 @@ export default function AdminDashboard() {
                       {sermons.length===0&&<tr><td colSpan={4} className="py-6 text-center text-[#9c958a]">No sermons uploaded yet</td></tr>}
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">PENDING PRAYER REQUESTS</h3><button onClick={()=>setActiveTab('prayer')} className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
@@ -312,7 +323,8 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">RECENT DONATIONS</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
-                  <table className="w-full text-[10px]">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] min-w-[320px]">
                     <thead><tr className="text-[#9c958a] border-b border-[rgba(243,238,228,0.06)]"><th className="text-left pb-2 font-normal">Donor</th><th className="text-left pb-2 font-normal">Message</th><th className="text-left pb-2 font-normal">Amount</th><th className="text-left pb-2 font-normal">Status</th></tr></thead>
                     <tbody>
                       {(recentDonations.length?recentDonations:[]).slice(0,5).map((d:any)=>{
@@ -329,6 +341,7 @@ export default function AdminDashboard() {
                       {recentDonations.length===0&&<tr><td colSpan={4} className="py-6 text-center text-[#9c958a]">No donations yet</td></tr>}
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">TOP CAMPAIGNS</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>

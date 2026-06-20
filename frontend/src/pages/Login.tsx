@@ -86,7 +86,7 @@ export default function Login() {
             </p>
           </div>
 
-          <div className="p-8 rounded-2xl" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+          <div className="p-4 sm:p-8 rounded-2xl" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
             {error && (
               <div className="mb-6 p-4 rounded-xl text-sm border"
                 style={{ background: 'rgba(220,38,38,0.08)', color: '#fca5a5', borderColor: 'rgba(220,38,38,0.15)' }}

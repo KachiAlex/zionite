@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   LayoutDashboard, Radio, BookOpen, Headphones, FileText, Heart, MessageSquare, Users, Mic2,
   Calendar, DollarSign, Bell, Bookmark, History, User, Settings, Search, Play, Pause,
-  Volume2, VolumeX, Send, ChevronRight, TrendingUp, Smartphone, Cross, BookOpenCheck
+  Volume2, VolumeX, Send, ChevronRight, TrendingUp, Smartphone, Cross, BookOpenCheck,
+  Menu, X
 } from 'lucide-react'
 
 /* ─── Types ─── */
@@ -37,18 +38,26 @@ const bottomNav = [
   { label: 'Settings', path: '/settings', icon: Settings },
 ]
 
-function Sidebar({ activePath }: { activePath: string }) {
+function Sidebar({ activePath, mobileOpen, onClose }: { activePath: string; mobileOpen?: boolean; onClose?: () => void }) {
   return (
-    <aside className="hidden lg:flex flex-col w-60 h-[calc(100vh-3.5rem)] sticky top-14 border-r border-[rgba(243,238,228,0.08)] bg-[#0f0f14] overflow-y-auto">
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={onClose} />
+      )}
+      <aside className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-50 translate-x-0' : 'hidden lg:flex'} flex-col w-60 h-screen lg:h-[calc(100vh-3.5rem)] lg:sticky lg:top-14 border-r border-[rgba(243,238,228,0.08)] bg-[#0f0f14] overflow-y-auto transition-transform duration-300 ${mobileOpen ? '' : '-translate-x-full lg:translate-x-0'}`}>
       <div className="p-5">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-[#c9a227]/10 border border-[#c9a227]/20 flex items-center justify-center">
-            <Cross className="w-5 h-5 text-[#c9a227]" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#c9a227]/10 border border-[#c9a227]/20 flex items-center justify-center">
+              <Cross className="w-5 h-5 text-[#c9a227]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">ZIONITEFM</p>
+              <p className="text-[10px] text-[#9c958a]">The Voice of Redemption</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold text-white">ZIONITEFM</p>
-            <p className="text-[10px] text-[#9c958a]">The Voice of Redemption</p>
-          </div>
+          <button onClick={onClose} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
         </div>
         <p className="text-[10px] uppercase tracking-wider text-[#9c958a] mb-3 ml-2">Menu</p>
         <nav className="space-y-0.5">
@@ -87,6 +96,7 @@ function Sidebar({ activePath }: { activePath: string }) {
         </div>
       </div>
     </aside>
+    </>
   )
 }
 
@@ -258,11 +268,29 @@ export default function MemberDashboard() {
 
   if (!user) return null
 
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+
   return (
-    <div className="min-h-screen" style={{background:'var(--ink)', color:'var(--parchment)'}}>
+    <div className="min-h-screen pb-16 lg:pb-0" style={{background:'var(--ink)', color:'var(--parchment)'}}>
       <div className="max-w-[1440px] mx-auto flex">
-        <Sidebar activePath={location.pathname} />
-        <main className="flex-1 min-w-0 px-4 md:px-6 py-6">
+        <Sidebar activePath={location.pathname} mobileOpen={mobileSidebarOpen} onClose={()=>setMobileSidebarOpen(false)} />
+        <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 py-4 md:py-6">
+          {/* Mobile header bar */}
+          <div className="lg:hidden flex items-center justify-between mb-4">
+            <button onClick={()=>setMobileSidebarOpen(true)} className="flex items-center gap-2 text-[#9c958a]">
+              <Menu className="w-5 h-5" />
+              <span className="text-xs">Menu</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button className="relative w-8 h-8 rounded-full bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] flex items-center justify-center">
+                <Bell className="w-4 h-4 text-[#9c958a]" />
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#8a3326]" />
+              </button>
+              <div className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] text-xs font-bold">
+                {user.name?.[0]?.toUpperCase()||'L'}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
             <div className="xl:col-span-9 space-y-5">
               {/* Header */}
@@ -460,7 +488,7 @@ export default function MemberDashboard() {
             </div>
           </div>
           {/* Footer */}
-          <div className="mt-8 py-4 border-t border-[rgba(243,238,228,0.08)] flex items-center justify-between">
+          <div className="mt-8 py-4 border-t border-[rgba(243,238,228,0.08)] flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
             <div className="flex items-center gap-2">
               <Cross className="w-4 h-4 text-[#c9a227]" />
               <span className="text-xs text-[#9c958a]">ZIONITEFM – <span className="text-[10px] uppercase tracking-wider">The Voice of Redemption</span></span>
@@ -468,6 +496,25 @@ export default function MemberDashboard() {
             <p className="text-[10px] text-[#9c958a] italic">&ldquo;Go into all the world and preach the gospel to all creation.&rdquo; – Mark 16:15</p>
           </div>
         </main>
+      </div>
+      {/* Mobile bottom nav */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[rgba(243,238,228,0.08)] bg-[#0f0f14]/95 backdrop-blur-md flex items-center justify-around py-2">
+        {[
+          {icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard'},
+          {icon: Radio, label: 'Live', path: '/live'},
+          {icon: BookOpen, label: 'Sermons', path: '/archive'},
+          {icon: Heart, label: 'Prayer', path: '/prayer'},
+          {icon: Settings, label: 'More', path: '/settings'},
+        ].map(item => {
+          const active = location.pathname === item.path
+          const Icon = item.icon
+          return (
+            <Link key={item.label} to={item.path} className="flex flex-col items-center gap-0.5 px-2 py-1">
+              <Icon className={`w-5 h-5 ${active ? 'text-[#c9a227]' : 'text-[#9c958a]'}`} />
+              <span className={`text-[10px] ${active ? 'text-[#c9a227]' : 'text-[#9c958a]'}`}>{item.label}</span>
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
