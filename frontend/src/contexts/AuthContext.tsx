@@ -26,21 +26,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem('token')
       const cachedUser = localStorage.getItem('user')
 
-      if (token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        if (cachedUser) {
-          try { setUser(JSON.parse(cachedUser)) } catch {}
-        }
-        try {
-          const { data } = await axios.get('/api/auth/verify', { timeout: 8000 })
-          setUser(data.user)
-          localStorage.setItem('user', JSON.stringify(data.user))
-        } catch {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          delete axios.defaults.headers.common['Authorization']
-          setUser(null)
-        }
+      // Defensive: reject literal "undefined" or obviously malformed tokens
+      if (!token || token === 'undefined' || token === 'null' || token.length < 10) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        delete axios.defaults.headers.common['Authorization']
+        setLoading(false)
+        return
+      }
+
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      if (cachedUser && cachedUser !== 'undefined') {
+        try { setUser(JSON.parse(cachedUser)) } catch {}
+      }
+      try {
+        const { data } = await axios.get('/api/auth/verify', { timeout: 8000 })
+        setUser(data.user)
+        localStorage.setItem('user', JSON.stringify(data.user))
+      } catch {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        delete axios.defaults.headers.common['Authorization']
+        setUser(null)
       }
       setLoading(false)
     }
