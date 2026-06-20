@@ -1,13 +1,25 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Mic2, Search, Heart, Users, Menu, X } from 'lucide-react'
+import { Mic2, Search, Heart, Users, Menu, X, LayoutDashboard, LogOut, LogIn } from 'lucide-react'
 
 export default function Navbar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
   const [searchQ, setSearchQ] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [avatarOpen, setAvatarOpen] = useState(false)
+  const avatarRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setAvatarOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   const navItems = [
     { label: 'Home', path: '/' },
@@ -51,15 +63,47 @@ export default function Navbar() {
             <input type="text" placeholder="Search sermons, topics, speakers..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
               className="bg-transparent text-xs text-white placeholder-[#9c958a] outline-none w-44" />
           </div>
-          {user ? (
-            <Link to="/admin" className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] text-xs font-bold">
-              {user.name?.[0]?.toUpperCase() || 'A'}
-            </Link>
-          ) : (
-            <Link to="/login" className="flex items-center gap-1 text-[#c9a227] hover:text-[#e0bd5a] transition-colors">
-              <Users className="w-4 h-4" />
-            </Link>
-          )}
+
+          {/* Avatar dropdown */}
+          <div ref={avatarRef} className="relative">
+            <button onClick={() => setAvatarOpen(!avatarOpen)}
+              className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] text-xs font-bold hover:bg-[#e0bd5a] transition-colors">
+              {user ? user.name?.[0]?.toUpperCase() || 'A' : <Users className="w-4 h-4" />}
+            </button>
+
+            {avatarOpen && (
+              <div className="absolute right-0 mt-2 w-52 rounded-xl overflow-hidden shadow-xl"
+                style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+                {user ? (
+                  <>
+                    <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                      <p className="text-sm font-medium text-white">{user.name}</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--dim)' }}>{user.email}</p>
+                      <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
+                        style={{ background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }}>{user.role}</span>
+                    </div>
+                    <Link to="/admin" onClick={() => setAvatarOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[rgba(243,238,228,0.04)]"
+                      style={{ color: 'var(--parchment)' }}>
+                      <LayoutDashboard className="w-4 h-4" style={{ color: 'var(--dim)' }} /> Dashboard
+                    </Link>
+                    <button onClick={() => { logout(); setAvatarOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[rgba(243,238,228,0.04)]"
+                      style={{ color: 'var(--parchment)' }}>
+                      <LogOut className="w-4 h-4" style={{ color: 'var(--dim)' }} /> Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <Link to="/login" onClick={() => setAvatarOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-3 text-sm transition-colors hover:bg-[rgba(243,238,228,0.04)]"
+                    style={{ color: 'var(--parchment)' }}>
+                    <LogIn className="w-4 h-4" style={{ color: 'var(--dim)' }} /> Sign In
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+
           <button className="hidden md:flex items-center gap-1.5 bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-1.5 rounded-full transition-colors">
             <Heart className="w-3.5 h-3.5" /> Donate
           </button>
@@ -83,6 +127,15 @@ export default function Navbar() {
               </Link>
             )
           })}
+          {user && (
+            <>
+              <Link to="/admin" onClick={() => setMenuOpen(false)} className="block text-sm py-2 text-[#c9a227]">Dashboard</Link>
+              <button onClick={() => { logout(); setMenuOpen(false); }} className="block text-sm py-2 text-[#c9a227]">Sign Out</button>
+            </>
+          )}
+          {!user && (
+            <Link to="/login" onClick={() => setMenuOpen(false)} className="block text-sm py-2 text-[#c9a227]">Sign In</Link>
+          )}
         </div>
       )}
     </nav>
