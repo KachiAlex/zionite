@@ -457,8 +457,8 @@ export default function Live() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {chatMessages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col ${isOwnMessage(msg) ? 'items-end' : 'items-start'}`}>
+              {chatMessages.map((msg, idx) => (
+                <div key={msg.id} className={`flex flex-col animate-slide-up ${isOwnMessage(msg) ? 'items-end' : 'items-start'}`} style={{ animationDelay: `${Math.min(idx * 0.03, 0.3)}s` }}>
                   <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${isOwnMessage(msg) ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
                     style={{
                       background: isOwnMessage(msg) ? (msg.is_private ? '#4a3b2a' : '#c9a227') : (msg.is_private ? '#2a2a3a' : '#0f1016'),

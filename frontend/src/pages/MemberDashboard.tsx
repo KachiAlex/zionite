@@ -175,16 +175,16 @@ function LivePlayerHero({ broadcast, isPlaying, setIsPlaying, isMuted, setIsMute
 
 function QuickCard({ icon: Icon, title, subtitle, actionLabel, to, accent }: any) {
   return (
-    <Link to={to} className="group block rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover:border-[rgba(243,238,228,0.15)] transition-colors">
+    <Link to={to} className="group block rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover:border-[rgba(243,238,228,0.15)] transition-all duration-300 hover-lift">
       <div className="flex items-start justify-between mb-4">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent} transition-transform duration-300 group-hover:scale-110`}>
           <Icon className="w-5 h-5" />
         </div>
-        <ChevronRight className="w-4 h-4 text-[#9c958a] group-hover:text-[#c9a227] transition-colors" />
+        <ChevronRight className="w-4 h-4 text-[#9c958a] group-hover:text-[#c9a227] transition-all duration-300 group-hover:translate-x-1" />
       </div>
       <h3 className="text-sm font-medium text-white mb-1">{title}</h3>
       <p className="text-xs text-[#9c958a] leading-relaxed mb-4">{subtitle}</p>
-      <span className="inline-flex items-center text-[11px] font-medium text-[#c9a227] bg-[#c9a227]/10 px-3 py-1.5 rounded-lg">{actionLabel}</span>
+      <span className="inline-flex items-center text-[11px] font-medium text-[#c9a227] bg-[#c9a227]/10 px-3 py-1.5 rounded-lg group-hover:bg-[#c9a227]/20 transition-colors">{actionLabel}</span>
     </Link>
   )
 }

@@ -184,14 +184,17 @@ export default function AdminDashboard() {
                   {icon:Mic,label:'Podcasts',value:dashboard?.podcastCount?.toLocaleString()||'0',chg:'',sub:'Total Episodes',bg:'rgba(249,115,22,0.12)',col:'#f97316'},
                   {icon:Heart,label:'Prayer Requests',value:dashboard?.prayerCount?.toLocaleString()||String(prayers.length||0),chg:'',sub:`Pending`,bg:'rgba(239,68,68,0.12)',col:'#ef4444'},
                   {icon:DollarSign,label:'Total Donations',value:dashboard?.totalDonations?`$${Number(dashboard.totalDonations).toLocaleString()}`:'$0',chg:'',sub:'All time',bg:'rgba(201,162,39,0.12)',col:'#c9a227'},
-                ].map((c,i)=>(
-                  <div key={i} className="p-3.5 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style={{background:c.bg}}><c.icon className="w-4 h-4" style={{color:c.col}}/></div>
+                ].map((c,i)=>{
+                  const staggerClass = i < 6 ? `stagger-${i+1}` : ''
+                  return (
+                  <div key={i} className={`p-3.5 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] hover-lift animate-slide-up ${staggerClass}`}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2 transition-transform duration-300 hover:scale-110" style={{background:c.bg}}><c.icon className="w-4 h-4" style={{color:c.col}}/></div>
                     <p className="text-[10px] text-[#9c958a]">{c.label}</p>
                     <p className="text-lg font-bold text-white mt-0.5">{c.value}</p>
                     <div className="flex items-center gap-1 mt-0.5">{c.chg?<span className="text-[9px] text-[#4ade80]">{c.chg}</span>:null}<span className="text-[9px] text-[#9c958a]">{c.sub}</span></div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 {(()=>{const live=broadcasts.find(b=>b.status==='live');return(

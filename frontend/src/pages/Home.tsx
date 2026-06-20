@@ -25,10 +25,10 @@ function SectionHeader({ title, action, to }:{ title:string; action:string; to:s
 
 function SermonCard({ s }:{ s:Sermon }) {
   return (
-    <Link to={`/archive/${s.id}`} className="group block">
+    <Link to={`/archive/${s.id}`} className="group block hover-lift">
       <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
         {s.thumbnail_url ? (
-          <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover" />
+          <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
@@ -117,14 +117,14 @@ export default function Home() {
       </div>
 
       {/* ====== MAIN DASHBOARD GRID ====== */}
-      <div className="max-w-[1440px] mx-auto px-4 md:px-6 pb-5">
+      <div className="max-w-[1440px] mx-auto px-4 md:px-6 pb-5 animate-slide-up">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
           {/* LEFT COLUMN (8/12) */}
           <div className="lg:col-span-8 space-y-5">
 
             {/* Featured Sermons */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
               <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {sermons.length>0 ? sermons.map(s=><SermonCard key={s.id} s={s} />) :
@@ -139,7 +139,7 @@ export default function Home() {
             {/* Bottom row: 3 cards */}
             <div className="grid md:grid-cols-3 gap-5">
               {/* Sermon Transcripts */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Sermon Transcripts" action="View All" to="/archive" />
                 <p className="text-xs text-[#9c958a] mb-3">Read, study and download sermon transcripts.</p>
                 <div className="space-y-2">
@@ -157,7 +157,7 @@ export default function Home() {
               </section>
 
               {/* Guest Speaker Spotlight */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Guest Speaker Spotlight" action="View All" to="/events" />
                 {guestSpeakers.length > 0 ? (
                   <div className="flex gap-3">
@@ -185,7 +185,7 @@ export default function Home() {
               </section>
 
               {/* Giving & Donations */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Giving & Donations" action="" to="#" />
                 <p className="text-xs text-[#9c958a] mb-3">Your giving makes ministry and impact possible.</p>
                 <div className="space-y-2 mb-4">
@@ -206,7 +206,7 @@ export default function Home() {
           <div className="lg:col-span-4 space-y-5">
 
             {/* Today's Schedule */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
               <SectionHeader title="Today's Schedule" action="View Full Schedule" to="/status" />
               <div className="text-center py-6">
                 <Calendar className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
@@ -215,7 +215,7 @@ export default function Home() {
             </section>
 
             {/* Upcoming Events */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
               <SectionHeader title="Upcoming Events" action="View All" to="/events" />
               {events.length > 0 ? (
                 <div className="space-y-3">
