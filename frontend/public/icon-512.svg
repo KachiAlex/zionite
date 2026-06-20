@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0c0c12" rx="64"/>
+  <circle cx="256" cy="240" r="128" fill="none" stroke="#c9a227" stroke-width="16"/>
+  <polygon points="220,192 220,288 292,240" fill="#c9a227"/>
+  <text x="256" y="440" text-anchor="middle" fill="#9c958a" font-family="system-ui, sans-serif" font-size="32" font-weight="bold">ZIONITE FM</text>
+</svg>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import axios from "axios"
 import { useAuth } from "../contexts/AuthContext"
+import { useAudioPlayer } from "../contexts/AudioPlayerContext"
 import {
   Play, Search, Heart,
   Users, BookOpen, Headphones, ChevronRight,
@@ -24,24 +25,35 @@ function SectionHeader({ title, action, to }:{ title:string; action:string; to:s
 }
 
 function SermonCard({ s }:{ s:Sermon }) {
+  const { playTrack } = useAudioPlayer()
   return (
-    <Link to={`/archive/${s.id}`} className="group block hover-lift">
-      <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
-        {s.thumbnail_url ? (
-          <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
-          <Play className="w-3 h-3 text-white fill-white" />
-          <span className="text-[10px] text-white">{s.duration ? Math.round(s.duration/60)+" min" : "45 min"}</span>
+    <div className="group block hover-lift">
+      <Link to={`/archive/${s.id}`}>
+        <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
+          {s.thumbnail_url ? (
+            <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          {s.video_url && (
+            <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">VIDEO</div>
+          )}
         </div>
-        {s.video_url && (
-          <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">VIDEO</div>
+      </Link>
+      <div className="flex items-start justify-between gap-2">
+        <Link to={`/archive/${s.id}`} className="flex-1 min-w-0">
+          <h4 className="text-sm font-medium text-white group-hover:text-[#c9a227] transition-colors leading-snug truncate">{s.title}</h4>
+          <p className="text-xs text-[#9c958a] mt-0.5">{s.speaker || "Pastor"}</p>
+        </Link>
+        {s.audio_url && (
+          <button
+            onClick={(e) => { e.stopPropagation(); playTrack({ id: s.id, title: s.title, speaker: s.speaker || 'Pastor', audioUrl: s.audio_url!, thumbnail: s.thumbnail_url }) }}
+            className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] flex-shrink-0 transition-transform hover:scale-110"
+          >
+            <Play className="w-4 h-4 fill-current ml-0.5" />
+          </button>
         )}
       </div>
-      <h4 className="text-sm font-medium text-white group-hover:text-[#c9a227] transition-colors leading-snug">{s.title}</h4>
-      <p className="text-xs text-[#9c958a] mt-0.5">{s.speaker || "Pastor"}</p>
-    </Link>
+    </div>
   )
 }
 

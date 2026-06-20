@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import SearchOverlay from './SearchOverlay'
 import { Mic2, Search, Heart, Users, Menu, X, LayoutDashboard, LogOut, LogIn } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const [searchQ, setSearchQ] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const avatarRef = useRef<HTMLDivElement>(null)
@@ -25,6 +26,7 @@ export default function Navbar() {
     { label: 'Home', path: '/' },
     { label: 'Live Radio', path: '/live' },
     { label: 'Sermons', path: '/archive' },
+    { label: 'Music', path: '/music' },
     { label: 'Podcasts', path: '/podcasts' },
     { label: 'Prayer Wall', path: '/prayer' },
     { label: 'Events', path: '/events' },
@@ -58,11 +60,14 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center bg-[#1c1d24] rounded-full px-3 py-1.5 border border-[rgba(243,238,228,0.08)]">
-            <Search className="w-3.5 h-3.5 text-[#9c958a] mr-2" />
-            <input type="text" placeholder="Search sermons, topics, speakers..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
-              className="bg-transparent text-xs text-white placeholder-[#9c958a] outline-none w-44" />
-          </div>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="hidden md:flex items-center bg-[#1c1d24] rounded-full px-3 py-1.5 border border-[rgba(243,238,228,0.08)] text-[#9c958a] hover:text-white transition-colors"
+          >
+            <Search className="w-3.5 h-3.5 mr-2" />
+            <span className="text-xs">Search sermons, topics, speakers...</span>
+          </button>
+          <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
 
           {/* Avatar dropdown */}
           <div ref={avatarRef} className="relative">
@@ -118,6 +123,10 @@ export default function Navbar() {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="md:hidden border-t border-[rgba(243,238,228,0.08)] px-4 py-3 space-y-2" style={{ background: 'var(--ink-2)' }}>
+          <button onClick={() => { setSearchOpen(true); setMenuOpen(false); }}
+            className="flex items-center gap-2 text-sm py-2 text-[#9c958a] w-full text-left">
+            <Search className="w-4 h-4" /> Search
+          </button>
           {navItems.map(item => {
             const active = location.pathname === item.path
             return (

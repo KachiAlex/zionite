@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { useAudioPlayer } from '../contexts/AudioPlayerContext'
 import {
   LayoutDashboard, Radio, BookOpen, Headphones, FileText, Heart, MessageSquare, Users, Mic2,
   Calendar, DollarSign, Bell, Bookmark, History, User, Settings, Search, Play, Pause,
@@ -190,25 +191,34 @@ function QuickCard({ icon: Icon, title, subtitle, actionLabel, to, accent }: any
 }
 
 function SermonRow({ s }: { s: Sermon }) {
+  const { playTrack } = useAudioPlayer()
   return (
-    <Link to={`/archive/${s.id}`} className="group flex items-center gap-3 p-2.5 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
-      <div className="relative w-10 h-10 rounded-lg bg-[#14141a] overflow-hidden shrink-0">
+    <div className="group flex items-center gap-3 p-2.5 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
+      <Link to={`/archive/${s.id}`} className="relative w-10 h-10 rounded-lg bg-[#14141a] overflow-hidden shrink-0">
         {s.thumbnail_url ? <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-[#9c958a] m-2.5" />}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="w-5 h-5 rounded-full bg-black/50 flex items-center justify-center">
             <Play className="w-3 h-3 text-white fill-white" />
           </div>
         </div>
-      </div>
-      <div className="flex-1 min-w-0">
+      </Link>
+      <Link to={`/archive/${s.id}`} className="flex-1 min-w-0">
         <p className="text-xs font-medium text-white truncate group-hover:text-[#c9a227] transition-colors">{s.title}</p>
         <p className="text-[10px] text-[#9c958a]">{s.speaker || 'Pastor'} · {new Date(s.date).toLocaleDateString()}</p>
-      </div>
+      </Link>
       <div className="flex items-center gap-2 shrink-0">
+        {s.audio_url && (
+          <button
+            onClick={() => playTrack({ id: s.id, title: s.title, speaker: s.speaker || 'Pastor', audioUrl: s.audio_url!, thumbnail: s.thumbnail_url })}
+            className="w-7 h-7 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] transition-transform hover:scale-110"
+          >
+            <Play className="w-3 h-3 fill-current ml-0.5" />
+          </button>
+        )}
         <span className="text-[10px] text-[#9c958a]">{s.duration ? Math.round(s.duration/60)+' min' : '45 min'}</span>
         <Bookmark className="w-3.5 h-3.5 text-[#9c958a]" />
       </div>
-    </Link>
+    </div>
   )
 }
 
