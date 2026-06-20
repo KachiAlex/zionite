@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { loginSchema, registerSchema } from '../lib/validation'
 import { LogIn, UserPlus, Radio, ArrowLeft } from 'lucide-react'
 
 export default function Login() {
@@ -17,11 +18,20 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setLoading(true)
 
+    // Client-side Zod validation
+    const schema = isRegister ? registerSchema : loginSchema
+    const payload = isRegister ? { email, password, name } : { email, password }
+    const parsed = schema.safeParse(payload)
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || 'Invalid input'
+      setError(firstError)
+      return
+    }
+
+    setLoading(true)
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
-      const payload = isRegister ? { email, password, name } : { email, password }
       console.log('[AUTH] calling', endpoint, 'with', JSON.stringify(Object.keys(payload)))
       const { data } = await axios.post(endpoint, payload, { timeout: 15000 })
       console.log('[AUTH] success, role:', data.user?.role)

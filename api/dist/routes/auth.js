@@ -1,10 +1,20 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { db, initDb, dbReady } from '../db.js';
 import { JWT_SECRET, authenticateToken, requireRole } from '../middleware/auth.js';
 const router = Router();
+const registerSchema = z.object({
+    email: z.string().email('Invalid email address').min(1, 'Email is required'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+});
+const loginSchema = z.object({
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(1, 'Password is required'),
+});
 router.post('/register', async (req, res) => {
     try {
         if (!dbReady) {
@@ -12,11 +22,13 @@ router.post('/register', async (req, res) => {
             return;
         }
         await initDb();
-        const { email, password, name } = req.body;
-        if (!email || !password || !name) {
-            res.status(400).json({ error: 'Email, password, and name are required' });
+        const parsed = registerSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const errors = parsed.error.issues.map(i => i.message).join(', ');
+            res.status(400).json({ error: errors });
             return;
         }
+        const { email, password, name } = parsed.data;
         const existing = await db.get('SELECT * FROM users WHERE email = $1', [email]);
         if (existing) {
             res.status(409).json({ error: 'Email already registered' });
@@ -40,11 +52,13 @@ router.post('/login', async (req, res) => {
             return;
         }
         await initDb();
-        const { email, password } = req.body;
-        if (!email || !password) {
-            res.status(400).json({ error: 'Email and password are required' });
+        const parsed = loginSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const errors = parsed.error.issues.map(i => i.message).join(', ');
+            res.status(400).json({ error: errors });
             return;
         }
+        const { email, password } = parsed.data;
         const user = await db.get('SELECT * FROM users WHERE email = $1', [email]);
         if (!user) {
             res.status(401).json({ error: 'Invalid credentials' });

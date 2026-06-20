@@ -1,0 +1,14 @@
+{
+  "name": "Zionite FM - Church Broadcast",
+  "short_name": "Zionite FM",
+  "description": "The Voice of Redemption - Live broadcasts, sermons, and community",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0c12",
+  "theme_color": "#0c0c12",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

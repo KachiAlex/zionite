@@ -1,7 +1,17 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { db, initDb } from '../db.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { optimizeImage } from '../middleware/optimizeImage.js';
+const uploadImage = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        cb(null, allowed.includes(file.mimetype));
+    }
+});
 const router = Router();
 router.get('/', async (req, res) => {
     try {
@@ -43,19 +53,34 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
     try {
         await initDb();
-        const { title, description, scripture_reference } = req.body;
+        const { title, description, scripture_reference, thumbnail_url, speaker } = req.body;
         if (!title) {
             res.status(400).json({ error: 'Title is required' });
             return;
         }
         const id = uuidv4();
-        await db.run(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, started_at, broadcaster_id)
-       VALUES ($1, $2, $3, $4, 'live', CURRENT_TIMESTAMP, $5)`, [id, title, description || null, scripture_reference || null, req.user.id]);
-        res.json({ broadcast: { id, title, description, scripture_reference, status: 'live', broadcaster_id: req.user.id } });
+        await db.run(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, started_at, broadcaster_id, thumbnail_url, speaker)
+       VALUES ($1, $2, $3, $4, 'live', CURRENT_TIMESTAMP, $5, $6, $7)`, [id, title, description || null, scripture_reference || null, req.user.id, thumbnail_url || null, speaker || null]);
+        res.json({ broadcast: { id, title, description, scripture_reference, status: 'live', broadcaster_id: req.user.id, thumbnail_url, speaker } });
     }
     catch (err) {
         console.error('[BROADCASTS] create error:', err.message);
         res.status(500).json({ error: 'Failed to create broadcast' });
+    }
+});
+router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'admin'), uploadImage.single('image'), optimizeImage, async (req, res) => {
+    try {
+        if (!req.file) {
+            res.status(400).json({ error: 'Image file required' });
+            return;
+        }
+        const base64 = req.file.buffer.toString('base64');
+        const image_url = `data:${req.file.mimetype};base64,${base64}`;
+        res.json({ image_url });
+    }
+    catch (err) {
+        console.error('[BROADCASTS] upload error:', err.message);
+        res.status(500).json({ error: 'Failed to upload image' });
     }
 });
 router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {

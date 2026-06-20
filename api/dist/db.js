@@ -66,7 +66,7 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     status TEXT NOT NULL DEFAULT 'scheduled', started_at TIMESTAMP, ended_at TIMESTAMP,
     broadcaster_id TEXT NOT NULL, audio_path TEXT, stream_key TEXT, stream_type TEXT DEFAULT 'church_online',
-    church_online_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    church_online_url TEXT, thumbnail_url TEXT, speaker TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
     `CREATE TABLE IF NOT EXISTS sermons (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
@@ -105,6 +105,30 @@ const SCHEMA_QUERIES = [
     `CREATE TABLE IF NOT EXISTS transcripts (
     id TEXT PRIMARY KEY, sermon_id TEXT NOT NULL UNIQUE, content TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS music (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT, album TEXT, genre TEXT,
+    audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
+    file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS stream_listeners (
+    id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, session_id TEXT NOT NULL,
+    platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS donations (
+    id TEXT PRIMARY KEY, name TEXT, email TEXT, amount NUMERIC NOT NULL,
+    message TEXT, is_anonymous BOOLEAN DEFAULT FALSE, status TEXT DEFAULT 'completed',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS testimonies (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT, content TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', is_featured BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, goal_amount NUMERIC NOT NULL,
+    current_amount NUMERIC DEFAULT 0, end_date TEXT, is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ];
 let _dbInitPromise = null;
@@ -132,6 +156,17 @@ async function _initDbInternal() {
         await db.query(SCHEMA_QUERIES[i]);
     }
     console.log('[DB] schema OK');
+    // Migration: add columns to broadcasts if missing
+    try {
+        await db.query(`ALTER TABLE broadcasts ADD COLUMN thumbnail_url TEXT`);
+        console.log('[DB] migration: added thumbnail_url to broadcasts');
+    }
+    catch { /* already exists */ }
+    try {
+        await db.query(`ALTER TABLE broadcasts ADD COLUMN speaker TEXT`);
+        console.log('[DB] migration: added speaker to broadcasts');
+    }
+    catch { /* already exists */ }
     // Migration: add video_url and thumbnail_url to sermons if missing
     try {
         await db.query(`ALTER TABLE sermons ADD COLUMN video_url TEXT`);

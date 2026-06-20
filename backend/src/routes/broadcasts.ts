@@ -3,6 +3,7 @@ import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
+import { optimizeImage } from '../middleware/optimizeImage.js'
 
 const uploadImage = multer({
   storage: multer.memoryStorage(),
@@ -68,7 +69,7 @@ router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (
   }
 })
 
-router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'admin'), uploadImage.single('image'), async (req: AuthenticatedRequest, res) => {
+router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'admin'), uploadImage.single('image'), optimizeImage, async (req: AuthenticatedRequest, res) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'Image file required' }); return }
     const base64 = req.file.buffer.toString('base64')

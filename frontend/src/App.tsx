@@ -1,19 +1,33 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { AudioPlayerProvider } from './contexts/AudioPlayerContext'
 import Layout from './components/Layout'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import Broadcast from './pages/Broadcast'
-import Archive from './pages/Archive'
-import AdminDashboard from './pages/AdminDashboard'
-import MemberDashboard from './pages/MemberDashboard'
-import Status from './pages/Status'
-import Live from './pages/Live'
-import Music from './pages/Music'
-import Podcasts from './pages/Podcasts'
-import PrayerWall from './pages/PrayerWall'
-import Events from './pages/Events'
-import AboutUs from './pages/AboutUs'
+import ErrorBoundary from './components/ErrorBoundary'
+import ProtectedRoute from './components/ProtectedRoute'
+
+// Code-split pages for smaller initial bundle
+const Home = lazy(() => import('./pages/Home'))
+const Login = lazy(() => import('./pages/Login'))
+const Broadcast = lazy(() => import('./pages/Broadcast'))
+const Archive = lazy(() => import('./pages/Archive'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const MemberDashboard = lazy(() => import('./pages/MemberDashboard'))
+const Status = lazy(() => import('./pages/Status'))
+const Live = lazy(() => import('./pages/Live'))
+const Music = lazy(() => import('./pages/Music'))
+const Podcasts = lazy(() => import('./pages/Podcasts'))
+const PrayerWall = lazy(() => import('./pages/PrayerWall'))
+const Events = lazy(() => import('./pages/Events'))
+const AboutUs = lazy(() => import('./pages/AboutUs'))
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ink)' }}>
+      <div className="w-8 h-8 border-2 border-[#c9a227] border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function AnimatedRoutes() {
   const location = useLocation()
@@ -22,10 +36,7 @@ function AnimatedRoutes() {
       <Routes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/broadcast" element={<Broadcast />} />
         <Route path="/archive" element={<Archive />} />
-        <Route path="/dashboard" element={<MemberDashboard />} />
-        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/status" element={<Status />} />
         <Route path="/live" element={<Live />} />
         <Route path="/live/:broadcastId" element={<Live />} />
@@ -34,6 +45,30 @@ function AnimatedRoutes() {
         <Route path="/prayer" element={<PrayerWall />} />
         <Route path="/events" element={<Events />} />
         <Route path="/about" element={<AboutUs />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['listener', 'admin', 'broadcaster']}>
+              <MemberDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'broadcaster']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/broadcast"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'broadcaster']}>
+              <Broadcast />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </div>
   )
@@ -42,11 +77,17 @@ function AnimatedRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Layout>
-          <AnimatedRoutes />
-        </Layout>
-      </BrowserRouter>
+      <AudioPlayerProvider>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <Layout>
+              <Suspense fallback={<PageLoader />}>
+                <AnimatedRoutes />
+              </Suspense>
+            </Layout>
+          </ErrorBoundary>
+        </BrowserRouter>
+      </AudioPlayerProvider>
     </AuthProvider>
   )
 }
