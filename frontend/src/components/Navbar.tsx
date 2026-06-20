@@ -82,7 +82,7 @@ export default function Navbar() {
                       <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
                         style={{ background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }}>{user.role}</span>
                     </div>
-                    <Link to="/admin" onClick={() => setAvatarOpen(false)}
+                    <Link to={user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard'} onClick={() => setAvatarOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[rgba(243,238,228,0.04)]"
                       style={{ color: 'var(--parchment)' }}>
                       <LayoutDashboard className="w-4 h-4" style={{ color: 'var(--dim)' }} /> Dashboard
@@ -129,7 +129,7 @@ export default function Navbar() {
           })}
           {user && (
             <>
-              <Link to="/admin" onClick={() => setMenuOpen(false)} className="block text-sm py-2 text-[#c9a227]">Dashboard</Link>
+              <Link to={user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard'} onClick={() => setMenuOpen(false)} className="block text-sm py-2 text-[#c9a227]">Dashboard</Link>
               <button onClick={() => { logout(); setMenuOpen(false); }} className="block text-sm py-2 text-[#c9a227]">Sign Out</button>
             </>
           )}
