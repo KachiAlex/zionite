@@ -13,6 +13,7 @@ interface Broadcast { id: string; title: string; description?: string; scripture
 interface ScheduleItem { id: string; title: string; day_of_week: number; time: string; type: string; days_until: number }
 interface ChatMessage { id: string; user_name?: string; guest_name?: string; message: string; created_at: string }
 interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string }
+interface GuestSpeaker { id: string; name: string; bio: string; photo_url: string; topic: string; date: string; is_active: boolean }
 const SCHEDULE = [
   { time:"09:00 AM", title:"Worship Experience", live:true },
   { time:"12:00 PM", title:"Midday Prayer", live:false },
@@ -57,6 +58,7 @@ export default function Home() {
   const [broadcast, setBroadcast] = useState<Broadcast|null>(null)
   const [schedule, setSchedule] = useState<ScheduleItem[]>([])
   const [sermons, setSermons] = useState<Sermon[]>([])
+  const [guestSpeakers, setGuestSpeakers] = useState<GuestSpeaker[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(70)
   const [searchQ, setSearchQ] = useState("")
@@ -70,14 +72,16 @@ export default function Home() {
 
   async function fetchData(){
     try {
-      const [br, sc, sr] = await Promise.all([
+      const [br, sc, sr, sp] = await Promise.all([
         axios.get("/api/broadcasts/active").catch(()=>({data:{broadcast:null}})),
         axios.get("/api/schedule").catch(()=>({data:{schedule:[]}})),
         axios.get("/api/sermons?limit=4").catch(()=>({data:{sermons:[]}})),
+        axios.get("/api/guest-speakers").catch(()=>({data:{speakers:[]}})),
       ])
       setBroadcast(br.data.broadcast)
       setSchedule(sc.data.schedule||[])
       setSermons(sr.data.sermons||[])
+      setGuestSpeakers(sp.data.speakers||[])
     } catch {}
   }
 
@@ -295,17 +299,35 @@ export default function Home() {
               {/* Guest Speaker Spotlight */}
               <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
                 <SectionHeader title="Guest Speaker Spotlight" action="View All" to="/events" />
-                <div className="flex gap-3">
-                  <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
-                    <Users className="w-8 h-8 text-[#c9a227]/40" />
+                {guestSpeakers.length > 0 ? (
+                  <div className="flex gap-3">
+                    {guestSpeakers[0].photo_url ? (
+                      <img src={guestSpeakers[0].photo_url} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
+                        <Users className="w-8 h-8 text-[#c9a227]/40" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-white">{guestSpeakers[0].name}</p>
+                      <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
+                      <p className="text-xs text-[#9c958a] mt-1">{guestSpeakers[0].topic || 'Special Conference'}</p>
+                      {guestSpeakers[0].date && <p className="text-[10px] text-[#9c958a]">{guestSpeakers[0].date}</p>}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">Dr. John Mark</p>
-                    <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
-                    <p className="text-xs text-[#9c958a] mt-1">Special Conference</p>
-                    <p className="text-[10px] text-[#9c958a]">May 24 - 26, 2025</p>
+                ) : (
+                  <div className="flex gap-3">
+                    <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
+                      <Users className="w-8 h-8 text-[#c9a227]/40" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">Dr. John Mark</p>
+                      <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
+                      <p className="text-xs text-[#9c958a] mt-1">Special Conference</p>
+                      <p className="text-[10px] text-[#9c958a]">May 24 - 26, 2025</p>
+                    </div>
                   </div>
-                </div>
+                )}
                 <Link to="/events" className="btn-gold w-full text-xs mt-3">View Event Details</Link>
               </section>
 
