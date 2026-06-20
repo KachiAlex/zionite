@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import axios from "axios"
-import { useAuth } from "../contexts/AuthContext"
 import {
   Play, Search, Heart,
   Users, BookOpen, Headphones, ChevronRight,
@@ -10,28 +9,15 @@ import {
 } from "lucide-react"
 
 interface Broadcast { id: string; title: string; description?: string; scripture_reference?: string; status: string; started_at?: string; broadcaster_id: string }
-interface ScheduleItem { id: string; title: string; day_of_week: number; time: string; type: string; days_until: number }
 interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string; audio_url?: string; video_url?: string; thumbnail_url?: string }
 interface GuestSpeaker { id: string; name: string; bio: string; photo_url: string; topic: string; date: string; is_active: boolean }
 interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string }
-const SCHEDULE = [
-  { time:"09:00 AM", title:"Worship Experience", live:true },
-  { time:"12:00 PM", title:"Midday Prayer", live:false },
-  { time:"03:00 PM", title:"Kingdom Teachings", live:false },
-  { time:"06:00 PM", title:"Evening Encounter", live:true },
-]
-const FEATURED = [
-  { title:"Walking in Divine Purpose", speaker:"Pastor Samuel Adeyemi", duration:"48:23" },
-  { title:"The Power of Consistent Prayer", speaker:"Pastor Grace IE", duration:"36:11" },
-  { title:"Jesus: The Way, The Truth & The Life", speaker:"Pastor Michael O.", duration:"52:17" },
-  { title:"Overcoming Life's Challenges", speaker:"Pastor Sarah O.", duration:"43:02" },
-]
 
 function SectionHeader({ title, action, to }:{ title:string; action:string; to:string }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h3 className="font-serif text-lg md:text-xl font-medium text-white">{title}</h3>
-      <Link to={to} className="text-xs font-medium text-[#9c958a] hover:text-[#c9a227] transition-colors">{action}</Link>
+      <h3 className="font-serif text-lg md:text-xl font-bold text-white">{title}</h3>
+      <Link to={to} className="text-xs font-bold text-[#9c958a] hover:text-[#c9a227] transition-colors">{action}</Link>
     </div>
   )
 }
@@ -63,7 +49,6 @@ export default function Home() {
   const [sermons, setSermons] = useState<Sermon[]>([])
   const [guestSpeakers, setGuestSpeakers] = useState<GuestSpeaker[]>([])
   const [events, setEvents] = useState<EventItem[]>([])
-  const { user } = useAuth()
 
   useEffect(()=>{
     fetchData()
@@ -87,7 +72,6 @@ export default function Home() {
   }
 
   const isLive = broadcast?.status==="live"
-  const listenerCount = 2543
 
   return (
     <div className="min-h-screen" style={{background:"var(--ink)",color:"var(--parchment)"}}>
@@ -97,33 +81,33 @@ export default function Home() {
           <img src="https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=2000&q=80" alt="" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-[#0c0c12]/85 via-[#0c0c12]/70 to-[#0c0c12]" />
         </div>
-        <div className="relative max-w-[1440px] mx-auto px-4 md:px-6 py-12 md:py-20">
-          <div className="max-w-xl">
-            <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-1">Welcome to</p>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-medium text-white leading-tight mb-4">
+        <div className="relative max-w-[1440px] mx-auto px-4 md:px-6 py-16 md:py-28">
+          <div className="max-w-3xl mx-auto text-center">
+            <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-2 font-bold">Welcome to</p>
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">
               ZioniteFM –<br />The Voice of Redemption
             </h1>
-            <p className="text-sm text-[#9c958a] max-w-md leading-relaxed mb-6">
+            <p className="text-base text-[#9c958a] max-w-xl mx-auto leading-relaxed mb-8 font-semibold">
               The official digital radio ministry of The Redemption Project. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               <Link to={isLive?`/live/${broadcast.id}`:"/live"} className="btn-gold text-sm">
                 <Headphones className="w-4 h-4" /> Listen Live
               </Link>
-              <Link to="/archive" className="flex items-center gap-2 text-xs text-[#9c958a] hover:text-white transition-colors">
+              <Link to="/archive" className="flex items-center gap-2 text-sm font-semibold text-[#9c958a] hover:text-white transition-colors hover:scale-105 duration-300">
                 <BookOpen className="w-4 h-4" /> Browse Sermons
               </Link>
             </div>
-            <div className="flex items-center gap-3 mt-8">
+            <div className="flex items-center justify-center gap-3 mt-8">
               <div className="flex -space-x-2">
                 {["SJ","DM","BK","AO","GO"].map((init,i)=>{
                   const bg = ["c9a227","8a3326","21222c","1c1d24","48433a"][i]
                   return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} className="w-8 h-8 rounded-full border-2 border-[#14141a]" alt="" />
                 })}
               </div>
-              <div>
-                <p className="text-xs text-white">Join the Community</p>
-                <p className="text-[10px] text-[#9c958a]">{listenerCount.toLocaleString()}+ listeners online</p>
+              <div className="text-left">
+                <p className="text-xs font-semibold text-white">Join the Community</p>
+                <p className="text-[10px] text-[#9c958a]">Thousands of listeners online</p>
               </div>
             </div>
           </div>
@@ -142,22 +126,10 @@ export default function Home() {
               <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {sermons.length>0 ? sermons.map(s=><SermonCard key={s.id} s={s} />) :
-                  FEATURED.map((f,i)=>{
-                    const colors = ["from-amber-900/30","from-emerald-900/30","from-blue-900/30","from-rose-900/30"]
-                    return (
-                      <div key={i}>
-                        <div className={`relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-gradient-to-br ${colors[i]} to-[#14141a]`}>
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
-                            <Play className="w-3 h-3 text-white fill-white" />
-                            <span className="text-[10px] text-white">{f.duration}</span>
-                          </div>
-                        </div>
-                        <h4 className="text-sm font-medium text-white leading-snug">{f.title}</h4>
-                        <p className="text-xs text-[#9c958a] mt-0.5">{f.speaker}</p>
-                      </div>
-                    )
-                  })
+                  <div className="col-span-full text-center py-8">
+                    <BookOpen className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                    <p className="text-sm text-[#9c958a] font-semibold">No sermons available yet.</p>
+                  </div>
                 }
               </div>
             </section>
@@ -202,16 +174,9 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex gap-3">
-                    <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
-                      <Users className="w-8 h-8 text-[#c9a227]/40" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">Dr. John Mark</p>
-                      <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
-                      <p className="text-xs text-[#9c958a] mt-1">Special Conference</p>
-                      <p className="text-[10px] text-[#9c958a]">May 24 - 26, 2025</p>
-                    </div>
+                  <div className="text-center py-4">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                    <p className="text-sm text-[#9c958a] font-semibold">No guest speakers yet.</p>
                   </div>
                 )}
                 <Link to="/events" className="btn-gold w-full text-xs mt-3">View Event Details</Link>
@@ -241,17 +206,9 @@ export default function Home() {
             {/* Today's Schedule */}
             <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
               <SectionHeader title="Today's Schedule" action="View Full Schedule" to="/status" />
-              <div className="space-y-0">
-                {SCHEDULE.map((item,i)=>{
-                  const isNow = item.live
-                  return (
-                    <div key={i} className={`flex items-center gap-3 py-2.5 ${i<SCHEDULE.length-1?"border-b border-[rgba(243,238,228,0.06)]":""}`}>
-                      <span className={`text-[11px] font-mono w-16 flex-shrink-0 ${isNow?"text-[#c9a227]":"text-[#9c958a]"}`}>{item.time}</span>
-                      <span className={`text-xs flex-1 ${isNow?"text-white font-medium":"text-[#9c958a]"}`}>{item.title}</span>
-                      {isNow && <span className="text-[10px] text-[#ef4444] font-medium">LIVE</span>}
-                    </div>
-                  )
-                })}
+              <div className="text-center py-6">
+                <Calendar className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                <p className="text-sm text-[#9c958a] font-semibold">No scheduled broadcasts today.</p>
               </div>
             </section>
 
