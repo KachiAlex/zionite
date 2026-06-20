@@ -79,7 +79,7 @@ async function initDb() {
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS stream_listeners (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, session_id TEXT NOT NULL,
-    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
   // Add stream config columns if missing (safe for existing tables)
   try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS rtmp_url TEXT`) } catch {}
@@ -105,7 +105,7 @@ async function initDb() {
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS donations (
     id TEXT PRIMARY KEY, name TEXT, email TEXT, amount NUMERIC NOT NULL,
-    message TEXT, is_anonymous BOOLEAN DEFAULT FALSE,
+    message TEXT, is_anonymous BOOLEAN DEFAULT FALSE, status TEXT DEFAULT 'completed',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS podcasts (
@@ -122,6 +122,19 @@ async function initDb() {
     location TEXT, image_url TEXT, is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS testimonies (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT, content TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', is_featured BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, goal_amount NUMERIC NOT NULL,
+    current_amount NUMERIC DEFAULT 0, end_date TEXT, is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  // Migrations for existing tables
+  try { await dbQuery(`ALTER TABLE stream_listeners ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'web'`) } catch {}
+  try { await dbQuery(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed'`) } catch {}
 
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
@@ -704,6 +717,169 @@ app.post('/prayer/:id/pray', async (req, res) => {
 app.delete('/prayer/:id', auth, requireRole('admin'), async (req, res) => {
   try { await initDb(); await dbQuery('DELETE FROM prayer_requests WHERE id=$1', [req.params.id]); res.json({ ok: true }) }
   catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Donations ────────────────────────────────────────────────
+app.get('/donations', async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT id, name, email, amount, message, is_anonymous, status, created_at FROM donations ORDER BY created_at DESC LIMIT 50')
+    res.json({ donations: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/donations', async (req, res) => {
+  try {
+    await initDb()
+    const { name, email, amount, message, is_anonymous } = req.body
+    if (!amount || parseFloat(amount) <= 0) { res.status(400).json({ error: 'Valid amount is required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO donations (id, name, email, amount, message, is_anonymous) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, name || null, email || null, parseFloat(amount), message || null, is_anonymous === true])
+    const row = await dbGet('SELECT * FROM donations WHERE id=$1', [id])
+    res.status(201).json({ donation: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/donations/admin/all', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT * FROM donations ORDER BY created_at DESC')
+    const totalResult = await dbGet('SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE status=$1', ['completed'])
+    res.json({ donations: rows, total: totalResult?.total || 0 })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Testimonies ──────────────────────────────────────────────
+app.get('/testimonies', async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery(`SELECT id, name, content, status, is_featured, created_at FROM testimonies WHERE status='approved' ORDER BY created_at DESC LIMIT 50`)
+    res.json({ testimonies: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/testimonies', async (req, res) => {
+  try {
+    await initDb()
+    const { name, email, content } = req.body
+    if (!name || !content) { res.status(400).json({ error: 'Name and content are required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO testimonies (id, name, email, content) VALUES ($1,$2,$3,$4)`,
+      [id, name, email || null, content.trim()])
+    const row = await dbGet('SELECT * FROM testimonies WHERE id=$1', [id])
+    res.status(201).json({ testimony: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/testimonies/admin/all', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT * FROM testimonies ORDER BY created_at DESC')
+    res.json({ testimonies: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/testimonies/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { status, is_featured } = req.body
+    const existing = await dbGet('SELECT * FROM testimonies WHERE id=$1', [req.params.id])
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
+    await dbQuery('UPDATE testimonies SET status=$1, is_featured=$2 WHERE id=$3',
+      [status ?? existing.status, is_featured ?? existing.is_featured, req.params.id])
+    const row = await dbGet('SELECT * FROM testimonies WHERE id=$1', [req.params.id])
+    res.json({ testimony: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/testimonies/:id', auth, requireRole('admin'), async (req, res) => {
+  try { await initDb(); await dbQuery('DELETE FROM testimonies WHERE id=$1', [req.params.id]); res.json({ ok: true }) }
+  catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Campaigns ────────────────────────────────────────────────
+app.get('/campaigns', async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery(`SELECT id, title, description, goal_amount, current_amount, end_date, is_active, created_at FROM campaigns WHERE is_active=TRUE ORDER BY created_at DESC`)
+    res.json({ campaigns: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/campaigns', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { title, description, goal_amount, end_date } = req.body
+    if (!title || !goal_amount) { res.status(400).json({ error: 'Title and goal amount are required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO campaigns (id, title, description, goal_amount, end_date) VALUES ($1,$2,$3,$4,$5)`,
+      [id, title, description || null, parseFloat(goal_amount), end_date || null])
+    const row = await dbGet('SELECT * FROM campaigns WHERE id=$1', [id])
+    res.status(201).json({ campaign: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/campaigns/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { title, description, goal_amount, current_amount, end_date, is_active } = req.body
+    const existing = await dbGet('SELECT * FROM campaigns WHERE id=$1', [req.params.id])
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
+    await dbQuery(`UPDATE campaigns SET title=$1, description=$2, goal_amount=$3, current_amount=$4, end_date=$5, is_active=$6 WHERE id=$7`,
+      [title ?? existing.title, description ?? existing.description, goal_amount ?? existing.goal_amount,
+       current_amount ?? existing.current_amount, end_date ?? existing.end_date, is_active ?? existing.is_active, req.params.id])
+    const row = await dbGet('SELECT * FROM campaigns WHERE id=$1', [req.params.id])
+    res.json({ campaign: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/campaigns/:id', auth, requireRole('admin'), async (req, res) => {
+  try { await initDb(); await dbQuery('DELETE FROM campaigns WHERE id=$1', [req.params.id]); res.json({ ok: true }) }
+  catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Analytics ────────────────────────────────────────────────
+app.get('/analytics/dashboard', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const onlineResult = await dbGet(`SELECT COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '5 minutes'`)
+    const todayResult = await dbGet(`SELECT COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '24 hours'`)
+    const sermonsResult = await dbGet('SELECT COUNT(*) as count FROM sermons')
+    const podcastsResult = await dbGet('SELECT COUNT(*) as count FROM podcasts')
+    const prayersResult = await dbGet('SELECT COUNT(*) as count FROM prayer_requests')
+    const donationsResult = await dbGet('SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE status=$1', ['completed'])
+    const platformRows = await dbQuery(`SELECT platform, COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '24 hours' GROUP BY platform`)
+    const totalPlatform = platformRows.reduce((s: number, r: any) => s + parseInt(r.count), 0) || 1
+    const platformBreakdown = platformRows.map((r: any) => ({
+      name: r.platform === 'web' ? 'Web Player' : r.platform === 'mobile_app' ? 'Mobile App' : r.platform === 'mobile_web' ? 'Mobile Web' : r.platform === 'smart_speaker' ? 'Smart Speaker' : r.platform,
+      value: Math.round((parseInt(r.count) / totalPlatform) * 100), rawCount: parseInt(r.count)
+    }))
+    const recentSermons = await dbQuery('SELECT id, title, speaker, date FROM sermons ORDER BY date DESC LIMIT 5')
+    const pendingTestimonies = await dbQuery(`SELECT id, name, content, created_at FROM testimonies WHERE status='pending' ORDER BY created_at DESC LIMIT 5`)
+    const recentDonations = await dbQuery('SELECT id, name, amount, status, created_at FROM donations ORDER BY created_at DESC LIMIT 5')
+    const activeCampaigns = await dbQuery('SELECT id, title, goal_amount, current_amount FROM campaigns WHERE is_active=TRUE ORDER BY created_at DESC LIMIT 5')
+    const transcripts = await dbQuery('SELECT t.id, s.title as sermon_title, t.created_at FROM transcripts t JOIN sermons s ON t.sermon_id = s.id ORDER BY t.created_at DESC LIMIT 5')
+    res.json({
+      stats: { listenersOnline: onlineResult?.count || 0, totalListenersToday: todayResult?.count || 0, sermonCount: sermonsResult?.count || 0, podcastCount: podcastsResult?.count || 0, prayerCount: prayersResult?.count || 0, totalDonations: donationsResult?.total || 0 },
+      platformBreakdown, recentSermons, pendingTestimonies, recentDonations, activeCampaigns, transcripts
+    })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/analytics/ping', async (req, res) => {
+  try {
+    await initDb()
+    const { session_id, broadcast_id, platform } = req.body
+    if (!session_id) { res.status(400).json({ error: 'session_id required' }); return }
+    const existing = await dbGet('SELECT * FROM stream_listeners WHERE session_id=$1', [session_id])
+    if (existing) {
+      await dbQuery('UPDATE stream_listeners SET last_seen=NOW(), broadcast_id=$1, platform=$2 WHERE session_id=$3', [broadcast_id || existing.broadcast_id, platform || existing.platform, session_id])
+    } else {
+      await dbQuery(`INSERT INTO stream_listeners (id, broadcast_id, session_id, platform) VALUES ($1,$2,$3,$4)`, [uuidv4(), broadcast_id || null, session_id, platform || 'web'])
+    }
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
 // ── 404 & Error handlers ─────────────────────────────────────

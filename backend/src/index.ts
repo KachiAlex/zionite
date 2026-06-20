@@ -10,6 +10,10 @@ import guestSpeakerRoutes from './routes/guest-speakers.js'
 import podcastRoutes from './routes/podcasts.js'
 import prayerRoutes from './routes/prayer.js'
 import eventRoutes from './routes/events.js'
+import donationRoutes from './routes/donations.js'
+import testimonyRoutes from './routes/testimonies.js'
+import campaignRoutes from './routes/campaigns.js'
+import analyticsRoutes from './routes/analytics.js'
 
 const app = express()
 
@@ -54,6 +58,10 @@ app.use('/guest-speakers', guestSpeakerRoutes)
 app.use('/podcasts', podcastRoutes)
 app.use('/prayer', prayerRoutes)
 app.use('/events', eventRoutes)
+app.use('/donations', donationRoutes)
+app.use('/testimonies', testimonyRoutes)
+app.use('/campaigns', campaignRoutes)
+app.use('/analytics', analyticsRoutes)
 
 // 404
 app.use((_req, res) => {

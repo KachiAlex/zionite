@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  Users, Radio, Headphones, LayoutDashboard, Signal, MessageSquare, Settings, Music, Mic2, Podcast, Heart, Calendar,
+  Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Podcast, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, StopCircle, BarChart3, Shield, Sparkles
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -24,6 +24,11 @@ interface ChatMessage { id: string; broadcast_id?: string; user_name: string; me
 interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string; file_format: string; file_size: number; created_at: string }
 interface Stats { total: number; live: number; ended: number }
 interface PrayerItem { id: string; name: string | null; request: string; is_anonymous: boolean; prayers_count: number; created_at: string }
+interface TestimonyItem { id: string; name: string; email?: string; content: string; status: string; is_featured: boolean; created_at: string }
+interface DonationItem { id: string; name: string | null; email: string | null; amount: number; message: string | null; status: string; created_at: string }
+interface CampaignItem { id: string; title: string; description: string | null; goal_amount: number; current_amount: number; end_date: string | null; is_active: boolean }
+interface TranscriptItem { id: string; sermon_title: string; created_at: string }
+interface DashboardStats { listenersOnline: number; totalListenersToday: number; sermonCount: number; podcastCount: number; prayerCount: number; totalDonations: number }
 
 type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'podcasts' | 'prayer' | 'events'
 
@@ -36,7 +41,13 @@ export default function AdminDashboard() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
   const [prayers, setPrayers] = useState<PrayerItem[]>([])
-  const [stats, setStats] = useState<Stats>({ total: 0, live: 0, ended: 0 })
+  const [dashboard, setDashboard] = useState<DashboardStats | null>(null)
+  const [platformData, setPlatformData] = useState<any[]>([])
+  const [pendingTestimonies, setPendingTestimonies] = useState<TestimonyItem[]>([])
+  const [recentDonations, setRecentDonations] = useState<DonationItem[]>([])
+  const [campaigns, setCampaigns] = useState<CampaignItem[]>([])
+  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([])
+  const [listenerChart, setListenerChart] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
 
@@ -48,20 +59,31 @@ export default function AdminDashboard() {
   async function fetchData() {
     setLoading(true)
     try {
-      const [broadcastsRes, statsRes, usersRes, sermonsRes, musicRes, prayerRes] = await Promise.all([
+      const token = localStorage.getItem('token')
+      const headers = { Authorization: `Bearer ${token}` }
+      const [broadcastsRes, statsRes, usersRes, sermonsRes, musicRes, prayerRes, analyticsRes] = await Promise.all([
         axios.get('/api/broadcasts'),
-        axios.get('/api/broadcasts/stats/overview'),
-        axios.get('/api/auth/users', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+        axios.get('/api/broadcasts/stats/overview').catch(() => ({ data: { total: 0, live: 0, ended: 0 } })),
+        axios.get('/api/auth/users', { headers }),
         axios.get('/api/sermons'),
         axios.get('/api/music'),
         axios.get('/api/prayer').catch(() => ({ data: { prayers: [] } })),
+        axios.get('/api/analytics/dashboard', { headers }).catch(() => ({ data: null })),
       ])
       setBroadcasts(broadcastsRes.data.broadcasts)
-      setStats(statsRes.data)
       setUsers(usersRes.data.users)
       setSermons(sermonsRes.data.sermons)
       setMusicTracks(musicRes.data.music || [])
       setPrayers(prayerRes.data.prayers || [])
+      if (analyticsRes.data) {
+        setDashboard(analyticsRes.data.stats)
+        setPlatformData(analyticsRes.data.platformBreakdown || [])
+        setPendingTestimonies(analyticsRes.data.pendingTestimonies || [])
+        setRecentDonations(analyticsRes.data.recentDonations || [])
+        setCampaigns(analyticsRes.data.activeCampaigns || [])
+        setTranscripts(analyticsRes.data.transcripts || [])
+        setListenerChart(analyticsRes.data.listenerHistory || [])
+      }
     } catch (err) { console.error('Failed to fetch dashboard data:', err) }
     finally { setLoading(false) }
   }
@@ -147,42 +169,43 @@ export default function AdminDashboard() {
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  {icon:Users,label:'Listeners Online',value:'1,248',chg:'+16.6%',sub:'vs yesterday',bg:'rgba(139,124,248,0.12)',col:'#8b7cf8'},
-                  {icon:Headphones,label:'Total Listeners',value:'12,540',chg:'+22.4%',sub:'vs yesterday',bg:'rgba(59,130,246,0.12)',col:'#3b82f6'},
-                  {icon:BookOpen,label:'Sermons',value:sermons.length?String(sermons.length):'356',chg:'+12.5%',sub:'Total Uploads',bg:'rgba(74,222,128,0.12)',col:'#4ade80'},
-                  {icon:Mic,label:'Podcasts',value:'128',chg:'+8.4%',sub:'Total Episodes',bg:'rgba(249,115,22,0.12)',col:'#f97316'},
-                  {icon:Heart,label:'Prayer Requests',value:prayers.length?String(prayers.length):'243',chg:'+16.7%',sub:`Pending: ${Math.min(23,prayers.length||23)}`,bg:'rgba(239,68,68,0.12)',col:'#ef4444'},
-                  {icon:DollarSign,label:'Total Donations',value:'$18,762',chg:'+35.6%',sub:'vs last 7 days',bg:'rgba(201,162,39,0.12)',col:'#c9a227'},
+                  {icon:Users,label:'Listeners Online',value:dashboard?.listenersOnline?.toLocaleString()||'0',chg:'Live',sub:'Active now',bg:'rgba(139,124,248,0.12)',col:'#8b7cf8'},
+                  {icon:Headphones,label:'Total Listeners',value:dashboard?.totalListenersToday?.toLocaleString()||'0',chg:'24h',sub:'Total sessions',bg:'rgba(59,130,246,0.12)',col:'#3b82f6'},
+                  {icon:BookOpen,label:'Sermons',value:dashboard?.sermonCount?.toLocaleString()||String(sermons.length||0),chg:'',sub:'Total Uploads',bg:'rgba(74,222,128,0.12)',col:'#4ade80'},
+                  {icon:Mic,label:'Podcasts',value:dashboard?.podcastCount?.toLocaleString()||'0',chg:'',sub:'Total Episodes',bg:'rgba(249,115,22,0.12)',col:'#f97316'},
+                  {icon:Heart,label:'Prayer Requests',value:dashboard?.prayerCount?.toLocaleString()||String(prayers.length||0),chg:'',sub:`Pending`,bg:'rgba(239,68,68,0.12)',col:'#ef4444'},
+                  {icon:DollarSign,label:'Total Donations',value:dashboard?.totalDonations?`$${Number(dashboard.totalDonations).toLocaleString()}`:'$0',chg:'',sub:'All time',bg:'rgba(201,162,39,0.12)',col:'#c9a227'},
                 ].map((c,i)=>(
                   <div key={i} className="p-3.5 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style={{background:c.bg}}><c.icon className="w-4 h-4" style={{color:c.col}}/></div>
                     <p className="text-[10px] text-[#9c958a]">{c.label}</p>
                     <p className="text-lg font-bold text-white mt-0.5">{c.value}</p>
-                    <div className="flex items-center gap-1 mt-0.5"><span className="text-[9px] text-[#4ade80]">{c.chg}</span><span className="text-[9px] text-[#9c958a]">{c.sub}</span></div>
+                    <div className="flex items-center gap-1 mt-0.5">{c.chg?<span className="text-[9px] text-[#4ade80]">{c.chg}</span>:null}<span className="text-[9px] text-[#9c958a]">{c.sub}</span></div>
                   </div>
                 ))}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {(()=>{const live=broadcasts.find(b=>b.status==='live');return(
                 <div className="lg:col-span-5 p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-semibold text-white tracking-wide">LIVE BROADCAST CONTROL</h3>
-                    <span className="flex items-center gap-1 text-[9px] font-bold text-[#ef4444] bg-[#ef4444]/10 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 bg-[#ef4444] rounded-full animate-pulse"/>LIVE</span>
+                    <span className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full ${live?'text-[#ef4444] bg-[#ef4444]/10':'text-[#9c958a] bg-[rgba(243,238,228,0.06)]'}`}>{live?<><span className="w-1.5 h-1.5 bg-[#ef4444] rounded-full animate-pulse"/>LIVE</>:'OFFLINE'}</span>
                   </div>
                   <div className="flex gap-3">
                     <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-[#2a1f3d] to-[#1a1025] flex items-center justify-center flex-shrink-0">
                       <div className="text-center leading-tight"><div className="text-sm font-bold text-[#c9a227]">THE POWER</div><div className="text-sm font-bold text-[#c9a227]">OF</div><div className="text-sm font-bold text-[#c9a227]">REDEMPTION</div></div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="mb-2"><span className="text-[9px] text-[#ef4444] font-bold uppercase">On Air Now</span><h4 className="text-xs font-bold text-white mt-0.5 truncate">Evening Worship Experience</h4><p className="text-[11px] text-[#9c958a]">Pastor James Emmanuel</p></div>
+                      <div className="mb-2"><span className={`text-[9px] font-bold uppercase ${live?'text-[#ef4444]':'text-[#9c958a]'}`}>{live?'On Air Now':'No Active Broadcast'}</span><h4 className="text-xs font-bold text-white mt-0.5 truncate">{live?.title||'Start a broadcast'}</h4><p className="text-[11px] text-[#9c958a]">{live?'Live Session':'No stream data'}</p></div>
                       <div className="flex items-end gap-[2px] h-8 my-2">
                         {[40,65,30,80,55,90,45,70,35,85,50,75,60,40,95,55,70,45,80,35,65,50,85,40,75,60,90,45,70,55,80,35,65,50,75,40,85,60,45,70].map((h,i)=>(
                           <div key={i} className="w-[3px] rounded-full bg-[#c9a227]/50" style={{height:`${h}%`}}/>
                         ))}
                       </div>
                       <div className="grid grid-cols-3 gap-1 mt-2">
-                        <div className="text-center"><p className="text-[9px] text-[#9c958a]">Listeners</p><p className="text-xs font-bold text-white">1,248</p></div>
+                        <div className="text-center"><p className="text-[9px] text-[#9c958a]">Listeners</p><p className="text-xs font-bold text-white">{dashboard?.listenersOnline||0}</p></div>
                         <div className="text-center"><p className="text-[9px] text-[#9c958a]">Quality</p><p className="text-xs font-bold text-[#4ade80]">Excellent</p></div>
-                        <div className="text-center"><p className="text-[9px] text-[#9c958a]">Duration</p><p className="text-xs font-bold text-white">01:26:35</p></div>
+                        <div className="text-center"><p className="text-[9px] text-[#9c958a]">Duration</p><p className="text-xs font-bold text-white">{live&&live.started_at?(()=>{const m=Math.floor((Date.now()-new Date(live.started_at!).getTime())/60000);const h=Math.floor(m/60);return `${String(h).padStart(2,'0')}:${String(m%60).padStart(2,'0')}:00`;})():'00:00:00'}</p></div>
                       </div>
                       <div className="flex gap-1.5 mt-3">
                         <button className="flex-1 flex items-center justify-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] text-[10px] font-medium py-1.5 rounded-md border border-[#ef4444]/20"><StopCircle className="w-3 h-3"/>Stop</button>
@@ -192,6 +215,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
+                )})()}
                 <div className="lg:col-span-4 p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-semibold text-white tracking-wide">LISTENER STATISTICS</h3>
@@ -202,7 +226,7 @@ export default function AdminDashboard() {
                     <span className="flex items-center gap-1 text-[9px]"><span className="w-1.5 h-1.5 rounded-full bg-[#8b7cf8]"/>Unique</span>
                   </div>
                   <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={[{time:'12AM',l:500,u:300},{time:'4AM',l:700,u:450},{time:'8AM',l:1200,u:900},{time:'12PM',l:1600,u:1100},{time:'4PM',l:1400,u:1000},{time:'8PM',l:1800,u:1300}]}>
+                    <LineChart data={listenerChart.length?listenerChart:[{time:'12AM',l:0,u:0},{time:'4AM',l:0,u:0},{time:'8AM',l:0,u:0},{time:'12PM',l:0,u:0},{time:'4PM',l:0,u:0},{time:'8PM',l:0,u:0}]}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(243,238,228,0.06)"/>
                       <XAxis dataKey="time" stroke="#9c958a" fontSize={9} tickLine={false} axisLine={false}/>
                       <YAxis stroke="#9c958a" fontSize={9} tickLine={false} axisLine={false}/>
@@ -216,17 +240,21 @@ export default function AdminDashboard() {
                   <h3 className="text-xs font-semibold text-white tracking-wide mb-3">STREAM ANALYTICS</h3>
                   <ResponsiveContainer width="100%" height={120}>
                     <PieChart>
-                      <Pie data={[{n:'Mobile App',v:45,c:'#8b7cf8'},{n:'Web',v:25,c:'#c9a227'},{n:'Mobile Web',v:15,c:'#4ade80'},{n:'Speaker',v:10,c:'#f87171'},{n:'Other',v:5,c:'#9ca3af'}]} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="v" stroke="none" paddingAngle={2}>
-                        {['#8b7cf8','#c9a227','#4ade80','#f87171','#9ca3af'].map((c,i)=><Cell key={i} fill={c}/>)}
+                      <Pie data={platformData.length?platformData:[{name:'No Data',value:1}]} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" stroke="none" paddingAngle={2}>
+                        {(platformData.length?platformData:[{name:'No Data',value:1}]).map((_:any,i:number)=><Cell key={i} fill={['#8b7cf8','#c9a227','#4ade80','#f87171','#9ca3af'][i%5]}/>)}
                       </Pie>
                       <Tooltip contentStyle={{background:'#1c1d24',border:'1px solid rgba(243,238,228,0.1)',borderRadius:'6px',fontSize:'10px'}}/>
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="text-center -mt-1 mb-2"><p className="text-base font-bold text-white">12,540</p><p className="text-[9px] text-[#9c958a]">Total Streams</p></div>
+                  <div className="text-center -mt-1 mb-2"><p className="text-base font-bold text-white">{dashboard?.totalListenersToday?.toLocaleString()||'0'}</p><p className="text-[9px] text-[#9c958a]">Total Streams</p></div>
                   <div className="space-y-1">
-                    {[{n:'Mobile App',v:'45%',c:'#8b7cf8'},{n:'Web Player',v:'25%',c:'#c9a227'},{n:'Mobile Web',v:'15%',c:'#4ade80'},{n:'Smart Speaker',v:'10%',c:'#f87171'},{n:'Other',v:'5%',c:'#9ca3af'}].map((s,i)=>(
-                      <div key={i} className="flex items-center justify-between text-[9px]"><div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{background:s.c}}/><span className="text-[#9c958a]">{s.n}</span></div><span className="text-white font-medium">{s.v}</span></div>
-                    ))}
+                    {platformData.length?platformData.map((s:any,i:number)=>{
+                      const total=platformData.reduce((a:number,b:any)=>a+(Number(b.value)||0),0)||1
+                      const pct=total?Math.round((Number(s.value)||0)/total*100)+'%':'0%'
+                      return(
+                        <div key={i} className="flex items-center justify-between text-[9px]"><div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{background:['#8b7cf8','#c9a227','#4ade80','#f87171','#9ca3af'][i%5]}}/><span className="text-[#9c958a]">{s.name}</span></div><span className="text-white font-medium">{pct}</span></div>
+                      )
+                    }):<div className="text-[9px] text-[#9c958a] text-center">No platform data</div>}
                   </div>
                 </div>
               </div>
@@ -236,47 +264,44 @@ export default function AdminDashboard() {
                   <table className="w-full text-[10px]">
                     <thead><tr className="text-[#9c958a] border-b border-[rgba(243,238,228,0.06)]"><th className="text-left pb-2 font-normal">Title</th><th className="text-left pb-2 font-normal">Speaker</th><th className="text-left pb-2 font-normal">Date</th><th className="text-left pb-2 font-normal">Status</th></tr></thead>
                     <tbody>
-                      {(sermons.length?sermons:[{id:'1',title:'Walking in Divine Purpose',speaker:'Pastor James',date:'May 19'},{id:'2',title:'The Power of Faith',speaker:'Rev. Michael',date:'May 18'},{id:'3',title:'Victory Through Worship',speaker:'Pastor James',date:'May 17'},{id:'4',title:'Faith That Moves Mountains',speaker:'Dr. Sarah K.',date:'May 16'},{id:'5',title:'The Grace of God',speaker:'Pastor James',date:'May 15'}] as any[]).slice(0,5).map(s=>(
-                        <tr key={s.id} className="border-b border-[rgba(243,238,228,0.04)]"><td className="py-2 text-white font-medium truncate max-w-[100px]">{s.title}</td><td className="py-2 text-[#9c958a]">{s.speaker}</td><td className="py-2 text-[#9c958a]">{s.date}</td><td className="py-2"><span className="px-1.5 py-0.5 rounded-full bg-[#4ade80]/10 text-[#4ade80] text-[8px]">Published</span></td></tr>
+                      {(sermons.length?sermons:[]).slice(0,5).map((s:any)=>(
+                        <tr key={s.id} className="border-b border-[rgba(243,238,228,0.04)]"><td className="py-2 text-white font-medium truncate max-w-[100px]">{s.title}</td><td className="py-2 text-[#9c958a]">{s.speaker}</td><td className="py-2 text-[#9c958a]">{s.date?s.date.split('T')[0]:'-'}</td><td className="py-2"><span className="px-1.5 py-0.5 rounded-full bg-[#4ade80]/10 text-[#4ade80] text-[8px]">Published</span></td></tr>
                       ))}
+                      {sermons.length===0&&<tr><td colSpan={4} className="py-6 text-center text-[#9c958a]">No sermons uploaded yet</td></tr>}
                     </tbody>
                   </table>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">PENDING PRAYER REQUESTS</h3><button onClick={()=>setActiveTab('prayer')} className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
                   <div className="space-y-2.5">
-                    {[
-                      {id:'1',name:'Jennifer Okafor',time:'2m ago',text:'Please pray for my family\'s financial breakthrough.',priority:'High'},
-                      {id:'2',name:'Michael Johnson',time:'8m ago',text:'Standing in faith for healing from chronic pain.',priority:'Medium'},
-                      {id:'3',name:'Anonymous',time:'15m ago',text:'Pray for clarity in a life changing decision.',priority:'Low'},
-                      {id:'4',name:'Sarah Williams',time:'25m ago',text:'For my children\'s academic excellence.',priority:'Medium'},
-                      {id:'5',name:'David Emmanuel',time:'32m ago',text:'For open doors in my business and ministry.',priority:'High'},
-                    ].map(p=>{
-                      const pc:{[k:string]:string}={High:'bg-[#ef4444]/10 text-[#ef4444]',Medium:'bg-[#f97316]/10 text-[#f97316]',Low:'bg-[#3b82f6]/10 text-[#3b82f6]'}
+                    {(prayers.length?prayers:[]).slice(0,5).map((p:any)=>{
+                      const initials=(p.name||'A').split(' ').map((n:string)=>n[0]).join('').slice(0,2).toUpperCase()
+                      const timeAgo=p.created_at?(()=>{const m=Math.floor((Date.now()-new Date(p.created_at).getTime())/60000);return m<60?`${m}m ago`:`${Math.floor(m/60)}h ago`;})():''
                       return(
                         <div key={p.id} className="flex items-start gap-2.5 p-2 rounded-lg bg-[rgba(243,238,228,0.02)]">
-                          <div className="w-7 h-7 rounded-full bg-[rgba(139,124,248,0.15)] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#8b7cf8]">{p.name[0]}</div>
-                          <div className="flex-1 min-w-0"><div className="flex items-center justify-between"><span className="text-[11px] font-medium text-white">{p.name}</span><span className="text-[9px] text-[#9c958a]">{p.time}</span></div><p className="text-[10px] text-[#9c958a] mt-0.5 truncate">{p.text}</p></div>
-                          <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${pc[p.priority]}`}>{p.priority}</span>
+                          <div className="w-7 h-7 rounded-full bg-[rgba(139,124,248,0.15)] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#8b7cf8]">{initials}</div>
+                          <div className="flex-1 min-w-0"><div className="flex items-center justify-between"><span className="text-[11px] font-medium text-white">{p.is_anonymous?'Anonymous':(p.name||'Unknown')}</span><span className="text-[9px] text-[#9c958a]">{timeAgo}</span></div><p className="text-[10px] text-[#9c958a] mt-0.5 truncate">{p.request}</p></div>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 bg-[#3b82f6]/10 text-[#3b82f6]">New</span>
                         </div>
                       )
                     })}
+                    {prayers.length===0&&<div className="py-6 text-center text-[#9c958a] text-[10px]">No prayer requests yet</div>}
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">TESTIMONY APPROVALS</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
                   <div className="space-y-2.5">
-                    {[
-                      {id:'1',name:'Chinma Blessing',date:'May 20, 2025',text:'God healed me of a chronic illness!'},
-                      {id:'2',name:'Emeka Abraham',date:'May 19, 2025',text:'After months of waiting, God answered!'},
-                      {id:'3',name:'Grace David',date:'May 18, 2025',text:'He turned my situation around.'},
-                    ].map(t=>(
-                      <div key={t.id} className="flex items-start gap-2.5 p-2 rounded-lg bg-[rgba(243,238,228,0.02)]">
-                        <div className="w-7 h-7 rounded-full bg-[rgba(201,162,39,0.15)] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#c9a227]">{t.name[0]}</div>
-                        <div className="flex-1 min-w-0"><div className="flex items-center justify-between"><span className="text-[11px] font-medium text-white">{t.name}</span><span className="text-[9px] text-[#9c958a]">{t.date}</span></div><p className="text-[10px] text-[#9c958a] mt-0.5 truncate">{t.text}</p></div>
-                        <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-[#f97316]/10 text-[#f97316] font-medium flex-shrink-0">Pending</span>
-                      </div>
-                    ))}
+                    {(pendingTestimonies.length?pendingTestimonies:[]).slice(0,5).map((t:any)=>{
+                      const initials=(t.name||'A').split(' ').map((n:string)=>n[0]).join('').slice(0,2).toUpperCase()
+                      return(
+                        <div key={t.id} className="flex items-start gap-2.5 p-2 rounded-lg bg-[rgba(243,238,228,0.02)]">
+                          <div className="w-7 h-7 rounded-full bg-[rgba(201,162,39,0.15)] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#c9a227]">{initials}</div>
+                          <div className="flex-1 min-w-0"><div className="flex items-center justify-between"><span className="text-[11px] font-medium text-white">{t.name}</span><span className="text-[9px] text-[#9c958a]">{t.created_at?t.created_at.split('T')[0]:''}</span></div><p className="text-[10px] text-[#9c958a] mt-0.5 truncate">{t.content}</p></div>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-[#f97316]/10 text-[#f97316] font-medium flex-shrink-0">Pending</span>
+                        </div>
+                      )
+                    })}
+                    {pendingTestimonies.length===0&&<div className="py-6 text-center text-[#9c958a] text-[10px]">No testimonies pending</div>}
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button className="flex-1 py-1.5 rounded-md bg-[#4ade80]/10 text-[#4ade80] text-[10px] font-medium border border-[#4ade80]/20 hover:bg-[#4ade80]/20 transition-colors">Approve Selected</button>
@@ -288,30 +313,52 @@ export default function AdminDashboard() {
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">RECENT DONATIONS</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
                   <table className="w-full text-[10px]">
-                    <thead><tr className="text-[#9c958a] border-b border-[rgba(243,238,228,0.06)]"><th className="text-left pb-2 font-normal">Donor</th><th className="text-left pb-2 font-normal">Type</th><th className="text-left pb-2 font-normal">Amount</th><th className="text-left pb-2 font-normal">Status</th></tr></thead>
+                    <thead><tr className="text-[#9c958a] border-b border-[rgba(243,238,228,0.06)]"><th className="text-left pb-2 font-normal">Donor</th><th className="text-left pb-2 font-normal">Message</th><th className="text-left pb-2 font-normal">Amount</th><th className="text-left pb-2 font-normal">Status</th></tr></thead>
                     <tbody>
-                      <tr className="border-b border-[rgba(243,238,228,0.04)]">
-                        <td className="py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-[#c9a227]/20 flex items-center justify-center text-[8px] font-bold text-[#c9a227]">JD</div><span className="text-white">John Doe</span></div></td>
-                        <td className="py-2 text-[#9c958a]">Seed Offering</td>
-                        <td className="py-2 text-white font-medium">$100.00</td>
-                        <td className="py-2"><span className="px-1.5 py-0.5 rounded-full bg-[#4ade80]/10 text-[#4ade80] text-[8px]">Completed</span></td>
-                      </tr>
+                      {(recentDonations.length?recentDonations:[]).slice(0,5).map((d:any)=>{
+                        const initials=(d.name||'A').split(' ').map((n:string)=>n[0]).join('').slice(0,2).toUpperCase()
+                        return(
+                          <tr key={d.id} className="border-b border-[rgba(243,238,228,0.04)]">
+                            <td className="py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-[#c9a227]/20 flex items-center justify-center text-[8px] font-bold text-[#c9a227]">{initials}</div><span className="text-white">{d.name||'Anonymous'}</span></div></td>
+                            <td className="py-2 text-[#9c958a] truncate max-w-[80px]">{d.message||'Donation'}</td>
+                            <td className="py-2 text-white font-medium">${Number(d.amount||0).toFixed(2)}</td>
+                            <td className="py-2"><span className={`px-1.5 py-0.5 rounded-full text-[8px] ${d.status==='completed'?'bg-[#4ade80]/10 text-[#4ade80]':'bg-[#f97316]/10 text-[#f97316]'}`}>{d.status||'Pending'}</span></td>
+                          </tr>
+                        )
+                      })}
+                      {recentDonations.length===0&&<tr><td colSpan={4} className="py-6 text-center text-[#9c958a]">No donations yet</td></tr>}
                     </tbody>
                   </table>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">TOP CAMPAIGNS</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1"><span className="text-[11px] font-medium text-white">ZioniteFM Expansion Project</span><span className="text-[10px] text-[#c9a227] font-medium">$7,650 / $15,000</span></div>
-                    <div className="w-full h-1.5 bg-[rgba(243,238,228,0.06)] rounded-full overflow-hidden"><div className="h-full bg-[#c9a227] rounded-full" style={{width:'51%'}}/></div>
+                  <div className="space-y-3">
+                    {(campaigns.length?campaigns:[]).slice(0,3).map((c:any)=>{
+                      const pct=c.goal_amount?Math.min(100,Math.round((c.current_amount/c.goal_amount)*100)):0
+                      return(
+                        <div key={c.id}>
+                          <div className="flex items-center justify-between mb-1"><span className="text-[11px] font-medium text-white truncate max-w-[140px]">{c.title}</span><span className="text-[10px] text-[#c9a227] font-medium">${(c.current_amount||0).toLocaleString()} / ${(c.goal_amount||0).toLocaleString()}</span></div>
+                          <div className="w-full h-1.5 bg-[rgba(243,238,228,0.06)] rounded-full overflow-hidden"><div className="h-full bg-[#c9a227] rounded-full" style={{width:`${pct}%`}}/></div>
+                        </div>
+                      )
+                    })}
+                    {campaigns.length===0&&<div className="py-6 text-center text-[#9c958a] text-[10px]">No active campaigns</div>}
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-semibold text-white tracking-wide">AI TRANSCRIPT GENERATION</h3><button className="text-[9px] text-[#c9a227] hover:underline">View All</button></div>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-[rgba(243,238,228,0.02)]">
-                    <div className="w-8 h-8 rounded-lg bg-[rgba(139,124,248,0.15)] flex items-center justify-center"><Sparkles className="w-4 h-4 text-[#8b7cf8]"/></div>
-                    <div className="flex-1"><p className="text-[11px] font-medium text-white">Evening Worship Experience</p><p className="text-[9px] text-[#9c958a]">May 20, 2025</p></div>
-                    <span className="text-[9px] px-2 py-1 rounded-full bg-[#8b7cf8]/10 text-[#8b7cf8] font-medium">Processing</span>
+                  <div className="space-y-2">
+                    {(transcripts.length?transcripts:[]).slice(0,3).map((t:any)=>{
+                      const status=t.status||'Processing'
+                      return(
+                        <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg bg-[rgba(243,238,228,0.02)]">
+                          <div className="w-8 h-8 rounded-lg bg-[rgba(139,124,248,0.15)] flex items-center justify-center"><Sparkles className="w-4 h-4 text-[#8b7cf8]"/></div>
+                          <div className="flex-1"><p className="text-[11px] font-medium text-white truncate">{t.sermon_title}</p><p className="text-[9px] text-[#9c958a]">{t.created_at?t.created_at.split('T')[0]:''}</p></div>
+                          <span className={`text-[9px] px-2 py-1 rounded-full font-medium ${status==='completed'?'bg-[#4ade80]/10 text-[#4ade80]':'bg-[#8b7cf8]/10 text-[#8b7cf8]'}`}>{status==='completed'?'Completed':'Processing'}</span>
+                        </div>
+                      )
+                    })}
+                    {transcripts.length===0&&<div className="py-6 text-center text-[#9c958a] text-[10px]">No transcripts yet</div>}
                   </div>
                 </div>
               </div>
