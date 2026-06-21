@@ -159,7 +159,7 @@ export default function RadioStudio({
   const shouldRecordRef = useRef(false)
 
   useEffect(() => {
-    shouldRecordRef.current = isLive && !!selectedDevice
+    shouldRecordRef.current = isLive
     if (shouldRecordRef.current) { startStreaming() } else { stopStreaming() }
     return () => stopStreaming()
   }, [isLive, selectedDevice, broadcastId])
