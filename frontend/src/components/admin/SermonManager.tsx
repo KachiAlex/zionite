@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { Headphones, Plus, Loader2 } from 'lucide-react'
+import { Headphones, Plus, Loader2, Image } from 'lucide-react'
 
 interface Sermon {
   id: string
@@ -13,18 +13,21 @@ interface Sermon {
 }
 
 export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[]; onRefresh: () => void }) {
-  const [form, setForm] = useState({ title: '', speaker: '', audio_url: '', video_url: '', thumbnail_url: '', date: '', scripture_reference: '', series: '', description: '', duration: '' })
-  const [mediaType, setMediaType] = useState<'audio' | 'video'>('audio')
+  const [form, setForm] = useState({ title: '', speaker: '', video_url: '', scripture_reference: '', series: '', description: '', duration: '' })
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const token = localStorage.getItem('token')
 
   async function addSermon(e: React.FormEvent) {
     e.preventDefault()
-    const needsAudio = mediaType === 'audio' && !audioFile && !form.audio_url.trim()
-    const needsVideo = mediaType === 'video' && !form.video_url.trim()
-    if (!form.title.trim() || !form.date || (needsAudio && needsVideo)) {
-      alert('Title, date, and either audio file/URL or video URL are required')
+    if (!form.title.trim()) {
+      alert('Title is required')
+      return
+    }
+    if (!audioFile) {
+      alert('Audio file is required')
       return
     }
     setSubmitting(true)
@@ -32,29 +35,37 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
       const data = new FormData()
       data.append('title', form.title)
       data.append('speaker', form.speaker)
-      data.append('date', form.date)
       data.append('scripture_reference', form.scripture_reference)
       data.append('series', form.series)
       data.append('description', form.description)
       data.append('duration', form.duration)
       data.append('video_url', form.video_url)
-      data.append('thumbnail_url', form.thumbnail_url)
-      if (audioFile) {
-        data.append('audio', audioFile)
-      } else if (form.audio_url) {
-        data.append('audio_url', form.audio_url)
-      }
+      data.append('audio', audioFile)
+      if (thumbnailFile) data.append('thumbnail', thumbnailFile)
       await axios.post('/api/sermons', data, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
       })
-      setForm({ title: '', speaker: '', audio_url: '', video_url: '', thumbnail_url: '', date: '', scripture_reference: '', series: '', description: '', duration: '' })
+      setForm({ title: '', speaker: '', video_url: '', scripture_reference: '', series: '', description: '', duration: '' })
       setAudioFile(null)
-      setMediaType('audio')
+      setThumbnailFile(null)
+      setThumbnailPreview('')
       onRefresh()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to add sermon')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  function handleThumbnailChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] || null
+    setThumbnailFile(file)
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => setThumbnailPreview(reader.result as string)
+      reader.readAsDataURL(file)
+    } else {
+      setThumbnailPreview('')
     }
   }
 
@@ -81,56 +92,43 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
             className="w-full rounded-xl px-4 py-2.5 text-sm"
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
-          {/* Media type toggle */}
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <button type="button" onClick={() => setMediaType('audio')} className="text-xs px-3 py-1.5 rounded-lg border"
-              style={{ borderColor: mediaType === 'audio' ? 'var(--gold)' : 'var(--line)', color: mediaType === 'audio' ? 'var(--gold)' : 'var(--dim)' }}>
-              Audio
-            </button>
-            <button type="button" onClick={() => setMediaType('video')} className="text-xs px-3 py-1.5 rounded-lg border"
-              style={{ borderColor: mediaType === 'video' ? 'var(--gold)' : 'var(--line)', color: mediaType === 'video' ? 'var(--gold)' : 'var(--dim)' }}>
-              Video Embed URL
-            </button>
-          </div>
 
-          {mediaType === 'audio' ? (
-            <>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={e => setAudioFile(e.target.files?.[0] || null)}
-                className="w-full rounded-xl px-4 py-2 text-sm"
-                style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
-              />
-              <input
-                placeholder="Or Audio URL"
-                value={form.audio_url}
-                onChange={e => setForm({ ...form, audio_url: e.target.value })}
-                className="w-full rounded-xl px-4 py-2.5 text-sm"
-                style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
-              />
-            </>
-          ) : (
+          {/* Required: Audio file */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs mb-1" style={{ color: 'var(--dim)' }}>Audio Message *</label>
             <input
-              placeholder="Video embed URL (YouTube, Vimeo, etc.)"
-              value={form.video_url}
-              onChange={e => setForm({ ...form, video_url: e.target.value })}
-              className="w-full rounded-xl px-4 py-2.5 text-sm sm:col-span-2"
+              type="file"
+              accept="audio/*"
+              onChange={e => setAudioFile(e.target.files?.[0] || null)}
+              className="w-full rounded-xl px-4 py-2 text-sm"
               style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
             />
-          )}
+            {audioFile && <span className="text-[10px] mt-1 block" style={{ color: 'var(--dim)' }}>{audioFile.name}</span>}
+          </div>
+
+          {/* Thumbnail file picker */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: 'var(--dim)' }}>
+              <Image className="w-3 h-3" /> Thumbnail
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleThumbnailChange}
+                className="flex-1 rounded-xl px-4 py-2 text-sm"
+                style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
+              />
+              {thumbnailPreview && (
+                <img src={thumbnailPreview} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-[var(--line)]" />
+              )}
+            </div>
+          </div>
 
           <input
-            placeholder="Thumbnail URL"
-            value={form.thumbnail_url}
-            onChange={e => setForm({ ...form, thumbnail_url: e.target.value })}
-            className="w-full rounded-xl px-4 py-2.5 text-sm sm:col-span-2"
-            style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
-          />
-          <input
-            type="date"
-            value={form.date}
-            onChange={e => setForm({ ...form, date: e.target.value })}
+            placeholder="Video embed URL (optional)"
+            value={form.video_url}
+            onChange={e => setForm({ ...form, video_url: e.target.value })}
             className="w-full rounded-xl px-4 py-2.5 text-sm"
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
@@ -164,7 +162,7 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
           <div className="sm:col-span-2">
-            <button type="submit" disabled={submitting} className="btn-gold disabled:opacity-50">
+            <button type="submit" disabled={submitting || !form.title.trim() || !audioFile} className="btn-gold disabled:opacity-50">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Add Sermon
             </button>

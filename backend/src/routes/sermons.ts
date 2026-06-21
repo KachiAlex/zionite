@@ -31,20 +31,24 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', authenticateToken, requireRole('admin'), upload.single('audio'), async (req, res) => {
+router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), async (req, res) => {
   try {
     await initDb()
     const { title, description, scripture_reference, speaker, series, date, duration, video_url, thumbnail_url } = req.body
-    if (!title || !date) { res.status(400).json({ error: 'Title and date are required' }); return }
+    if (!title) { res.status(400).json({ error: 'Title is required' }); return }
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined
     const id = uuidv4()
-    const audioUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.audio_url || '')
+    const audioFile = files?.audio?.[0]
+    const thumbnailFile = files?.thumbnail?.[0]
+    const audioUrl = audioFile ? `/uploads/${audioFile.filename}` : (req.body.audio_url || '')
+    const thumbnailUrl = thumbnailFile ? `/uploads/${thumbnailFile.filename}` : (thumbnail_url || '')
     await db.run(
       `INSERT INTO sermons (id, title, description, scripture_reference, speaker, series, audio_url, video_url, thumbnail_url, date, duration)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [id, title, description || null, scripture_reference || null, speaker || null, series || null,
-       audioUrl || null, video_url || null, thumbnail_url || null, date, duration ? parseInt(duration, 10) : null]
+       audioUrl || null, video_url || null, thumbnailUrl || null, date || new Date().toISOString().split('T')[0], duration ? parseInt(duration, 10) : null]
     )
-    res.json({ sermon: { id, title, description, scripture_reference, speaker, series, audio_url: audioUrl, video_url, thumbnail_url, date, duration } })
+    res.json({ sermon: { id, title, description, scripture_reference, speaker, series, audio_url: audioUrl, video_url, thumbnail_url: thumbnailUrl, date, duration } })
   } catch (err: any) {
     console.error('[SERMONS] create error:', err.message)
     res.status(500).json({ error: 'Failed to upload sermon' })
