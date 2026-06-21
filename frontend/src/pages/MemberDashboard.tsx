@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
@@ -190,12 +190,12 @@ function QuickCard({ icon: Icon, title, subtitle, actionLabel, to, accent }: any
   )
 }
 
-function SermonRow({ s }: { s: Sermon }) {
+const SermonRow = memo(function SermonRow({ s }: { s: Sermon }) {
   const { playTrack } = useAudioPlayer()
   return (
     <div className="group flex items-center gap-3 p-2.5 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
       <Link to={`/archive/${s.id}`} className="relative w-10 h-10 rounded-lg bg-[#14141a] overflow-hidden shrink-0">
-        {s.thumbnail_url ? <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-[#9c958a] m-2.5" />}
+        {s.thumbnail_url ? <img src={s.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-[#9c958a] m-2.5" />}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="w-5 h-5 rounded-full bg-black/50 flex items-center justify-center">
             <Play className="w-3 h-3 text-white fill-white" />
@@ -220,7 +220,7 @@ function SermonRow({ s }: { s: Sermon }) {
       </div>
     </div>
   )
-}
+})
 
 /* ─── MemberDashboard ─── */
 export default function MemberDashboard() {

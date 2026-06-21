@@ -1,99 +1,70 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
+import { useBroadcasts, useSermons, useUsers, usePrayers, useMusic, useDashboardAnalytics } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Podcast, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, StopCircle, BarChart3, Shield, Sparkles,
   Menu, X
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import BroadcastManager from '../components/admin/BroadcastManager'
-import SermonManager from '../components/admin/SermonManager'
-import ChatSupervisor from '../components/admin/ChatSupervisor'
-import AdminSettings from '../components/admin/AdminSettings'
-import MusicManager from '../components/admin/MusicManager'
-import GuestSpeakerManager from '../components/admin/GuestSpeakerManager'
-import PodcastManager from '../components/admin/PodcastManager'
-import PrayerManager from '../components/admin/PrayerManager'
-import EventManager from '../components/admin/EventManager'
 
-interface Broadcast { id: string; title: string; status: 'scheduled' | 'live' | 'ended'; started_at?: string; created_at: string }
-interface UserItem { id: string; email: string; name?: string; role: string; created_at: string }
-interface Sermon { id: string; title: string; speaker: string; audio_url: string; video_url: string; thumbnail_url: string; date: string; duration?: number }
+const BroadcastManager = lazy(() => import('../components/admin/BroadcastManager'))
+const SermonManager = lazy(() => import('../components/admin/SermonManager'))
+const ChatSupervisor = lazy(() => import('../components/admin/ChatSupervisor'))
+const AdminSettings = lazy(() => import('../components/admin/AdminSettings'))
+const MusicManager = lazy(() => import('../components/admin/MusicManager'))
+const GuestSpeakerManager = lazy(() => import('../components/admin/GuestSpeakerManager'))
+const PodcastManager = lazy(() => import('../components/admin/PodcastManager'))
+const PrayerManager = lazy(() => import('../components/admin/PrayerManager'))
+const EventManager = lazy(() => import('../components/admin/EventManager'))
+
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
-interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string; file_format: string; file_size: number; created_at: string }
-interface Stats { total: number; live: number; ended: number }
-interface PrayerItem { id: string; name: string | null; request: string; is_anonymous: boolean; prayers_count: number; created_at: string }
-interface TestimonyItem { id: string; name: string; email?: string; content: string; status: string; is_featured: boolean; created_at: string }
-interface DonationItem { id: string; name: string | null; email: string | null; amount: number; message: string | null; status: string; created_at: string }
-interface CampaignItem { id: string; title: string; description: string | null; goal_amount: number; current_amount: number; end_date: string | null; is_active: boolean }
-interface TranscriptItem { id: string; sermon_title: string; created_at: string }
-interface DashboardStats { listenersOnline: number; totalListenersToday: number; sermonCount: number; podcastCount: number; prayerCount: number; totalDonations: number }
 
 type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'podcasts' | 'prayer' | 'events'
 
 export default function AdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
-  const [users, setUsers] = useState<UserItem[]>([])
-  const [sermons, setSermons] = useState<Sermon[]>([])
+  const queryClient = useQueryClient()
+  const { data: broadcasts = [] } = useBroadcasts()
+  const { data: sermons = [] } = useSermons()
+  const { data: users = [] } = useUsers()
+  const { data: musicTracks = [] } = useMusic()
+  const { data: prayers = [] } = usePrayers()
+  const { data: analytics } = useDashboardAnalytics()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
-  const [prayers, setPrayers] = useState<PrayerItem[]>([])
-  const [dashboard, setDashboard] = useState<DashboardStats | null>(null)
-  const [platformData, setPlatformData] = useState<any[]>([])
-  const [pendingTestimonies, setPendingTestimonies] = useState<TestimonyItem[]>([])
-  const [recentDonations, setRecentDonations] = useState<DonationItem[]>([])
-  const [campaigns, setCampaigns] = useState<CampaignItem[]>([])
-  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([])
-  const [listenerChart, setListenerChart] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
+  const dashboard = analytics?.stats ?? null
+  const platformData = analytics?.platformBreakdown ?? []
+  const pendingTestimonies = analytics?.pendingTestimonies ?? []
+  const recentDonations = analytics?.recentDonations ?? []
+  const campaigns = analytics?.activeCampaigns ?? []
+  const transcripts = analytics?.transcripts ?? []
+  const listenerChart = analytics?.listenerHistory ?? []
+  const loading = !analytics
+
   useEffect(() => {
     if (!user || user.role !== 'admin') { navigate('/'); return }
-    fetchData()
   }, [user, navigate])
 
-  async function fetchData() {
-    setLoading(true)
-    try {
-      const token = localStorage.getItem('token')
-      const headers = { Authorization: `Bearer ${token}` }
-      const [broadcastsRes, statsRes, usersRes, sermonsRes, musicRes, prayerRes, analyticsRes] = await Promise.all([
-        axios.get('/api/broadcasts'),
-        axios.get('/api/broadcasts/stats/overview').catch(() => ({ data: { total: 0, live: 0, ended: 0 } })),
-        axios.get('/api/auth/users', { headers }),
-        axios.get('/api/sermons'),
-        axios.get('/api/music'),
-        axios.get('/api/prayer').catch(() => ({ data: { prayers: [] } })),
-        axios.get('/api/analytics/dashboard', { headers }).catch(() => ({ data: null })),
-      ])
-      setBroadcasts(broadcastsRes.data.broadcasts)
-      setUsers(usersRes.data.users)
-      setSermons(sermonsRes.data.sermons)
-      setMusicTracks(musicRes.data.music || [])
-      setPrayers(prayerRes.data.prayers || [])
-      if (analyticsRes.data) {
-        setDashboard(analyticsRes.data.stats)
-        setPlatformData(analyticsRes.data.platformBreakdown || [])
-        setPendingTestimonies(analyticsRes.data.pendingTestimonies || [])
-        setRecentDonations(analyticsRes.data.recentDonations || [])
-        setCampaigns(analyticsRes.data.activeCampaigns || [])
-        setTranscripts(analyticsRes.data.transcripts || [])
-        setListenerChart(analyticsRes.data.listenerHistory || [])
-      }
-    } catch (err) { console.error('Failed to fetch dashboard data:', err) }
-    finally { setLoading(false) }
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+    queryClient.invalidateQueries({ queryKey: ['sermons'] })
+    queryClient.invalidateQueries({ queryKey: ['users'] })
+    queryClient.invalidateQueries({ queryKey: ['music'] })
+    queryClient.invalidateQueries({ queryKey: ['prayers'] })
+    queryClient.invalidateQueries({ queryKey: ['analytics'] })
   }
 
   async function fetchChat() {
     try {
       const res = await axios.get('/api/broadcasts')
-      const bcs = res.data.broadcasts as Broadcast[]
+      const bcs = res.data.broadcasts as any[]
       const allMessages: ChatMessage[] = []
       for (const b of bcs.slice(0, 5)) {
         try { const msgRes = await axios.get(`/api/chat/${b.id}`); allMessages.push(...msgRes.data.messages) } catch {}
@@ -109,7 +80,7 @@ export default function AdminDashboard() {
     const token = localStorage.getItem('token')
     try {
       await axios.patch(`/api/auth/users/${userId}/role`, { role: newRole }, { headers: { Authorization: `Bearer ${token}` } })
-      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u))
+      queryClient.setQueryData(['users'], (old: any) => old?.map((u: any) => u.id === userId ? { ...u, role: newRole } : u))
     } catch (err: any) { alert(err.response?.data?.error || 'Failed to update role') }
   }
 
@@ -380,7 +351,9 @@ export default function AdminDashboard() {
               </div>
             </div>
           ):activeTab==='broadcasts'?(
-            <BroadcastManager broadcasts={broadcasts} onRefresh={fetchData}/>
+            <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+              <BroadcastManager broadcasts={broadcasts as any} onRefresh={refresh}/>
+            </Suspense>
           ):activeTab==='users'?(
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">User Management</h2></div>
@@ -401,13 +374,17 @@ export default function AdminDashboard() {
               </div>
             </div>
           ):activeTab==='sermons'?(
-            <SermonManager sermons={sermons} onRefresh={fetchData}/>
+            <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+              <SermonManager sermons={sermons as any} onRefresh={refresh}/>
+            </Suspense>
           ):activeTab==='chat'?(
             <ChatSupervisor messages={chatMessages} onRefresh={fetchChat}/>
           ):activeTab==='settings'?(
             <AdminSettings/>
           ):activeTab==='music'?(
-            <MusicManager music={musicTracks} onRefresh={fetchData}/>
+            <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+              <MusicManager music={musicTracks as any} onRefresh={refresh}/>
+            </Suspense>
           ):activeTab==='speakers'?(
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Guest Speaker Spotlight</h2></div>

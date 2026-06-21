@@ -1,19 +1,16 @@
-import { useEffect, useState } from "react"
+import { memo } from "react"
 import { Link } from "react-router-dom"
-import axios from "axios"
 import { useAuth } from "../contexts/AuthContext"
 import { useAudioPlayer } from "../contexts/AudioPlayerContext"
+import { useActiveBroadcast, useSermons, useMusic, useGuestSpeakers, useEvents } from "../lib/api"
+import type { Sermon, MusicTrack } from "../lib/api"
+import StructuredData from "../components/StructuredData"
 import {
-  Play, Search, Heart,
+  Play, Pause, Search, Heart,
   Users, BookOpen, Headphones, ChevronRight,
   Download, Facebook, Instagram, Youtube, Twitter,
-  Mic2, MapPin, Mail, Radio, Calendar
+  Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music
 } from "lucide-react"
-
-interface Broadcast { id: string; title: string; description?: string; scripture_reference?: string; status: string; started_at?: string; broadcaster_id: string }
-interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string; audio_url?: string; video_url?: string; thumbnail_url?: string }
-interface GuestSpeaker { id: string; name: string; bio: string; photo_url: string; topic: string; date: string; is_active: boolean }
-interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string }
 
 function SectionHeader({ title, action, to }:{ title:string; action:string; to:string }) {
   return (
@@ -24,14 +21,14 @@ function SectionHeader({ title, action, to }:{ title:string; action:string; to:s
   )
 }
 
-function SermonCard({ s }:{ s:Sermon }) {
+const SermonCard = memo(function SermonCard({ s }:{ s:Sermon }) {
   const { playTrack } = useAudioPlayer()
   return (
     <div className="group block hover-lift">
       <Link to={`/archive/${s.id}`}>
         <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
           {s.thumbnail_url ? (
-            <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+            <img src={s.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           {s.video_url && (
@@ -55,40 +52,48 @@ function SermonCard({ s }:{ s:Sermon }) {
       </div>
     </div>
   )
-}
+})
 
-export default function Home() {
-  const [broadcast, setBroadcast] = useState<Broadcast|null>(null)
-  const [sermons, setSermons] = useState<Sermon[]>([])
-  const [guestSpeakers, setGuestSpeakers] = useState<GuestSpeaker[]>([])
-  const [events, setEvents] = useState<EventItem[]>([])
-  const { user } = useAuth()
+const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
+  const { currentTrack, isPlaying, playTrack, togglePlay } = useAudioPlayer()
+  const isCurrent = currentTrack?.id === track.id
 
-  useEffect(()=>{
-    fetchData()
-    const iv = setInterval(fetchData, 30000)
-    return ()=>clearInterval(iv)
-  },[])
-
-  async function fetchData(){
-    try {
-      const [br, sr, sp, ev] = await Promise.all([
-        axios.get("/api/broadcasts/active").catch(()=>({data:{broadcast:null}})),
-        axios.get("/api/sermons?limit=4").catch(()=>({data:{sermons:[]}})),
-        axios.get("/api/guest-speakers").catch(()=>({data:{speakers:[]}})),
-        axios.get("/api/events").catch(()=>({data:{events:[]}})),
-      ])
-      setBroadcast(br.data.broadcast)
-      setSermons(sr.data.sermons||[])
-      setGuestSpeakers(sp.data.speakers||[])
-      setEvents(ev.data.events||[])
-    } catch {}
+  function handlePlay() {
+    if (isCurrent) { togglePlay(); return }
+    playTrack({ id: track.id, title: track.title, speaker: track.artist || 'Unknown artist', audioUrl: track.audio_url, thumbnail: track.cover_url })
   }
 
+  return (
+    <div className="group block hover-lift">
+      <div className="relative rounded-xl overflow-hidden aspect-square mb-2.5 bg-[#1c1d24]">
+        {track.cover_url ? (
+          <img src={track.cover_url} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-12 h-12 text-[#9c958a]/40" /></div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <button onClick={handlePlay} className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] flex-shrink-0 transition-transform hover:scale-110">
+          {isCurrent && isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+        </button>
+      </div>
+      <h4 className="text-sm font-medium text-white group-hover:text-[#c9a227] transition-colors leading-snug truncate">{track.title}</h4>
+      <p className="text-xs text-[#9c958a] mt-0.5">{track.artist || 'Unknown artist'}</p>
+    </div>
+  )
+})
+
+export default function Home() {
+  const { data: broadcast } = useActiveBroadcast()
+  const { data: sermons = [] } = useSermons(4)
+  const { data: musicTracks = [] } = useMusic()
+  const { data: guestSpeakers = [] } = useGuestSpeakers()
+  const { data: events = [] } = useEvents()
+  const { user } = useAuth()
   const isLive = broadcast?.status==="live"
 
   return (
     <div className="min-h-screen" style={{background:"var(--ink)",color:"var(--parchment)"}}>
+      <StructuredData />
       {/* ====== HERO ====== */}
       <div className="relative">
         <div className="absolute inset-0">
@@ -116,7 +121,7 @@ export default function Home() {
               <div className="flex -space-x-2">
                 {["SJ","DM","BK","AO","GO"].map((init,i)=>{
                   const bg = ["c9a227","8a3326","21222c","1c1d24","48433a"][i]
-                  return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} className="w-8 h-8 rounded-full border-2 border-[#14141a] group-hover:scale-105 transition-transform duration-300" alt="" />
+                  return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} loading="lazy" className="w-8 h-8 rounded-full border-2 border-[#14141a] group-hover:scale-105 transition-transform duration-300" alt="" />
                 })}
               </div>
               <div className="text-left">
@@ -148,6 +153,19 @@ export default function Home() {
               </div>
             </section>
 
+            {/* Featured Music */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+              <SectionHeader title="Featured Music" action="View All" to="/music" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {musicTracks.length>0 ? musicTracks.slice(0,4).map(t=><MusicCard key={t.id} track={t} />) :
+                  <div className="col-span-full text-center py-8">
+                    <Music className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                    <p className="text-sm text-[#9c958a] font-semibold">No music available yet.</p>
+                  </div>
+                }
+              </div>
+            </section>
+
             {/* Bottom row: 3 cards */}
             <div className="grid md:grid-cols-3 gap-5">
               {/* Sermon Transcripts */}
@@ -174,7 +192,7 @@ export default function Home() {
                 {guestSpeakers.length > 0 ? (
                   <div className="flex gap-3">
                     {guestSpeakers[0].photo_url ? (
-                      <img src={guestSpeakers[0].photo_url} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                      <img src={guestSpeakers[0].photo_url} alt="" loading="lazy" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
                         <Users className="w-8 h-8 text-[#c9a227]/40" />
@@ -234,7 +252,7 @@ export default function Home() {
                   {events.slice(0, 3).map(evt => (
                     <div key={evt.id} className="flex items-start gap-3">
                       {evt.image_url ? (
-                        <img src={evt.image_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                        <img src={evt.image_url} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
                           <Calendar className="w-5 h-5 text-[#c9a227]/60" />

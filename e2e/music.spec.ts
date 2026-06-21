@@ -107,4 +107,56 @@ test.describe('Add Music Flow', () => {
     await expect(page.getByText('Test Album')).toBeVisible()
     await expect(page.getByText('3:00')).toBeVisible()
   })
+
+  test('user can discover and play music from home and library', async ({ page }) => {
+    const mockTrack = {
+      id: 'track-123',
+      title: 'Amazing Grace',
+      artist: 'Worship Team',
+      album: 'Sunday Worship',
+      genre: 'Gospel',
+      audio_url: 'https://example.com/amazing-grace.mp3',
+      cover_url: 'https://example.com/cover.jpg',
+      duration: 240,
+      lyrics: 'Amazing grace, how sweet the sound...'
+    }
+
+    await page.route('**/api/music', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ music: [mockTrack] }) })
+    })
+
+    await page.route('**/api/broadcasts/active', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ broadcast: null }) })
+    })
+
+    await page.route('**/api/sermons?limit=4', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sermons: [] }) })
+    })
+
+    await page.route('**/api/guest-speakers', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ speakers: [] }) })
+    })
+
+    await page.route('**/api/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
+
+    // Home page shows featured music
+    await page.goto('/')
+    await expect(page.getByText(/featured music/i)).toBeVisible()
+    await expect(page.getByText('Amazing Grace')).toBeVisible()
+    await expect(page.getByText('Worship Team')).toBeVisible()
+
+    // Navigate to Music page via navbar
+    await page.getByRole('link', { name: /music/i }).click()
+    await expect(page.getByRole('heading', { name: /music library/i })).toBeVisible()
+    await expect(page.getByText('Amazing Grace')).toBeVisible()
+
+    // Click to play track
+    await page.getByText('Amazing Grace').click()
+
+    // Global MiniPlayer appears
+    await expect(page.locator('.fixed.bottom-0').getByText('Amazing Grace')).toBeVisible()
+    await expect(page.locator('.fixed.bottom-0').getByText('Worship Team')).toBeVisible()
+  })
 })

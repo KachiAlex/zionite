@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import * as Sentry from '@sentry/node'
 import authRoutes from './routes/auth.js'
@@ -17,6 +18,7 @@ import testimonyRoutes from './routes/testimonies.js'
 import campaignRoutes from './routes/campaigns.js'
 import analyticsRoutes from './routes/analytics.js'
 import searchRoutes from './routes/search.js'
+import { cacheMiddleware } from './middleware/cache.js'
 
 // Sentry init
 if (process.env.SENTRY_DSN) {
@@ -26,14 +28,15 @@ if (process.env.SENTRY_DSN) {
 const app = express()
 
 app.use(cors({ origin: '*', credentials: true }))
+app.use(compression() as any)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Rate limiting
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false })
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true })
-app.use(apiLimiter)
-app.use('/auth', authLimiter)
+app.use(apiLimiter as any)
+app.use('/auth', authLimiter as any)
 
 // Strip /api prefix from Vercel rewrite so routes match at root
 app.use((req, res, next) => {
@@ -63,20 +66,20 @@ app.get('/debug', (_req, res) => {
 
 // API routes
 app.use('/auth', authRoutes)
-app.use('/broadcasts', broadcastRoutes)
-app.use('/sermons', sermonRoutes)
+app.use('/broadcasts', cacheMiddleware(30000), broadcastRoutes)
+app.use('/sermons', cacheMiddleware(60000), sermonRoutes)
 app.use('/schedule', scheduleRoutes)
 app.use('/chat', chatRoutes)
-app.use('/status', statusRoutes)
-app.use('/guest-speakers', guestSpeakerRoutes)
-app.use('/podcasts', podcastRoutes)
-app.use('/prayer', prayerRoutes)
-app.use('/events', eventRoutes)
+app.use('/status', cacheMiddleware(60000), statusRoutes)
+app.use('/guest-speakers', cacheMiddleware(60000), guestSpeakerRoutes)
+app.use('/podcasts', cacheMiddleware(60000), podcastRoutes)
+app.use('/prayer', cacheMiddleware(30000), prayerRoutes)
+app.use('/events', cacheMiddleware(60000), eventRoutes)
 app.use('/donations', donationRoutes)
 app.use('/testimonies', testimonyRoutes)
 app.use('/campaigns', campaignRoutes)
 app.use('/analytics', analyticsRoutes)
-app.use('/search', searchRoutes)
+app.use('/search', cacheMiddleware(30000), searchRoutes)
 
 // Sentry error handler (must be before 404)
 if (process.env.SENTRY_DSN) {

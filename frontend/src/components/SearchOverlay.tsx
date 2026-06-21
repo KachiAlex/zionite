@@ -76,7 +76,7 @@ export default function SearchOverlay({ open, onClose }: { open: boolean; onClos
                   <Link key={s.id} to={`/archive/${s.id}`} onClick={onClose}
                     className="flex items-center gap-3 p-2 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
                     {s.thumbnail_url ? (
-                      <img src={s.thumbnail_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                      <img src={s.thumbnail_url} alt="" loading="lazy" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-[#1c1d24] flex items-center justify-center flex-shrink-0"><BookOpen className="w-4 h-4 text-[#9c958a]" /></div>
                     )}
@@ -98,7 +98,7 @@ export default function SearchOverlay({ open, onClose }: { open: boolean; onClos
                   <Link key={p.id} to={`/podcasts`} onClick={onClose}
                     className="flex items-center gap-3 p-2 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
                     {p.thumbnail_url ? (
-                      <img src={p.thumbnail_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                      <img src={p.thumbnail_url} alt="" loading="lazy" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-[#1c1d24] flex items-center justify-center flex-shrink-0"><Mic2 className="w-4 h-4 text-[#9c958a]" /></div>
                     )}
@@ -120,7 +120,7 @@ export default function SearchOverlay({ open, onClose }: { open: boolean; onClos
                   <Link key={e.id} to={`/events`} onClick={onClose}
                     className="flex items-center gap-3 p-2 rounded-xl hover:bg-[rgba(243,238,228,0.04)] transition-colors">
                     {e.image_url ? (
-                      <img src={e.image_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                      <img src={e.image_url} alt="" loading="lazy" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-[#1c1d24] flex items-center justify-center flex-shrink-0"><Calendar className="w-4 h-4 text-[#9c958a]" /></div>
                     )}

@@ -117,7 +117,7 @@ export default function Archive() {
                 style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
               >
                 {s.thumbnail_url ? (
-                  <img src={s.thumbnail_url} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
+                  <img src={s.thumbnail_url} alt="" loading="lazy" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--ink)' }}>
                     {s.video_url ? <Video className="w-6 h-6" style={{ color: 'var(--gold)' }} /> : <Play className="w-6 h-6" style={{ color: 'var(--gold)' }} />}
