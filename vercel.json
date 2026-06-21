@@ -41,6 +41,10 @@
       "destination": "/icon-512.svg"
     },
     {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
       "source": "/icons/(.*)",
       "destination": "/icons/$1"
     },
