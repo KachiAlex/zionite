@@ -88,40 +88,56 @@ export default function AdminDashboard() {
 
   function SB({label,tab,icon:I,badge}:any){const a=activeTab===tab;return(<button onClick={()=>setActiveTab(tab)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors ${a?'bg-[#c9a227] text-[#1b1208] font-semibold':'text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]'}`}><I className="w-3.5 h-3.5"/><span className="flex-1 text-left">{label}</span>{badge?<span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${a?'bg-[#1b1208]/20':'bg-[#ef4444] text-white'}`}>{badge}</span>:null}</button>)}
   function SL({t}:{t:string}){return<p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
+
+  const sidebarContent = (
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-[#c9a227] flex items-center justify-center flex-shrink-0"><Radio className="w-4 h-4 text-[#1b1208]"/></div>
+          <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>
+        </div>
+        <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
+      </div>
+      <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>
+      <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
+      <SL t="Ministry Management"/>
+      <SB label="Sermons" tab="sermons" icon={BookOpen}/>
+      <SB label="Podcasts" tab="podcasts" icon={Podcast}/>
+      <SB label="Speakers" tab="speakers" icon={Mic2}/>
+      <SB label="Events" tab="events" icon={Calendar}/>
+      <SB label="Prayer Requests" tab="prayer" icon={Heart} badge={prayers.length}/>
+      <SL t="Broadcast Management"/>
+      <SB label="Live Broadcast" tab="broadcasts" icon={Radio}/>
+      <SB label="Auto DJ" tab="music" icon={Music}/>
+      <SB label="Stream Analytics" tab="dashboard" icon={BarChart3}/>
+      <SL t="Community"/>
+      <SB label="Chat Moderation" tab="chat" icon={MessageSquare} badge={chatMessages.length}/>
+      <SB label="User Management" tab="users" icon={Users}/>
+      <SB label="Reported Content" tab="chat" icon={Shield}/>
+      <SL t="Settings"/>
+      <SB label="System Settings" tab="settings" icon={Settings}/>
+    </div>
+  )
+
   return(
     <div className="min-h-screen flex" style={{background:'#0c0c12',color:'#f3eee4'}}>
+      {/* Mobile overlay backdrop */}
       {mobileSidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={()=>setMobileSidebarOpen(false)} />
       )}
-      <aside className={`${mobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 translate-x-0' : 'hidden lg:flex'} flex-col w-56 flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto transition-transform duration-300 ${mobileSidebarOpen ? '' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#c9a227] flex items-center justify-center flex-shrink-0"><Radio className="w-4 h-4 text-[#1b1208]"/></div>
-              <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>
-            </div>
-            <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
-          </div>
-          <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>
-          <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
-          <SL t="Ministry Management"/>
-          <SB label="Sermons" tab="sermons" icon={BookOpen}/>
-          <SB label="Podcasts" tab="podcasts" icon={Podcast}/>
-          <SB label="Speakers" tab="speakers" icon={Mic2}/>
-          <SB label="Events" tab="events" icon={Calendar}/>
-          <SB label="Prayer Requests" tab="prayer" icon={Heart} badge={prayers.length}/>
-          <SL t="Broadcast Management"/>
-          <SB label="Live Broadcast" tab="broadcasts" icon={Radio}/>
-          <SB label="Auto DJ" tab="music" icon={Music}/>
-          <SB label="Stream Analytics" tab="dashboard" icon={BarChart3}/>
-          <SL t="Community"/>
-          <SB label="Chat Moderation" tab="chat" icon={MessageSquare} badge={chatMessages.length}/>
-          <SB label="User Management" tab="users" icon={Users}/>
-          <SB label="Reported Content" tab="chat" icon={Shield}/>
-          <SL t="Settings"/>
-          <SB label="System Settings" tab="settings" icon={Settings}/>
-        </div>
+
+      {/* Mobile sidebar (fixed overlay) */}
+      {mobileSidebarOpen && (
+        <aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-56 flex-col border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto">
+          {sidebarContent}
+        </aside>
+      )}
+
+      {/* Desktop sidebar (normal flex item) */}
+      <aside className="hidden lg:flex flex-col w-56 flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto">
+        {sidebarContent}
       </aside>
+
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-14 border-b border-[rgba(243,238,228,0.06)] bg-[#111118]/80 backdrop-blur-md flex items-center justify-between px-3 sm:px-5 flex-shrink-0">
           <div className="flex items-center gap-3">
