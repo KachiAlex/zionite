@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import {
-  Radio, Play, Square, Plus, Loader2, Pause, ArrowLeft,
-  Mic, Headphones, BookOpen, ExternalLink, AlertCircle,
-  Monitor, ChevronRight
+  Radio, Play, Square, Plus, Loader2, ArrowLeft,
+  Mic, BookOpen, ExternalLink, AlertCircle, Monitor, ChevronDown, ChevronUp
 } from 'lucide-react'
 import RadioStudio from '../broadcast/RadioStudio'
-import AudioTestPanel from '../broadcast/AudioTestPanel'
 
 interface Broadcast {
   id: string
@@ -28,7 +26,6 @@ type StudioView = 'list' | 'setup' | 'studio'
 export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts: Broadcast[]; onRefresh: () => void }) {
   const token = localStorage.getItem('token')
   const [view, setView] = useState<StudioView>('list')
-  const [activeBroadcast, setActiveBroadcast] = useState<Broadcast | null>(null)
 
   /* ── Setup form state ── */
   const [title, setTitle] = useState('')
@@ -40,7 +37,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [speaker, setSpeaker] = useState('')
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [thumbnailPreview, setThumbnailPreview] = useState('')
-  const [selectedDevice, setSelectedDevice] = useState('')
+  const [selectedDevice] = useState('')
   const [setupError, setSetupError] = useState('')
 
   /* ── Studio state ── */
@@ -54,7 +51,6 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   useEffect(() => {
     const live = broadcasts.find(b => b.status === 'live')
     if (live) {
-      setActiveBroadcast(live)
       setBroadcastId(live.id)
       setTitle(live.title || '')
       setDescription(live.description || '')
@@ -105,7 +101,6 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
       await axios.patch(`/api/broadcasts/${id}/start`, {}, { headers: { Authorization: `Bearer ${token}` } })
       const b = broadcasts.find(x => x.id === id)
       if (b) {
-        setActiveBroadcast(b)
         setBroadcastId(b.id)
         setTitle(b.title || '')
         setDescription(b.description || '')
@@ -188,14 +183,13 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     if (!thumbnailFile) return ''
     const formData = new FormData()
     formData.append('image', thumbnailFile)
-    const { data } = await axios.post('/api/broadcasts/uploads/image', formData, {
+    const { data } = await axios.post('/api/uploads/image', formData, {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
     })
     return data.image_url || ''
   }
 
   function openStudio(b: Broadcast) {
-    setActiveBroadcast(b)
     setBroadcastId(b.id)
     setTitle(b.title || '')
     setDescription(b.description || '')
@@ -310,6 +304,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
 
   /* ─── SETUP VIEW ─── */
   if (view === 'setup') {
+    const [showAdvanced, setShowAdvanced] = useState(false)
     return (
       <div className="space-y-5">
         <button onClick={() => setView('list')}
@@ -320,9 +315,9 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         <div className="rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] overflow-hidden">
           <div className="px-5 py-4 border-b border-[rgba(243,238,228,0.06)]">
             <h3 className="text-xs font-bold text-white flex items-center gap-2">
-              <Radio className="w-4 h-4 text-[#c9a227]" /> New Broadcast Setup
+              <Radio className="w-4 h-4 text-[#c9a227]" /> New Broadcast
             </h3>
-            <p className="text-[10px] text-[#9c958a] mt-1">Configure your broadcast details before going live</p>
+            <p className="text-[10px] text-[#9c958a] mt-1">Enter a title, upload a thumbnail, and go live.</p>
           </div>
 
           <form onSubmit={createAndGoLive} className="p-5 space-y-5">
@@ -332,35 +327,15 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5">Broadcast Title *</label>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-                  placeholder="e.g., Sunday Morning Service"
-                  className="w-full rounded-lg px-3 py-2 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <BookOpen className="w-3 h-3" /> Scripture Reference
-                </label>
-                <input type="text" value={scripture} onChange={e => setScripture(e.target.value)}
-                  placeholder="e.g., Romans 8:1-17"
-                  className="w-full rounded-lg px-3 py-2 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
-                />
-              </div>
+            <div>
+              <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5">Broadcast Title *</label>
+              <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+                placeholder="e.g., Sunday Morning Service"
+                className="w-full rounded-lg px-3 py-2.5 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+              />
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <Mic className="w-3 h-3" /> Speaker / Guest Speaker
-                </label>
-                <input type="text" value={speaker} onChange={e => setSpeaker(e.target.value)}
-                  placeholder="e.g., Pastor Daniel Akins"
-                  className="w-full rounded-lg px-3 py-2 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
-                />
-              </div>
               <div>
                 <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5">Broadcast Thumbnail</label>
                 <div className="flex items-center gap-3">
@@ -369,52 +344,78 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                     <input type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" />
                   </label>
                   {thumbnailPreview && (
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-[rgba(243,238,228,0.08)]">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-[rgba(243,238,228,0.08)]">
                       <img src={thumbnailPreview} alt="Thumbnail preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5">Description</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-                placeholder="Optional description for listeners..."
-                className="w-full rounded-lg px-3 py-2 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors resize-none"
-              />
-            </div>
-
-            <div className="rounded-xl bg-[#1c1d24] border border-[rgba(243,238,228,0.06)] p-4 space-y-3">
-              <h4 className="text-[11px] font-semibold text-white flex items-center gap-1.5">
-                <ExternalLink className="w-3.5 h-3.5 text-[#c9a227]" /> Stream Configuration
-              </h4>
-              <div className="grid md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-[#9c958a] mb-1">Church Online URL</label>
-                  <input type="text" value={churchOnlineUrl} onChange={e => setChurchOnlineUrl(e.target.value)}
-                    placeholder="https://online.church/your-church"
-                    className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-[#9c958a] mb-1">RTMP Ingest URL</label>
-                  <input type="text" value={rtmpUrl} onChange={e => setRtmpUrl(e.target.value)}
-                    placeholder="rtmp://live.churchonline.com/live"
-                    className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
-                  />
-                </div>
-              </div>
               <div>
-                <label className="block text-[10px] text-[#9c958a] mb-1">Stream Key</label>
-                <input type="password" value={streamKey} onChange={e => setStreamKey(e.target.value)}
-                  placeholder="Your stream key"
-                  className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <BookOpen className="w-3 h-3" /> Scripture Reference
+                </label>
+                <input type="text" value={scripture} onChange={e => setScripture(e.target.value)}
+                  placeholder="e.g., Romans 8:1-17"
+                  className="w-full rounded-lg px-3 py-2.5 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
                 />
               </div>
             </div>
 
-            <AudioTestPanel onDeviceSelect={setSelectedDevice} />
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Mic className="w-3 h-3" /> Speaker
+                </label>
+                <input type="text" value={speaker} onChange={e => setSpeaker(e.target.value)}
+                  placeholder="e.g., Pastor Daniel Akins"
+                  className="w-full rounded-lg px-3 py-2.5 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-[#9c958a] uppercase tracking-wider mb-1.5">Description</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={1}
+                  placeholder="Optional description..."
+                  className="w-full rounded-lg px-3 py-2.5 text-xs bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            <button type="button" onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-1.5 text-[11px] text-[#9c958a] hover:text-white transition-colors">
+              {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Advanced Settings
+            </button>
+
+            {showAdvanced && (
+              <div className="rounded-xl bg-[#1c1d24] border border-[rgba(243,238,228,0.06)] p-4 space-y-3">
+                <h4 className="text-[11px] font-semibold text-white flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-[#c9a227]" /> Stream Configuration
+                </h4>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-[#9c958a] mb-1">Church Online URL</label>
+                    <input type="text" value={churchOnlineUrl} onChange={e => setChurchOnlineUrl(e.target.value)}
+                      placeholder="https://online.church/your-church"
+                      className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#9c958a] mb-1">RTMP Ingest URL</label>
+                    <input type="text" value={rtmpUrl} onChange={e => setRtmpUrl(e.target.value)}
+                      placeholder="rtmp://live.churchonline.com/live"
+                      className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-[#9c958a] mb-1">Stream Key</label>
+                  <input type="password" value={streamKey} onChange={e => setStreamKey(e.target.value)}
+                    placeholder="Your stream key"
+                    className="w-full rounded-lg px-3 py-2 text-xs bg-[#14141a] border border-[rgba(243,238,228,0.08)] text-white outline-none focus:border-[#c9a227]/40 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between pt-2">
               <button type="button" onClick={() => setView('list')}
@@ -454,7 +455,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         description={description}
         scripture={scripture}
         churchOnlineUrl={churchOnlineUrl}
-        status={status}
+        status={status as 'live' | 'paused'}
         startTime={startTime}
         selectedDevice={selectedDevice}
         onPause={pauseBroadcast}

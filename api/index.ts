@@ -243,9 +243,9 @@ function optionalAuth(req: AuthReq, res: Response, next: NextFunction) {
   next()
 }
 
-function requireRole(role: string) {
+function requireRole(...roles: string[]) {
   return (req: AuthReq, res: Response, next: NextFunction) => {
-    if (req.user?.role !== role) { res.status(403).json({ error: 'Forbidden' }); return }
+    if (!req.user || !roles.includes(req.user.role)) { res.status(403).json({ error: 'Forbidden' }); return }
     next()
   }
 }
@@ -334,7 +334,7 @@ app.get('/broadcasts/:id', async (req, res) => {
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.post('/broadcasts', auth, requireRole('admin'), async (req: AuthReq, res) => {
+app.post('/broadcasts', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
     const { title, description, scripture_reference, rtmp_url, stream_key, thumbnail_url, speaker } = req.body
@@ -346,7 +346,7 @@ app.post('/broadcasts', auth, requireRole('admin'), async (req: AuthReq, res) =>
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/end', auth, requireRole('admin'), async (req, res) => {
+app.patch('/broadcasts/:id/end', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1", [req.params.id])
@@ -354,7 +354,7 @@ app.patch('/broadcasts/:id/end', auth, requireRole('admin'), async (req, res) =>
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/start', auth, requireRole('admin'), async (req, res) => {
+app.patch('/broadcasts/:id/start', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1", [req.params.id])
@@ -362,7 +362,7 @@ app.patch('/broadcasts/:id/start', auth, requireRole('admin'), async (req, res) 
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/pause', auth, requireRole('admin'), async (req, res) => {
+app.patch('/broadcasts/:id/pause', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='paused' WHERE id=$1", [req.params.id])
@@ -370,7 +370,7 @@ app.patch('/broadcasts/:id/pause', auth, requireRole('admin'), async (req, res) 
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/resume', auth, requireRole('admin'), async (req, res) => {
+app.patch('/broadcasts/:id/resume', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1", [req.params.id])
