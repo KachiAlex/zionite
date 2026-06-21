@@ -397,6 +397,15 @@ app.get('/sermons', async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
+app.get('/sermons/:id', async (req, res) => {
+  try {
+    await initDb()
+    const row = await dbGet('SELECT * FROM sermons WHERE id=$1', [req.params.id])
+    if (!row) { res.status(404).json({ error: 'Sermon not found' }); return }
+    res.json({ sermon: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
 app.post('/sermons', auth, requireRole('admin'), async (req: AuthReq, res) => {
   try {
     await initDb()

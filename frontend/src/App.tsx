@@ -18,6 +18,7 @@ const Live = lazy(() => import('./pages/Live'))
 const Music = lazy(() => import('./pages/Music'))
 const Podcasts = lazy(() => import('./pages/Podcasts'))
 const PodcastDetail = lazy(() => import('./pages/PodcastDetail'))
+const SermonDetail = lazy(() => import('./pages/SermonDetail'))
 const PrayerWall = lazy(() => import('./pages/PrayerWall'))
 const Testimonies = lazy(() => import('./pages/Testimonies'))
 const Events = lazy(() => import('./pages/Events'))
@@ -39,6 +40,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/archive" element={<Archive />} />
+        <Route path="/sermons/:id" element={<SermonDetail />} />
         <Route path="/status" element={<Status />} />
         <Route path="/live" element={<Live />} />
         <Route path="/live/:broadcastId" element={<Live />} />
