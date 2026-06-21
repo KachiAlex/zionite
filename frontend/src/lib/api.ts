@@ -9,7 +9,7 @@ export interface GuestSpeaker { id: string; name: string; bio: string; photo_url
 export interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string }
 export interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string }
 export interface User { id: string; email: string; name?: string; role: string; created_at?: string }
-export interface Podcast { id: string; title: string; host: string; thumbnail_url?: string }
+export interface Podcast { id: string; title: string; speaker: string; duration: string; audio_url: string; thumbnail_url: string; description: string; date: string; category: string; is_featured: boolean; listen_count: number; created_at: string }
 export interface Prayer { id: string; name: string | null; request: string; is_anonymous: boolean; prayers_count: number; created_at: string }
 
 /* ─── Queries ─── */
@@ -74,6 +74,13 @@ export function usePodcasts() {
     const { data } = await api.get('/podcasts')
     return data.podcasts as Podcast[]
   }})
+}
+
+export function usePodcast(id: string) {
+  return useQuery<Podcast>({ queryKey: ['podcasts', id], queryFn: async () => {
+    const { data } = await api.get(`/podcasts/${id}`)
+    return data.podcast as Podcast
+  }, enabled: !!id })
 }
 
 export function usePrayers() {

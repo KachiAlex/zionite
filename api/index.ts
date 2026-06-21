@@ -149,7 +149,8 @@ async function _doInitDb() {
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS podcasts (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, speaker TEXT, duration TEXT,
-    audio_url TEXT, description TEXT, date TEXT,
+    audio_url TEXT, thumbnail_url TEXT, description TEXT, date TEXT,
+    category TEXT, is_featured BOOLEAN DEFAULT FALSE, listen_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS prayer_requests (
@@ -187,6 +188,10 @@ async function _doInitDb() {
   try { await dbQuery(`ALTER TABLE prayer_requests ADD COLUMN IF NOT EXISTS is_answered BOOLEAN DEFAULT FALSE`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS user_id TEXT`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`) } catch {}
+  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS thumbnail_url TEXT`) } catch {}
+  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS category TEXT`) } catch {}
+  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE`) } catch {}
+  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS listen_count INTEGER DEFAULT 0`) } catch {}
 
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
@@ -567,6 +572,14 @@ app.post('/uploads/image', auth, requireRole('admin'), uploadImage.single('image
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
+app.post('/uploads/audio', auth, requireRole('admin'), upload.single('audio'), async (req: AuthReq, res) => {
+  try {
+    if (!req.file) { res.status(400).json({ error: 'Audio file required' }); return }
+    const audio_url = await uploadToCloudinary(req.file.buffer, 'zionite/podcasts/audio', 'video')
+    res.json({ audio_url })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
 app.delete('/music/:id', auth, requireRole('admin'), async (req, res) => {
   try {
     await initDb()
@@ -773,20 +786,52 @@ app.delete('/events/:id', auth, requireRole('admin'), async (req, res) => {
 app.get('/podcasts', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT * FROM podcasts ORDER BY created_at DESC')
+    const rows = await dbQuery(`SELECT id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured, listen_count, created_at FROM podcasts ORDER BY is_featured DESC, created_at DESC`)
     res.json({ podcasts: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/podcasts/:id', async (req, res) => {
+  try {
+    await initDb()
+    const row = await dbGet('SELECT id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured, listen_count, created_at FROM podcasts WHERE id=$1', [req.params.id])
+    if (!row) { res.status(404).json({ error: 'Not found' }); return }
+    res.json({ podcast: row })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/podcasts/:id/listen', async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('UPDATE podcasts SET listen_count = listen_count + 1 WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
 app.post('/podcasts', auth, requireRole('admin'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    const { title, speaker, duration, audio_url, description, date } = req.body
+    const { title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured } = req.body
     if (!title) { res.status(400).json({ error: 'Title is required' }); return }
     const id = uuidv4()
-    await dbQuery(`INSERT INTO podcasts (id, title, speaker, duration, audio_url, description, date) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, title, speaker || '', duration || '', audio_url || '', description || '', date || ''])
-    res.status(201).json({ podcast: { id, title, speaker, duration, audio_url, description, date } })
+    await dbQuery(`INSERT INTO podcasts (id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [id, title, speaker || '', duration || '', audio_url || '', thumbnail_url || '', description || '', date || '', category || '', is_featured === true])
+    res.status(201).json({ podcast: { id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured: is_featured === true, listen_count: 0 } })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/podcasts/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const existing = await dbGet('SELECT * FROM podcasts WHERE id=$1', [req.params.id])
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
+    const { title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured } = req.body
+    await dbQuery(`UPDATE podcasts SET title=$1, speaker=$2, duration=$3, audio_url=$4, thumbnail_url=$5, description=$6, date=$7, category=$8, is_featured=$9 WHERE id=$10`,
+      [title ?? existing.title, speaker ?? existing.speaker, duration ?? existing.duration, audio_url ?? existing.audio_url,
+       thumbnail_url ?? existing.thumbnail_url, description ?? existing.description, date ?? existing.date,
+       category ?? existing.category, is_featured ?? existing.is_featured, req.params.id])
+    const row = await dbGet('SELECT * FROM podcasts WHERE id=$1', [req.params.id])
+    res.json({ podcast: row })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
