@@ -79,8 +79,9 @@ async function dbGet(query: string, params?: any[]) {
 
 // ── Schema init (lazy) ───────────────────────────────────────
 let _dbInit = false
-async function initDb() {
-  if (_dbInit || !sql) return
+let _dbInitPromise: Promise<void> | null = null
+async function _doInitDb() {
+  if (!sql) return
   await dbQuery(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
     name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'listener', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -173,6 +174,7 @@ async function initDb() {
   // Migrations for existing tables
   try { await dbQuery(`ALTER TABLE stream_listeners ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'web'`) } catch {}
   try { await dbQuery(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed'`) } catch {}
+  try { await dbQuery(`ALTER TABLE prayer_requests ADD COLUMN IF NOT EXISTS prayers_count INTEGER DEFAULT 0`) } catch {}
 
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
@@ -186,7 +188,22 @@ async function initDb() {
     await dbQuery(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1,$2,$3,$4,$5)`,
       ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'admin'])
   }
-  _dbInit = true
+}
+
+async function initDb() {
+  if (_dbInit || !sql) return
+  if (_dbInitPromise) {
+    await _dbInitPromise
+    return
+  }
+  _dbInitPromise = _doInitDb()
+  try {
+    await _dbInitPromise
+    _dbInit = true
+  } catch (e) {
+    _dbInitPromise = null
+    throw e
+  }
 }
 
 // ── Auth middleware ────────────────────────────────────────────
