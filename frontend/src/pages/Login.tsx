@@ -26,7 +26,7 @@ export default function Login() {
     const payload = isRegister ? { email, password, name } : { email, password }
     const parsed = schema.safeParse(payload)
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0]?.message || 'Invalid input'
+      const firstError = parsed.error.issues[0]?.message || 'Invalid input'
       setError(firstError)
       return
     }

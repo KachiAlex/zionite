@@ -44,7 +44,7 @@ export default function PrayerWall() {
     setValidationError('')
     const result = prayerRequestSchema.safeParse({ name, request, isAnonymous })
     if (!result.success) {
-      setValidationError(result.error.errors[0]?.message || 'Invalid input')
+      setValidationError(result.error.issues[0]?.message || 'Invalid input')
       return
     }
     setSubmitting(true)
@@ -96,6 +96,9 @@ export default function PrayerWall() {
           </div>
           <textarea placeholder="Write your prayer request..." value={request} onChange={e => setRequest(e.target.value)}
             required className="input-dark text-sm w-full h-24 resize-none mb-3" />
+          {validationError && (
+            <p className="text-xs mb-3" style={{ color: '#fca5a5' }}>{validationError}</p>
+          )}
           <button type="submit" disabled={submitting} className="btn-gold text-sm">
             <Send className="w-4 h-4" />{submitting ? 'Submitting...' : 'Submit Request'}
           </button>
