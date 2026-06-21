@@ -60,6 +60,7 @@ export default function MusicManager({ music, onRefresh }: { music: MusicTrack[]
       let coverUrl = ''
 
       // ── Step 1: Upload files directly to Cloudinary (signed) ──
+      // Use fetch (not axios) so the global Authorization header isn't sent to Cloudinary
       if (file) {
         const { data: sig } = await axios.get('/api/music/signature?folder=zionite/music/audio', {
           headers: { Authorization: `Bearer ${token}` }
@@ -70,7 +71,9 @@ export default function MusicManager({ music, onRefresh }: { music: MusicTrack[]
         fd.append('timestamp', sig.timestamp)
         fd.append('signature', sig.signature)
         fd.append('folder', sig.folder)
-        const { data: up } = await axios.post(sig.uploadUrl, fd)
+        const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
+        const up = await res.json()
+        if (!res.ok) throw new Error(up.error?.message || 'Cloudinary audio upload failed')
         audioUrl = up.secure_url
       }
 
@@ -84,7 +87,9 @@ export default function MusicManager({ music, onRefresh }: { music: MusicTrack[]
         fd.append('timestamp', sig.timestamp)
         fd.append('signature', sig.signature)
         fd.append('folder', sig.folder)
-        const { data: up } = await axios.post(sig.uploadUrl, fd)
+        const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
+        const up = await res.json()
+        if (!res.ok) throw new Error(up.error?.message || 'Cloudinary cover upload failed')
         coverUrl = up.secure_url
       }
 
