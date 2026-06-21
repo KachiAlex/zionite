@@ -156,28 +156,9 @@ async function _initDbInternal() {
         await db.query(SCHEMA_QUERIES[i]);
     }
     console.log('[DB] schema OK');
-    // Migration: add columns to broadcasts if missing
-    try {
-        await db.query(`ALTER TABLE broadcasts ADD COLUMN thumbnail_url TEXT`);
-        console.log('[DB] migration: added thumbnail_url to broadcasts');
-    }
-    catch { /* already exists */ }
-    try {
-        await db.query(`ALTER TABLE broadcasts ADD COLUMN speaker TEXT`);
-        console.log('[DB] migration: added speaker to broadcasts');
-    }
-    catch { /* already exists */ }
-    // Migration: add video_url and thumbnail_url to sermons if missing
-    try {
-        await db.query(`ALTER TABLE sermons ADD COLUMN video_url TEXT`);
-        console.log('[DB] migration: added video_url to sermons');
-    }
-    catch { /* already exists */ }
-    try {
-        await db.query(`ALTER TABLE sermons ADD COLUMN thumbnail_url TEXT`);
-        console.log('[DB] migration: added thumbnail_url to sermons');
-    }
-    catch { /* already exists */ }
+    // Run structured migrations
+    const { runMigrations } = await import('./migrations/runner.js');
+    await runMigrations();
     const existingSchedule = await db.get('SELECT * FROM schedule LIMIT 1');
     if (!existingSchedule) {
         await db.run(`

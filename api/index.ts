@@ -11,7 +11,7 @@ import { v2 as cloudinary } from 'cloudinary'
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/flac', 'audio/webm']
     cb(null, allowed.includes(file.mimetype))
@@ -20,7 +20,7 @@ const upload = multer({
 
 const uploadImage = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     cb(null, allowed.includes(file.mimetype))
@@ -459,6 +459,10 @@ app.get('/music', async (_req, res) => {
 
 app.post('/music', auth, requireRole('admin'), upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), async (req: AuthReq, res) => {
   try {
+    if (!process.env.CLOUDINARY_URL) {
+      res.status(500).json({ error: 'Cloudinary is not configured. Set CLOUDINARY_URL env var.' })
+      return
+    }
     await initDb()
     const { title, artist, album, genre, cover_url, duration, lyrics } = req.body
     if (!title) { res.status(400).json({ error: 'Title required' }); return }
@@ -486,7 +490,7 @@ app.post('/music', auth, requireRole('admin'), upload.fields([{ name: 'audio', m
     await dbQuery(`INSERT INTO music (id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [id, title, artist || '', album || '', genre || '', audio_url, finalCoverUrl || '', parseInt(duration) || 0, lyrics || '', file_format, file_size])
     res.status(201).json({ id, title })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Upload failed' }) }
 })
 
 app.post('/uploads/image', auth, requireRole('admin'), uploadImage.single('image'), async (req: AuthReq, res) => {
