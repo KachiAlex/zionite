@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { Headphones, Plus, Loader2, Image, Upload, Cloud, CheckCircle } from 'lucide-react'
+import { Headphones, Plus, Loader2, Image, Upload, Cloud, Video, AudioLines } from 'lucide-react'
 
 interface Sermon {
   id: string
@@ -12,7 +12,10 @@ interface Sermon {
   date: string
 }
 
+type UploadMode = 'audio' | 'video'
+
 export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[]; onRefresh: () => void }) {
+  const [mode, setMode] = useState<UploadMode>('audio')
   const [form, setForm] = useState({ title: '', speaker: '', video_url: '', scripture_reference: '', series: '', description: '', duration: '' })
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
@@ -44,17 +47,41 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
     return up.secure_url
   }
 
+  function resetForm() {
+    setForm({ title: '', speaker: '', video_url: '', scripture_reference: '', series: '', description: '', duration: '' })
+    setAudioFile(null)
+    setThumbnailFile(null)
+    setThumbnailPreview('')
+  }
+
+  function isFormValid(): boolean {
+    if (!form.title.trim()) return false
+    if (mode === 'audio') return !!audioFile
+    if (mode === 'video') return !!form.speaker.trim() && !!form.description.trim() && !!form.video_url.trim()
+    return false
+  }
+
   async function addSermon(e: React.FormEvent) {
     e.preventDefault()
     if (!form.title.trim()) { alert('Title is required'); return }
-    if (!audioFile) { alert('Audio file is required'); return }
+
+    if (mode === 'audio') {
+      if (!audioFile) { alert('Audio file is required'); return }
+    } else {
+      if (!form.speaker.trim()) { alert('Speaker is required'); return }
+      if (!form.description.trim()) { alert('Description is required'); return }
+      if (!form.video_url.trim()) { alert('Video embed URL is required'); return }
+    }
+
     setSubmitting(true)
     try {
       let audioUrl = ''
       let thumbnailUrl = ''
 
-      setUploadStep('Uploading audio to Cloudinary...')
-      audioUrl = await uploadToCloudinary(audioFile, 'zionite/sermons/audio')
+      if (mode === 'audio' && audioFile) {
+        setUploadStep('Uploading audio to Cloudinary...')
+        audioUrl = await uploadToCloudinary(audioFile, 'zionite/sermons/audio')
+      }
 
       if (thumbnailFile) {
         setUploadStep('Uploading thumbnail to Cloudinary...')
@@ -74,10 +101,7 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
         thumbnail_url: thumbnailUrl
       }, { headers: { Authorization: `Bearer ${token}` } })
 
-      setForm({ title: '', speaker: '', video_url: '', scripture_reference: '', series: '', description: '', duration: '' })
-      setAudioFile(null)
-      setThumbnailFile(null)
-      setThumbnailPreview('')
+      resetForm()
       onRefresh()
     } catch (err: any) {
       alert(errMsg(err))
@@ -107,7 +131,35 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
           <Plus className="w-4 h-4" style={{ color: 'var(--gold)' }} />
           Add Sermon
         </h3>
+
+        {/* Mode toggle */}
+        <div className="flex rounded-xl overflow-hidden mb-4" style={{ border: '1px solid var(--line)' }}>
+          <button
+            type="button"
+            onClick={() => { setMode('audio'); resetForm() }}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm transition-colors"
+            style={{
+              background: mode === 'audio' ? 'var(--gold)' : 'var(--ink)',
+              color: mode === 'audio' ? '#0a0a0a' : 'var(--parchment)'
+            }}
+          >
+            <AudioLines className="w-4 h-4" /> Audio Sermon
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('video'); resetForm() }}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm transition-colors"
+            style={{
+              background: mode === 'video' ? 'var(--gold)' : 'var(--ink)',
+              color: mode === 'video' ? '#0a0a0a' : 'var(--parchment)'
+            }}
+          >
+            <Video className="w-4 h-4" /> Video Sermon
+          </button>
+        </div>
+
         <form onSubmit={addSermon} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Common: Title */}
           <input
             placeholder="Title *"
             value={form.title}
@@ -115,31 +167,46 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
             className="w-full rounded-xl px-4 py-2.5 text-sm"
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
+
+          {/* Common: Speaker */}
           <input
-            placeholder="Speaker"
+            placeholder={mode === 'video' ? 'Speaker *' : 'Speaker'}
             value={form.speaker}
             onChange={e => setForm({ ...form, speaker: e.target.value })}
             className="w-full rounded-xl px-4 py-2.5 text-sm"
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
 
-          {/* Required: Audio file */}
-          <div className="sm:col-span-2">
-            <label className="block text-xs mb-1" style={{ color: 'var(--dim)' }}>Audio Message *</label>
+          {/* Audio: file upload */}
+          {mode === 'audio' && (
+            <div className="sm:col-span-2">
+              <label className="block text-xs mb-1" style={{ color: 'var(--dim)' }}>Audio Message *</label>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={e => setAudioFile(e.target.files?.[0] || null)}
+                className="w-full rounded-xl px-4 py-2 text-sm"
+                style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
+              />
+              {audioFile && (
+                <div className="flex items-center gap-2 mt-1">
+                  <Cloud className="w-3 h-3" style={{ color: 'var(--dim)' }} />
+                  <span className="text-[10px]" style={{ color: 'var(--dim)' }}>{audioFile.name} ({(audioFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Video: embed URL */}
+          {mode === 'video' && (
             <input
-              type="file"
-              accept="audio/*"
-              onChange={e => setAudioFile(e.target.files?.[0] || null)}
-              className="w-full rounded-xl px-4 py-2 text-sm"
+              placeholder="Video embed URL * (YouTube, Vimeo, etc.)"
+              value={form.video_url}
+              onChange={e => setForm({ ...form, video_url: e.target.value })}
+              className="w-full rounded-xl px-4 py-2.5 text-sm sm:col-span-2"
               style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
             />
-            {audioFile && (
-              <div className="flex items-center gap-2 mt-1">
-                <Cloud className="w-3 h-3" style={{ color: 'var(--dim)' }} />
-                <span className="text-[10px]" style={{ color: 'var(--dim)' }}>{audioFile.name} ({(audioFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Thumbnail file picker */}
           <div className="sm:col-span-2">
@@ -160,13 +227,7 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
             </div>
           </div>
 
-          <input
-            placeholder="Video embed URL (optional)"
-            value={form.video_url}
-            onChange={e => setForm({ ...form, video_url: e.target.value })}
-            className="w-full rounded-xl px-4 py-2.5 text-sm"
-            style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
-          />
+          {/* Optional fields */}
           <input
             placeholder="Scripture reference"
             value={form.scripture_reference}
@@ -181,23 +242,28 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
             className="w-full rounded-xl px-4 py-2.5 text-sm"
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
-          <input
-            placeholder="Duration (minutes)"
-            value={form.duration}
-            onChange={e => setForm({ ...form, duration: e.target.value })}
-            className="w-full rounded-xl px-4 py-2.5 text-sm"
-            style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
-          />
+
+          {mode === 'audio' && (
+            <input
+              placeholder="Duration (minutes)"
+              value={form.duration}
+              onChange={e => setForm({ ...form, duration: e.target.value })}
+              className="w-full rounded-xl px-4 py-2.5 text-sm"
+              style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
+            />
+          )}
+
           <textarea
-            placeholder="Description"
+            placeholder={mode === 'video' ? 'Description *' : 'Description'}
             value={form.description}
             onChange={e => setForm({ ...form, description: e.target.value })}
             className="w-full rounded-xl px-4 py-2.5 text-sm sm:col-span-2"
             rows={2}
             style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--parchment)' }}
           />
+
           <div className="sm:col-span-2">
-            <button type="submit" disabled={submitting || !form.title.trim() || !audioFile} className="btn-gold disabled:opacity-50">
+            <button type="submit" disabled={submitting || !isFormValid()} className="btn-gold disabled:opacity-50">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               {submitting ? uploadStep || 'Uploading...' : 'Upload Sermon'}
             </button>
