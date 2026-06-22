@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zionite-v3'
+const CACHE_NAME = 'zionite-v4'
 const STATIC_ASSETS = ['/', '/index.html']
 
 self.addEventListener('install', (event) => {
@@ -50,4 +50,44 @@ self.addEventListener('fetch', (event) => {
       })
     )
   }
+})
+
+// ── Push Notifications ─────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let data = { title: 'ZioniteFM', body: 'New update from The Voice of Redemption', url: '/' }
+  try {
+    if (event.data) data = { ...data, ...event.data.json() }
+  } catch {}
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      tag: 'zionite-push',
+      renotify: true,
+      data: { url: data.url || '/' },
+      actions: [
+        { action: 'open', title: 'Open' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ]
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  if (event.action === 'dismiss') return
+  const url = event.notification.data?.url || '/'
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url)
+          return client.focus()
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url)
+    })
+  )
 })

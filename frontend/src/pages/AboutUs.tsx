@@ -77,7 +77,7 @@ export default function AboutUs() {
           <p className="text-sm mb-4" style={{ color: 'var(--dim)' }}>
             Have questions, feedback, or partnership inquiries? We would love to hear from you.
           </p>
-          <a href="mailto:hello@zionite.online" className="btn-gold text-sm">Contact Us</a>
+          <a href="mailto:theredemptionprojectministries@gmail.com" className="btn-gold text-sm">Contact Us</a>
         </div>
       </div>
     </div>

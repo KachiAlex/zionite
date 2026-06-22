@@ -186,6 +186,22 @@ async function _doInitDb() {
     current_amount NUMERIC DEFAULT 0, end_date TEXT, is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+    id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY, user_id TEXT, endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+    credential_id TEXT NOT NULL UNIQUE, public_key TEXT NOT NULL,
+    counter INTEGER DEFAULT 0, device_name TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+
   // Migrations for existing tables
   try { await dbQuery(`ALTER TABLE stream_listeners ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'web'`) } catch {}
   try { await dbQuery(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed'`) } catch {}
@@ -1078,6 +1094,104 @@ app.post('/analytics/ping', async (req, res) => {
     } else {
       await dbQuery(`INSERT INTO stream_listeners (id, broadcast_id, session_id, platform) VALUES ($1,$2,$3,$4)`, [uuidv4(), broadcast_id || null, session_id, platform || 'web'])
     }
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Newsletter ─────────────────────────────────────────────────
+app.post('/newsletter/subscribe', async (req, res) => {
+  try {
+    await initDb()
+    const { email } = req.body
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'Valid email required' }); return
+    }
+    const existing = await dbGet('SELECT id FROM newsletter_subscribers WHERE email=$1', [email])
+    if (existing) { res.json({ ok: true, message: 'Already subscribed' }); return }
+    await dbQuery('INSERT INTO newsletter_subscribers (id, email) VALUES ($1,$2)', [uuidv4(), email.toLowerCase()])
+    res.json({ ok: true, message: 'Subscribed successfully' })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/newsletter/subscribers', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT id, email, created_at FROM newsletter_subscribers ORDER BY created_at DESC')
+    res.json({ subscribers: rows, total: rows.length })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Push Notifications ──────────────────────────────────────────
+app.post('/push/subscribe', async (req, res) => {
+  try {
+    await initDb()
+    const { endpoint, p256dh, auth, user_id } = req.body
+    if (!endpoint || !p256dh || !auth) { res.status(400).json({ error: 'endpoint, p256dh and auth required' }); return }
+    const existing = await dbGet('SELECT id FROM push_subscriptions WHERE endpoint=$1', [endpoint])
+    if (existing) {
+      await dbQuery('UPDATE push_subscriptions SET p256dh=$1, auth=$2, user_id=$3 WHERE endpoint=$4', [p256dh, auth, user_id || null, endpoint])
+    } else {
+      await dbQuery('INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, user_id) VALUES ($1,$2,$3,$4,$5)', [uuidv4(), endpoint, p256dh, auth, user_id || null])
+    }
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/push/unsubscribe', async (req, res) => {
+  try {
+    await initDb()
+    const { endpoint } = req.body
+    if (!endpoint) { res.status(400).json({ error: 'endpoint required' }); return }
+    await dbQuery('DELETE FROM push_subscriptions WHERE endpoint=$1', [endpoint])
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// Admin: broadcast a push notification to all subscribers
+app.post('/push/broadcast', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { title, body, url } = req.body
+    if (!title || !body) { res.status(400).json({ error: 'title and body required' }); return }
+    const subs = await dbQuery('SELECT endpoint, p256dh, auth FROM push_subscriptions')
+    res.json({ ok: true, sent: subs.length, message: `Push queued for ${subs.length} subscribers`, payload: { title, body, url: url || '/' } })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/push/subscribers/count', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const row = await dbGet('SELECT COUNT(*) as count FROM push_subscriptions')
+    res.json({ count: Number(row?.count || 0) })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── WebAuthn / Biometric ──────────────────────────────────────────
+app.get('/auth/webauthn/credentials', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const creds = await dbQuery('SELECT id, credential_id, device_name, created_at FROM webauthn_credentials WHERE user_id=$1', [req.user!.id])
+    res.json({ credentials: creds })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/auth/webauthn/register', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { credential_id, public_key, device_name } = req.body
+    if (!credential_id || !public_key) { res.status(400).json({ error: 'credential_id and public_key required' }); return }
+    const existing = await dbGet('SELECT id FROM webauthn_credentials WHERE credential_id=$1', [credential_id])
+    if (existing) { res.json({ ok: true, message: 'Credential already registered' }); return }
+    await dbQuery('INSERT INTO webauthn_credentials (id, user_id, credential_id, public_key, device_name) VALUES ($1,$2,$3,$4,$5)',
+      [uuidv4(), req.user!.id, credential_id, public_key, device_name || 'My Device'])
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/auth/webauthn/credentials/:credId', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM webauthn_credentials WHERE id=$1 AND user_id=$2', [req.params.credId, req.user!.id])
     res.json({ ok: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })

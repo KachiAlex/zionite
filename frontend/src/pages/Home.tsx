@@ -1,4 +1,5 @@
-import { memo } from "react"
+import { memo, useState } from "react"
+import axios from "axios"
 import { Link } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { usePageTitle } from "../hooks/usePageTitle"
@@ -124,6 +125,21 @@ export default function Home() {
   const { data: events = [] } = useEvents()
   const { user } = useAuth()
   const isLive = broadcast?.status==="live"
+  const [subEmail, setSubEmail] = useState('')
+  const [subState, setSubState] = useState<'idle'|'loading'|'done'|'error'>('idle') // eslint-disable-line
+
+  async function handleSubscribe(e: React.FormEvent) {
+    e.preventDefault()
+    if (!subEmail) return
+    setSubState('loading')
+    try {
+      await axios.post('/api/newsletter/subscribe', { email: subEmail })
+      setSubEmail('')
+      setSubState('done')
+    } catch {
+      setSubState('error')
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{background:"var(--ink)",color:"var(--parchment)"}}>
@@ -358,7 +374,7 @@ export default function Home() {
               <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Contact</h4>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs text-[#9c958a]"><MapPin className="w-3.5 h-3.5 text-[#c9a227]" /> Lagos, Nigeria</div>
-                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Mail className="w-3.5 h-3.5 text-[#c9a227]" /> hello@zionitefm.com</div>
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Mail className="w-3.5 h-3.5 text-[#c9a227]" /> theredemptionprojectministries@gmail.com</div>
                 <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Radio className="w-3.5 h-3.5 text-[#c9a227]" /> 24/7 Live Streaming</div>
               </div>
             </div>
@@ -366,10 +382,20 @@ export default function Home() {
             {/* Subscribe */}
             <div>
               <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Subscribe to Updates</h4>
-              <div className="flex gap-2">
-                <input type="email" placeholder="Enter your email" className="flex-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white placeholder-[#9c958a] outline-none" />
-                <button className="bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-2 rounded-lg transition-colors">Subscribe</button>
-              </div>
+              {subState === 'done' ? (
+                <p className="text-xs text-green-400 py-2">✓ Subscribed! Thank you.</p>
+              ) : (
+                <form onSubmit={handleSubscribe} className="flex gap-2">
+                  <input type="email" required placeholder="Enter your email" value={subEmail}
+                    onChange={e => setSubEmail(e.target.value)}
+                    className="flex-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white placeholder-[#9c958a] outline-none" />
+                  <button type="submit" disabled={subState === 'loading'}
+                    className="bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60">
+                    {subState === 'loading' ? '...' : 'Subscribe'}
+                  </button>
+                </form>
+              )}
+              {subState === 'error' && <p className="text-[10px] text-red-400 mt-1">Failed to subscribe. Try again.</p>}
               <div className="flex items-center gap-3 mt-4">
                 <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Facebook className="w-4 h-4" /></a>
                 <a href="#" className="text-[#9c958a] hover:text-[#c9a227] transition-colors"><Instagram className="w-4 h-4" /></a>

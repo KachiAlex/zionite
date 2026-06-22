@@ -2,12 +2,13 @@ import { memo, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { useAudioPlayer } from '../contexts/AudioPlayerContext'
 import {
   LayoutDashboard, Radio, BookOpen, Headphones, FileText, Heart, MessageSquare, Users, Mic2,
   Calendar, DollarSign, Bell, Bookmark, History, User, Settings, Search, Play, Pause,
   Volume2, VolumeX, Send, ChevronRight, TrendingUp, Smartphone, Cross, BookOpenCheck,
-  Menu, X
+  Menu, X, Fingerprint
 } from 'lucide-react'
 
 /* ─── Types ─── */
@@ -224,6 +225,10 @@ const SermonRow = memo(function SermonRow({ s }: { s: Sermon }) {
 /* ─── MemberDashboard ─── */
 export default function MemberDashboard() {
   const { user } = useAuth()
+  const {
+    pushEnabled, pushSupported, requestPush, disablePush, loadingPush,
+    biometricSupported, biometricRegistered, registerBiometric, loadingBiometric
+  } = useNotifications()
   const navigate = useNavigate()
   const location = useLocation()
   const [broadcast, setBroadcast] = useState<Broadcast|null>(null)
@@ -512,13 +517,45 @@ export default function MemberDashboard() {
                 <button className="w-full py-2.5 rounded-lg bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium transition-colors">Give Now</button>
               </div>
 
-              {/* Never Miss a Moment */}
-              <div className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#c9a227]/20 to-[#8a3326]/20 flex items-center justify-center"><Bell className="w-5 h-5 text-[#c9a227]" /></div>
-                  <div><h3 className="text-sm font-medium text-white">Never Miss a Moment</h3><p className="text-[11px] text-[#9c958a]">Enable push notifications</p></div>
+              {/* Settings */}
+              <div className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 space-y-4">
+                <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-[#c9a227]" /> Settings
+                </h3>
+
+                {/* Push Notifications */}
+                <div>
+                  <p className="text-[11px] font-medium text-white mb-1 flex items-center gap-1.5"><Bell className="w-3.5 h-3.5 text-[#c9a227]" /> Push Notifications</p>
+                  {!pushSupported ? (
+                    <p className="text-[10px] text-[#9c958a]">Not supported in this browser.</p>
+                  ) : (
+                    <button onClick={pushEnabled ? disablePush : requestPush} disabled={loadingPush}
+                      className={`w-full py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                        pushEnabled
+                          ? 'bg-[rgba(239,68,68,0.1)] text-[#ef4444] border border-[#ef4444]/20 hover:bg-[rgba(239,68,68,0.2)]'
+                          : 'bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208]'
+                      }`}>
+                      {loadingPush ? '...' : pushEnabled ? 'Disable Notifications' : 'Enable Notifications'}
+                    </button>
+                  )}
                 </div>
-                <button className="w-full py-2.5 rounded-lg bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium transition-colors">Enable Notifications</button>
+
+                {/* Biometric */}
+                <div>
+                  <p className="text-[11px] font-medium text-white mb-1 flex items-center gap-1.5"><Fingerprint className="w-3.5 h-3.5 text-[#c9a227]" /> Biometric Login</p>
+                  {!biometricSupported ? (
+                    <p className="text-[10px] text-[#9c958a]">Not supported on this device.</p>
+                  ) : (
+                    <button onClick={biometricRegistered ? undefined : registerBiometric} disabled={loadingBiometric || biometricRegistered}
+                      className={`w-full py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                        biometricRegistered
+                          ? 'bg-[rgba(74,222,128,0.1)] text-[#4ade80] border border-[#4ade80]/20 cursor-default'
+                          : 'bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208]'
+                      }`}>
+                      {loadingBiometric ? '...' : biometricRegistered ? '✓ Biometric Registered' : 'Register Biometric'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

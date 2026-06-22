@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AudioPlayerProvider } from './contexts/AudioPlayerContext'
 import { FavoritesProvider } from './contexts/FavoritesContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -84,6 +85,7 @@ function App() {
     <AuthProvider>
       <AudioPlayerProvider>
         <FavoritesProvider>
+          <NotificationProvider>
           <BrowserRouter>
             <ErrorBoundary>
               <Layout>
@@ -93,6 +95,7 @@ function App() {
               </Layout>
             </ErrorBoundary>
           </BrowserRouter>
+          </NotificationProvider>
         </FavoritesProvider>
       </AudioPlayerProvider>
     </AuthProvider>
