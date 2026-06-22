@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -6,8 +6,9 @@ import { useAudioPlayer } from '../contexts/AudioPlayerContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import {
   Headphones, Play, Pause, Calendar, BookOpen, User, Clock, ArrowLeft,
-  AlertCircle, Video, AudioLines, Share2, Download, Heart, BarChart3
+  AlertCircle, Video, AudioLines, Share2, Download, Heart, BarChart3, Loader2
 } from 'lucide-react'
+import { downloadWithTags } from '../lib/downloadWithTags'
 
 interface Sermon {
   id: string
@@ -87,16 +88,26 @@ export default function SermonDetail() {
     })
   }
 
-  function handleDownload() {
-    if (!sermon?.audio_url) return
-    const a = document.createElement('a')
-    a.href = sermon.audio_url
-    a.download = `${sermon.title}${sermon.audio_url.match(/\.\w+$/)?.[0] || '.mp3'}`
-    a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = useCallback(async () => {
+    if (!sermon?.audio_url || downloading) return
+    setDownloading(true)
+    try {
+      await downloadWithTags({
+        audioUrl: sermon.audio_url,
+        title: sermon.title,
+        artist: sermon.speaker || 'ZioniteFM',
+        album: sermon.series || 'ZioniteFM Sermons',
+        genre: 'Sermon',
+        coverUrl: sermon.thumbnail_url,
+        comment: sermon.scripture_reference,
+        filename: `${sermon.title}.mp3`
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }, [sermon, downloading])
 
   async function handleShare() {
     if (!sermon) return
@@ -213,8 +224,8 @@ export default function SermonDetail() {
                   <button onClick={handleShare} className="p-2 rounded-lg transition-colors" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }} title="Share">
                     <Share2 className="w-4 h-4" style={{ color: 'var(--dim)' }} />
                   </button>
-                  <button onClick={handleDownload} className="p-2 rounded-lg transition-colors" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }} title="Download">
-                    <Download className="w-4 h-4" style={{ color: 'var(--dim)' }} />
+                  <button onClick={handleDownload} disabled={downloading} className="p-2 rounded-lg transition-colors disabled:opacity-60" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }} title="Download">
+                    {downloading ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--dim)' }} /> : <Download className="w-4 h-4" style={{ color: 'var(--dim)' }} />}
                   </button>
                 </div>
               </div>

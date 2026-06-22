@@ -1,0 +1,33 @@
+﻿
+Running 1 test using 1 worker
+
+  Γ£ÿ  1 [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library (14.9s)
+
+
+  1) [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/featured music/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/featured music/i).first()
+
+
+      40 |
+      41 |     await page.goto('/')
+    > 42 |     await expect(page.getByText(/featured music/i).first()).toBeVisible({ timeout: 10000 })
+         |                                                             ^
+      43 |     await expect(page.getByText('Amazing Grace')).toBeVisible()
+      44 |
+      45 |     await page.getByRole('link', { name: /music/i }).click()
+        at C:\zionite\e2e\music.spec.ts:42:61
+
+    Error Context: test-results\music-Music-Flow-user-can--ee8ca-age-and-navigate-to-library-chromium\error-context.md
+
+  1 failed
+    [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library 

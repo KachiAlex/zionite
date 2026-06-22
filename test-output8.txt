@@ -1,0 +1,141 @@
+﻿
+Running 14 tests using 4 workers
+
+  Γ£ÿ   4 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (15.8s)
+  Γ£ÿ   2 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (15.8s)
+  Γ£ÿ   1 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (30.1s)
+  Γ£ÿ   3 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (30.1s)
+  Γ£ÿ   6 [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library (14.5s)
+  Γ£ô   8 [chromium] ΓÇ║ e2e\navigation.spec.ts:10:7 ΓÇ║ Navigation & Pages ΓÇ║ archive page loads sermons (2.1s)
+  Γ£ô   7 [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section (3.3s)
+  Γ£ô  10 [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads (2.1s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:28:7 ΓÇ║ Navigation ΓÇ║ archive page loads (25.8s)
+  Γ£ô  13 [chromium] ΓÇ║ e2e\navigation.spec.ts:35:7 ΓÇ║ Navigation & Pages ΓÇ║ status page loads (1.8s)
+  Γ£ô  14 [chromium] ΓÇ║ e2e\navigation.spec.ts:40:7 ΓÇ║ Navigation & Pages ΓÇ║ search overlay opens and shows results (3.4s)
+  Γ£ô   9 [chromium] ΓÇ║ e2e\navigation.spec.ts:20:7 ΓÇ║ Navigation & Pages ΓÇ║ music page loads (22.0s)
+  Γ£ô  11 [chromium] ΓÇ║ e2e\navigation.spec.ts:25:7 ΓÇ║ Navigation & Pages ΓÇ║ prayer wall page loads (22.0s)
+  Γ£ô  12 [chromium] ΓÇ║ e2e\navigation.spec.ts:30:7 ΓÇ║ Navigation & Pages ΓÇ║ about page loads (21.7s)
+
+
+  1) [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /welcome back/i })
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByRole('heading', { name: /welcome back/i })
+
+
+      4 |   test('can navigate to login page', async ({ page }) => {
+      5 |     await page.goto('/login')
+    > 6 |     await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({ timeout: 10000 })
+        |                                                                        ^
+      7 |   })
+      8 |
+      9 |   test('shows validation error for empty fields', async ({ page }) => {
+        at C:\zionite\e2e\auth.spec.ts:6:72
+
+    Error Context: test-results\auth-Authentication-can-navigate-to-login-page-chromium\error-context.md
+
+  2) [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields ΓöÇΓöÇ
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: /sign in/i })
+
+
+       9 |   test('shows validation error for empty fields', async ({ page }) => {
+      10 |     await page.goto('/login')
+    > 11 |     await page.getByRole('button', { name: /sign in/i }).click()
+         |                                                          ^
+      12 |     await expect(page.locator('input:invalid')).toHaveCount(2)
+      13 |   })
+      14 |
+        at C:\zionite\e2e\auth.spec.ts:11:58
+
+    Error Context: test-results\auth-Authentication-shows-validation-error-for-empty-fields-chromium\error-context.md
+
+  3) [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByText(/create one/i)
+
+
+      15 |   test('can toggle to registration', async ({ page }) => {
+      16 |     await page.goto('/login')
+    > 17 |     await page.getByText(/create one/i).click()
+         |                                         ^
+      18 |     await expect(page.getByRole('heading', { name: /create account/i })).toBeVisible()
+      19 |   })
+      20 | })
+        at C:\zionite\e2e\auth.spec.ts:17:41
+
+    Error Context: test-results\auth-Authentication-can-toggle-to-registration-chromium\error-context.md
+
+  4) [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite\s*fm/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite\s*fm/i).first()
+
+
+      23 |   test('home page loads', async ({ page }) => {
+      24 |     await page.goto('/')
+    > 25 |     await expect(page.getByText(/zionite\s*fm/i).first()).toBeVisible({ timeout: 10000 })
+         |                                                           ^
+      26 |   })
+      27 |
+      28 |   test('archive page loads', async ({ page }) => {
+        at C:\zionite\e2e\auth.spec.ts:25:59
+
+    Error Context: test-results\auth-Navigation-home-page-loads-chromium\error-context.md
+
+  5) [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/featured music/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/featured music/i).first()
+
+
+      40 |
+      41 |     await page.goto('/')
+    > 42 |     await expect(page.getByText(/featured music/i).first()).toBeVisible({ timeout: 10000 })
+         |                                                             ^
+      43 |     await expect(page.getByText('Amazing Grace')).toBeVisible()
+      44 |
+      45 |     await page.getByRole('link', { name: /music/i }).click()
+        at C:\zionite\e2e\music.spec.ts:42:61
+
+    Error Context: test-results\music-Music-Flow-user-can--ee8ca-age-and-navigate-to-library-chromium\error-context.md
+
+  5 failed
+    [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields ΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page and navigate to library 
+  9 passed (1.2m)

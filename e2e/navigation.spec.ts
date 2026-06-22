@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test'
 test.describe('Navigation & Pages', () => {
   test('home page loads with hero section', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText(/zionite fm/i)).toBeVisible()
-    await expect(page.getByText(/the voice of redemption/i)).toBeVisible()
+    await expect(page.getByText(/zionite\s*fm/i).first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/the voice of redemption/i).first()).toBeVisible({ timeout: 10000 })
   })
 
   test('archive page loads sermons', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('Navigation & Pages', () => {
 
   test('events page loads', async ({ page }) => {
     await page.goto('/events')
-    await expect(page.getByRole('heading', { name: /events/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /upcoming events/i })).toBeVisible()
   })
 
   test('music page loads', async ({ page }) => {

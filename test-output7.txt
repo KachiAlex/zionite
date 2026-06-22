@@ -1,0 +1,101 @@
+﻿
+Running 16 tests using 4 workers
+
+  Γ£ô   2 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (6.4s)
+  Γ£ô   1 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (6.7s)
+  Γ£ô   3 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (6.5s)
+  Γ£ô   4 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (8.3s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:28:7 ΓÇ║ Navigation ΓÇ║ archive page loads (4.5s)
+  Γ£ô   9 [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section (4.6s)
+  Γ£ô  10 [chromium] ΓÇ║ e2e\navigation.spec.ts:10:7 ΓÇ║ Navigation & Pages ΓÇ║ archive page loads sermons (2.4s)
+  Γ£ô  11 [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads (4.1s)
+  Γ£ô  12 [chromium] ΓÇ║ e2e\navigation.spec.ts:20:7 ΓÇ║ Navigation & Pages ΓÇ║ music page loads (4.1s)
+  Γ£ô  13 [chromium] ΓÇ║ e2e\navigation.spec.ts:25:7 ΓÇ║ Navigation & Pages ΓÇ║ prayer wall page loads (3.9s)
+  Γ£ÿ   8 [chromium] ΓÇ║ e2e\music.spec.ts:130:7 ΓÇ║ Music Flow ΓÇ║ admin can upload a track with file (14.3s)
+  Γ£ô  14 [chromium] ΓÇ║ e2e\navigation.spec.ts:30:7 ΓÇ║ Navigation & Pages ΓÇ║ about page loads (3.8s)
+  Γ£ÿ   7 [chromium] ΓÇ║ e2e\music.spec.ts:84:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page (14.1s)
+  Γ£ô  15 [chromium] ΓÇ║ e2e\navigation.spec.ts:40:7 ΓÇ║ Navigation & Pages ΓÇ║ search overlay opens and shows results (7.1s)
+  Γ£ÿ   6 [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ admin can add a track via external URL (15.9s)
+  Γ£ô  16 [chromium] ΓÇ║ e2e\navigation.spec.ts:35:7 ΓÇ║ Navigation & Pages ΓÇ║ status page loads (5.0s)
+
+
+  1) [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ admin can add a track via external URL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite\s*fm/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite\s*fm/i).first()
+
+
+      59 |
+      60 |     await page.goto('/admin')
+    > 61 |     await expect(page.getByText(/zionite\s*fm/i).first()).toBeVisible({ timeout: 10000 })
+         |                                                           ^
+      62 |
+      63 |     // Click Auto DJ sidebar tab
+      64 |     await page.getByRole('button', { name: /auto dj/i }).click()
+        at C:\zionite\e2e\music.spec.ts:61:59
+
+    Error Context: test-results\music-Music-Flow-admin-can-add-a-track-via-external-URL-chromium\error-context.md
+
+  2) [chromium] ΓÇ║ e2e\music.spec.ts:84:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/featured music/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/featured music/i).first()
+
+
+      120 |
+      121 |     await page.goto('/')
+    > 122 |     await expect(page.getByText(/featured music/i).first()).toBeVisible({ timeout: 10000 })
+          |                                                             ^
+      123 |     await expect(page.getByText('Amazing Grace')).toBeVisible()
+      124 |
+      125 |     await page.getByRole('link', { name: /music/i }).click()
+        at C:\zionite\e2e\music.spec.ts:122:61
+
+    Error Context: test-results\music-Music-Flow-user-can-discover-music-on-home-page-chromium\error-context.md
+
+  3) [chromium] ΓÇ║ e2e\music.spec.ts:130:7 ΓÇ║ Music Flow ΓÇ║ admin can upload a track with file ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite\s*fm/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite\s*fm/i).first()
+
+
+      190 |
+      191 |     await page.goto('/admin')
+    > 192 |     await expect(page.getByText(/zionite\s*fm/i).first()).toBeVisible({ timeout: 10000 })
+          |                                                           ^
+      193 |
+      194 |     await page.getByRole('button', { name: /auto dj/i }).click()
+      195 |     await expect(page.getByText(/add music/i)).toBeVisible()
+        at C:\zionite\e2e\music.spec.ts:192:59
+
+    Error Context: test-results\music-Music-Flow-admin-can-upload-a-track-with-file-chromium\error-context.md
+
+  3 failed
+    [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ admin can add a track via external URL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\music.spec.ts:84:7 ΓÇ║ Music Flow ΓÇ║ user can discover music on home page ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\music.spec.ts:130:7 ΓÇ║ Music Flow ΓÇ║ admin can upload a track with file ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  13 passed (1.4m)

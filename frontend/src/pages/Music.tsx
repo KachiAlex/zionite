@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAudioPlayer } from '../contexts/AudioPlayerContext'
@@ -7,6 +7,7 @@ import {
   Music, Play, Pause, Loader2, Disc3, Search, Share2, Download,
   Shuffle, Heart, ListMusic, Headphones
 } from 'lucide-react'
+import { downloadWithTags } from '../lib/downloadWithTags'
 
 interface Track {
   id: string
@@ -87,15 +88,25 @@ export default function MusicPage() {
     if (!shuffle) toggleShuffle()
   }
 
-  function handleDownload(track: Track) {
-    const a = document.createElement('a')
-    a.href = track.audio_url
-    a.download = `${track.title}${track.audio_url.match(/\.\w+$/)?.[0] || '.mp3'}`
-    a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  const handleDownload = useCallback(async (track: Track) => {
+    if (downloadingId) return
+    setDownloadingId(track.id)
+    try {
+      await downloadWithTags({
+        audioUrl: track.audio_url,
+        title: track.title,
+        artist: track.artist || 'ZioniteFM',
+        album: track.album || 'ZioniteFM Music',
+        genre: track.genre || 'Gospel',
+        coverUrl: track.cover_url,
+        filename: `${track.title}.mp3`
+      })
+    } finally {
+      setDownloadingId(null)
+    }
+  }, [downloadingId])
 
   async function handleShare(track: Track) {
     const shareUrl = `${window.location.origin}/music?track=${track.id}`
@@ -241,11 +252,14 @@ export default function MusicPage() {
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); handleDownload(track) }}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    disabled={downloadingId === track.id}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-60"
                     style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--dim)' }}
                     title="Download"
                   >
-                    <Download className="w-3.5 h-3.5" /> Download
+                    {downloadingId === track.id
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Tagging...</>
+                      : <><Download className="w-3.5 h-3.5" /> Download</>}
                   </button>
                 </div>
                 {track.lyrics && (

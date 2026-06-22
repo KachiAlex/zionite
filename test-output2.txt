@@ -1,0 +1,180 @@
+﻿
+Running 16 tests using 4 workers
+
+  Γ£ô   2 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (10.2s)
+  Γ£ô   4 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (11.3s)
+  Γ£ô   1 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (13.3s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:28:7 ΓÇ║ Navigation ΓÇ║ archive page loads (7.3s)
+  Γ£ÿ   3 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (19.7s)
+  Γ£ÿ   6 [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Add Music Flow ΓÇ║ admin can add a track via external URL (11.9s)
+  Γ£ÿ   7 [chromium] ΓÇ║ e2e\music.spec.ts:146:7 ΓÇ║ Add Music Flow ΓÇ║ user can discover and play music from home and library (8.8s)
+  Γ£ÿ   8 [chromium] ΓÇ║ e2e\music.spec.ts:202:7 ΓÇ║ Add Music Flow ΓÇ║ admin can upload a track with cover image (9.2s)
+  Γ£ô  10 [chromium] ΓÇ║ e2e\navigation.spec.ts:10:7 ΓÇ║ Navigation & Pages ΓÇ║ archive page loads sermons (5.6s)
+  Γ£ô  13 [chromium] ΓÇ║ e2e\navigation.spec.ts:25:7 ΓÇ║ Navigation & Pages ΓÇ║ prayer wall page loads (2.5s)
+  Γ£ô  12 [chromium] ΓÇ║ e2e\navigation.spec.ts:20:7 ΓÇ║ Navigation & Pages ΓÇ║ music page loads (8.9s)
+  Γ£ô  14 [chromium] ΓÇ║ e2e\navigation.spec.ts:30:7 ΓÇ║ Navigation & Pages ΓÇ║ about page loads (5.2s)
+  Γ£ô  15 [chromium] ΓÇ║ e2e\navigation.spec.ts:35:7 ΓÇ║ Navigation & Pages ΓÇ║ status page loads (3.4s)
+  Γ£ô  16 [chromium] ΓÇ║ e2e\navigation.spec.ts:40:7 ΓÇ║ Navigation & Pages ΓÇ║ search overlay opens and shows results (5.7s)
+  Γ£ÿ  11 [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads (4.8s)
+  Γ£ÿ   9 [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section (14.1s)
+
+
+  1) [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite fm/i)
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite fm/i)
+
+
+      23 |   test('home page loads', async ({ page }) => {
+      24 |     await page.goto('/')
+    > 25 |     await expect(page.getByText(/zionite fm/i)).toBeVisible({ timeout: 10000 })
+         |                                                 ^
+      26 |   })
+      27 |
+      28 |   test('archive page loads', async ({ page }) => {
+        at C:\zionite\e2e\auth.spec.ts:25:49
+
+    Error Context: test-results\auth-Navigation-home-page-loads-chromium\error-context.md
+
+  2) [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Add Music Flow ΓÇ║ admin can add a track via external URL ΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/welcome back/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/welcome back/i)
+
+
+      115 |
+      116 |     await page.goto('/admin')
+    > 117 |     await expect(page.getByText(/welcome back/i)).toBeVisible()
+          |                                                   ^
+      118 |
+      119 |     await page.getByRole('button', { name: /auto dj/i }).click()
+      120 |     await expect(page.getByRole('heading', { name: /add music/i })).toBeVisible()
+        at C:\zionite\e2e\music.spec.ts:117:51
+
+    Error Context: test-results\music-Add-Music-Flow-admin-can-add-a-track-via-external-URL-chromium\error-context.md
+
+  3) [chromium] ΓÇ║ e2e\music.spec.ts:146:7 ΓÇ║ Add Music Flow ΓÇ║ user can discover and play music from home and library 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/featured music/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/featured music/i)
+
+
+      183 |     // Home page shows featured music
+      184 |     await page.goto('/')
+    > 185 |     await expect(page.getByText(/featured music/i)).toBeVisible()
+          |                                                     ^
+      186 |     await expect(page.getByText('Amazing Grace')).toBeVisible()
+      187 |     await expect(page.getByText('Worship Team')).toBeVisible()
+      188 |
+        at C:\zionite\e2e\music.spec.ts:185:53
+
+    Error Context: test-results\music-Add-Music-Flow-user--47511-music-from-home-and-library-chromium\error-context.md
+
+  4) [chromium] ΓÇ║ e2e\music.spec.ts:202:7 ΓÇ║ Add Music Flow ΓÇ║ admin can upload a track with cover image 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/welcome back/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/welcome back/i)
+
+
+      313 |
+      314 |     await page.goto('/admin')
+    > 315 |     await expect(page.getByText(/welcome back/i)).toBeVisible()
+          |                                                   ^
+      316 |
+      317 |     await page.getByRole('button', { name: /auto dj/i }).click()
+      318 |     await expect(page.getByRole('heading', { name: /add music/i })).toBeVisible()
+        at C:\zionite\e2e\music.spec.ts:315:51
+
+    Error Context: test-results\music-Add-Music-Flow-admin-a3178-ad-a-track-with-cover-image-chromium\error-context.md
+
+  5) [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite fm/i)
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite fm/i)
+
+
+      4 |   test('home page loads with hero section', async ({ page }) => {
+      5 |     await page.goto('/')
+    > 6 |     await expect(page.getByText(/zionite fm/i)).toBeVisible({ timeout: 10000 })
+        |                                                 ^
+      7 |     await expect(page.getByText(/the voice of redemption/i)).toBeVisible({ timeout: 10000 })
+      8 |   })
+      9 |
+        at C:\zionite\e2e\navigation.spec.ts:6:49
+
+    Error Context: test-results\navigation-Navigation-Page-16fff-age-loads-with-hero-section-chromium\error-context.md
+
+  6) [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /events/i })
+    Expected: visible
+    Error: strict mode violation: getByRole('heading', { name: /events/i }) resolved to 2 elements:
+        1) <h1 class="text-3xl font-bold">Upcoming Events</h1> aka getByRole('heading', { name: 'Upcoming Events' })
+        2) <h3 class="text-lg font-semibold mb-2">No events yet</h3> aka getByRole('heading', { name: 'No events yet' })
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: /events/i })
+
+
+      15 |   test('events page loads', async ({ page }) => {
+      16 |     await page.goto('/events')
+    > 17 |     await expect(page.getByRole('heading', { name: /events/i })).toBeVisible()
+         |                                                                  ^
+      18 |   })
+      19 |
+      20 |   test('music page loads', async ({ page }) => {
+        at C:\zionite\e2e\navigation.spec.ts:17:66
+
+    Error Context: test-results\navigation-Navigation-Pages-events-page-loads-chromium\error-context.md
+
+  6 failed
+    [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Add Music Flow ΓÇ║ admin can add a track via external URL ΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\music.spec.ts:146:7 ΓÇ║ Add Music Flow ΓÇ║ user can discover and play music from home and library 
+    [chromium] ΓÇ║ e2e\music.spec.ts:202:7 ΓÇ║ Add Music Flow ΓÇ║ admin can upload a track with cover image 
+    [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section 
+    [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  10 passed (1.5m)

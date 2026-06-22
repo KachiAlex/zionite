@@ -1,5 +1,6 @@
-import { memo, useState } from "react"
+import { memo, useState, useCallback } from "react"
 import axios from "axios"
+import { downloadWithTags } from "../lib/downloadWithTags"
 import { Link } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { usePageTitle } from "../hooks/usePageTitle"
@@ -65,16 +66,26 @@ const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
     playTrack({ id: track.id, title: track.title, speaker: track.artist || 'Unknown artist', audioUrl: track.audio_url, thumbnail: track.cover_url })
   }
 
-  function handleDownload(e: React.MouseEvent) {
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    const a = document.createElement('a')
-    a.href = track.audio_url
-    a.download = `${track.title}${track.audio_url.match(/\.\w+$/)?.[0] || '.mp3'}`
-    a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }
+    if (downloading) return
+    setDownloading(true)
+    try {
+      await downloadWithTags({
+        audioUrl: track.audio_url,
+        title: track.title,
+        artist: track.artist || 'ZioniteFM',
+        album: track.album || 'ZioniteFM Music',
+        genre: track.genre || 'Gospel',
+        coverUrl: track.cover_url,
+        filename: `${track.title}.mp3`
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }, [track, downloading])
 
   async function handleShare(e: React.MouseEvent) {
     e.stopPropagation()
@@ -108,7 +119,7 @@ const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
         <button onClick={handleShare} className="text-[#9c958a] hover:text-[#c9a227] transition-colors" title="Share">
           <Share2 className="w-3.5 h-3.5" />
         </button>
-        <button onClick={handleDownload} className="text-[#9c958a] hover:text-[#c9a227] transition-colors" title="Download">
+        <button onClick={handleDownload} disabled={downloading} className="text-[#9c958a] hover:text-[#c9a227] transition-colors disabled:opacity-50" title="Download">
           <Download className="w-3.5 h-3.5" />
         </button>
       </div>

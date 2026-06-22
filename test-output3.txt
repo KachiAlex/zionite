@@ -1,0 +1,105 @@
+﻿
+Running 13 tests using 4 workers
+
+  Γ£ô   4 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (11.9s)
+  Γ£ô   3 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (14.9s)
+  Γ£ô   2 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (15.5s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:28:7 ΓÇ║ Navigation ΓÇ║ archive page loads (5.0s)
+  Γ£ô   7 [chromium] ΓÇ║ e2e\navigation.spec.ts:10:7 ΓÇ║ Navigation & Pages ΓÇ║ archive page loads sermons (3.1s)
+  Γ£ô   9 [chromium] ΓÇ║ e2e\navigation.spec.ts:20:7 ΓÇ║ Navigation & Pages ΓÇ║ music page loads (2.6s)
+  Γ£ÿ   6 [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section (5.0s)
+  Γ£ÿ   8 [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads (2.6s)
+  Γ£ô  10 [chromium] ΓÇ║ e2e\navigation.spec.ts:25:7 ΓÇ║ Navigation & Pages ΓÇ║ prayer wall page loads (4.7s)
+  Γ£ô  11 [chromium] ΓÇ║ e2e\navigation.spec.ts:40:7 ΓÇ║ Navigation & Pages ΓÇ║ search overlay opens and shows results (6.2s)
+  Γ£ô  12 [chromium] ΓÇ║ e2e\navigation.spec.ts:30:7 ΓÇ║ Navigation & Pages ΓÇ║ about page loads (4.2s)
+  Γ£ÿ   1 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (16.3s)
+  Γ£ô  13 [chromium] ΓÇ║ e2e\navigation.spec.ts:35:7 ΓÇ║ Navigation & Pages ΓÇ║ status page loads (6.2s)
+
+
+  1) [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite\s*fm/i)
+    Expected: visible
+    Error: strict mode violation: getByText(/zionite\s*fm/i) resolved to 4 elements:
+        1) <div class="text-sm font-medium text-white tracking-wide">ZIONITEFM</div> aka getByRole('link', { name: 'ZioniteFM Logo ZIONITEFM The' })
+        2) <h1 class="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">ΓÇª</h1> aka getByRole('heading', { name: 'ZioniteFM ΓÇô The Voice of' })
+        3) <div class="text-sm font-medium text-white tracking-wide">ZIONITEFM</div> aka getByRole('contentinfo').getByText('ZIONITEFM', { exact: true })
+        4) <p class="text-[10px] text-[#9c958a]">┬⌐ 2025 ZioniteFM. All Rights Reserved.</p> aka getByText('┬⌐ 2025 ZioniteFM. All Rights')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite\s*fm/i)
+
+
+      23 |   test('home page loads', async ({ page }) => {
+      24 |     await page.goto('/')
+    > 25 |     await expect(page.getByText(/zionite\s*fm/i)).toBeVisible({ timeout: 10000 })
+         |                                                   ^
+      26 |   })
+      27 |
+      28 |   test('archive page loads', async ({ page }) => {
+        at C:\zionite\e2e\auth.spec.ts:25:51
+
+    Error Context: test-results\auth-Navigation-home-page-loads-chromium\error-context.md
+
+  2) [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/zionite\s*fm/i)
+    Expected: visible
+    Error: strict mode violation: getByText(/zionite\s*fm/i) resolved to 4 elements:
+        1) <div class="text-sm font-medium text-white tracking-wide">ZIONITEFM</div> aka getByRole('link', { name: 'ZioniteFM Logo ZIONITEFM The' })
+        2) <h1 class="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">ΓÇª</h1> aka getByRole('heading', { name: 'ZioniteFM ΓÇô The Voice of' })
+        3) <div class="text-sm font-medium text-white tracking-wide">ZIONITEFM</div> aka getByRole('contentinfo').getByText('ZIONITEFM', { exact: true })
+        4) <p class="text-[10px] text-[#9c958a]">┬⌐ 2025 ZioniteFM. All Rights Reserved.</p> aka getByText('┬⌐ 2025 ZioniteFM. All Rights')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByText(/zionite\s*fm/i)
+
+
+      4 |   test('home page loads with hero section', async ({ page }) => {
+      5 |     await page.goto('/')
+    > 6 |     await expect(page.getByText(/zionite\s*fm/i)).toBeVisible({ timeout: 10000 })
+        |                                                   ^
+      7 |     await expect(page.getByText(/the voice of redemption/i)).toBeVisible({ timeout: 10000 })
+      8 |   })
+      9 |
+        at C:\zionite\e2e\navigation.spec.ts:6:51
+
+    Error Context: test-results\navigation-Navigation-Page-16fff-age-loads-with-hero-section-chromium\error-context.md
+
+  3) [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /events/i })
+    Expected: visible
+    Error: strict mode violation: getByRole('heading', { name: /events/i }) resolved to 2 elements:
+        1) <h1 class="text-3xl font-bold">Upcoming Events</h1> aka getByRole('heading', { name: 'Upcoming Events' })
+        2) <h3 class="text-lg font-semibold mb-2">No events yet</h3> aka getByRole('heading', { name: 'No events yet' })
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: /events/i })
+
+
+      15 |   test('events page loads', async ({ page }) => {
+      16 |     await page.goto('/events')
+    > 17 |     await expect(page.getByRole('heading', { name: /events/i })).toBeVisible()
+         |                                                                  ^
+      18 |   })
+      19 |
+      20 |   test('music page loads', async ({ page }) => {
+        at C:\zionite\e2e\navigation.spec.ts:17:66
+
+    Error Context: test-results\navigation-Navigation-Pages-events-page-loads-chromium\error-context.md
+
+  3 failed
+    [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section 
+    [chromium] ΓÇ║ e2e\navigation.spec.ts:15:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  10 passed (1.0m)

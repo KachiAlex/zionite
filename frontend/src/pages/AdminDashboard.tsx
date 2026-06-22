@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useBroadcasts, useSermons, useUsers, usePrayers, useMusic, useDashboardAnalytics } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
-  Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, Play, StopCircle, BarChart3, Shield, Sparkles,
+  Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
   Menu, X, Loader2
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
