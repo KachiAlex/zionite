@@ -1,4 +1,6 @@
-import ID3Writer from 'browser-id3-writer'
+import * as ID3WriterNS from 'browser-id3-writer'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ID3Writer: any = (ID3WriterNS as any).default ?? ID3WriterNS
 
 export interface TagOptions {
   title: string
@@ -36,7 +38,7 @@ export async function downloadWithTags(opts: TagOptions): Promise<void> {
     return
   }
 
-  const writer = new ID3Writer(songBuffer)
+  const writer = new ID3Writer(songBuffer) as any
 
   writer.setFrame('TIT2', title)
   if (artist) writer.setFrame('TPE1', [artist])
