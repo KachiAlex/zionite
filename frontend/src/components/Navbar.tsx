@@ -27,7 +27,6 @@ export default function Navbar() {
     { label: 'Live Radio', path: '/live' },
     { label: 'Sermons', path: '/archive' },
     { label: 'Music', path: '/music' },
-    { label: 'Podcasts', path: '/podcasts' },
     { label: 'Prayer Wall', path: '/prayer' },
     { label: 'Testimonies', path: '/testimonies' },
     { label: 'Events', path: '/events' },

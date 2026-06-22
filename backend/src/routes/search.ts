@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
   try {
     if (!dbReady) { res.status(503).json({ error: 'Database not configured' }); return }
     const raw = String(req.query.q || '').trim()
-    if (!raw) { res.json({ sermons: [], podcasts: [], events: [], music: [], speakers: [] }); return }
+    if (!raw) { res.json({ sermons: [], events: [], music: [], speakers: [] }); return }
 
     const tsQ = raw.replace(/\s+/g, ' & ')
 
@@ -20,14 +20,6 @@ router.get('/', async (req, res) => {
        ts_rank(to_tsvector('english', ${toTsVector('sermons', ['title','speaker','scripture_reference','description'])}), to_tsquery('english', $1)) as rank
        FROM sermons
        WHERE to_tsvector('english', ${toTsVector('sermons', ['title','speaker','scripture_reference','description'])}) @@ to_tsquery('english', $1)
-       ORDER BY rank DESC, created_at DESC LIMIT 10`,
-      [tsQ]
-    )
-    const podcasts = await db.all(
-      `SELECT id, title, speaker as host, thumbnail_url,
-       ts_rank(to_tsvector('english', ${toTsVector('podcasts', ['title','speaker','description'])}), to_tsquery('english', $1)) as rank
-       FROM podcasts
-       WHERE to_tsvector('english', ${toTsVector('podcasts', ['title','speaker','description'])}) @@ to_tsquery('english', $1)
        ORDER BY rank DESC, created_at DESC LIMIT 10`,
       [tsQ]
     )
@@ -56,7 +48,7 @@ router.get('/', async (req, res) => {
       [tsQ]
     )
 
-    res.json({ sermons, podcasts, events, music, speakers })
+    res.json({ sermons, events, music, speakers })
   } catch (err: any) {
     console.error('[SEARCH]', err.message)
     res.status(500).json({ error: 'Search failed' })

@@ -22,7 +22,6 @@ const sidebarNav = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Live Radio', path: '/live', icon: Radio },
   { label: 'Sermons', path: '/archive', icon: BookOpen },
-  { label: 'Podcast Archive', path: '/podcasts', icon: Headphones },
   { label: 'Transcripts', path: '/archive', icon: FileText },
   { label: 'Prayer Wall', path: '/prayer', icon: Heart },
   { label: 'Testimonies', path: '/testimonies', icon: MessageSquare },
@@ -362,9 +361,8 @@ export default function MemberDashboard() {
               <LivePlayerHero broadcast={broadcast} isPlaying={isPlaying} setIsPlaying={setIsPlaying} isMuted={isMuted} setIsMuted={setIsMuted} />
 
               {/* Quick Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <QuickCard icon={BookOpen} title="Sermon Library" subtitle="Grow in the Word. Explore life-changing messages." actionLabel="Explore" to="/archive" accent="bg-[#c9a227]/10 text-[#c9a227]" />
-                <QuickCard icon={Headphones} title="Podcast Archive" subtitle="Listen anytime, anywhere. Inspiring messages on the go." actionLabel="Browse" to="/podcasts" accent="bg-[#4ade80]/10 text-[#4ade80]" />
                 <QuickCard icon={BookOpenCheck} title="Sermon Transcripts" subtitle="Read, study, download. Auto-generated transcripts for deeper understanding." actionLabel="View Transcripts" to="/archive" accent="bg-[#f472b6]/10 text-[#f472b6]" />
               </div>
               {/* Prayer / Testimony / Chat */}

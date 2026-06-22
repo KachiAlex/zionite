@@ -91,7 +91,7 @@ test.describe('Add Music Flow', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          stats: { listenersOnline: 0, totalListenersToday: 0, sermonCount: 0, podcastCount: 0, prayerCount: 0, totalDonations: 0 },
+          stats: { listenersOnline: 0, totalListenersToday: 0, sermonCount: 0, prayerCount: 0, totalDonations: 0 },
           platformBreakdown: [],
           recentSermons: [],
           pendingTestimonies: [],
@@ -289,7 +289,7 @@ test.describe('Add Music Flow', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          stats: { listenersOnline: 0, totalListenersToday: 0, sermonCount: 0, podcastCount: 0, prayerCount: 0, totalDonations: 0 },
+          stats: { listenersOnline: 0, totalListenersToday: 0, sermonCount: 0, prayerCount: 0, totalDonations: 0 },
           platformBreakdown: [],
           recentSermons: [],
           pendingTestimonies: [],

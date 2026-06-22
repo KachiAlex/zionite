@@ -10,7 +10,6 @@ import scheduleRoutes from './routes/schedule.js'
 import chatRoutes from './routes/chat.js'
 import statusRoutes from './routes/status.js'
 import guestSpeakerRoutes from './routes/guest-speakers.js'
-import podcastRoutes from './routes/podcasts.js'
 import prayerRoutes from './routes/prayer.js'
 import eventRoutes from './routes/events.js'
 import donationRoutes from './routes/donations.js'
@@ -72,7 +71,6 @@ app.use('/schedule', scheduleRoutes)
 app.use('/chat', chatRoutes)
 app.use('/status', cacheMiddleware(60000), statusRoutes)
 app.use('/guest-speakers', cacheMiddleware(60000), guestSpeakerRoutes)
-app.use('/podcasts', cacheMiddleware(60000), podcastRoutes)
 app.use('/prayer', cacheMiddleware(30000), prayerRoutes)
 app.use('/events', cacheMiddleware(60000), eventRoutes)
 app.use('/donations', donationRoutes)

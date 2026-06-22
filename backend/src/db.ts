@@ -92,10 +92,6 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, name TEXT NOT NULL, bio TEXT, photo_url TEXT,
     topic TEXT, date TEXT, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
-  `CREATE TABLE IF NOT EXISTS podcasts (
-    id TEXT PRIMARY KEY, title TEXT NOT NULL, speaker TEXT, duration TEXT,
-    audio_url TEXT, description TEXT, date TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`,
   `CREATE TABLE IF NOT EXISTS prayer_requests (
     id TEXT PRIMARY KEY, name TEXT, request TEXT NOT NULL, is_anonymous BOOLEAN DEFAULT FALSE,
     prayers_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

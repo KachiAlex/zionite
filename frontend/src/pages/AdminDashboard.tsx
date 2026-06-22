@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useBroadcasts, useSermons, useUsers, usePrayers, useMusic, useDashboardAnalytics } from '../lib/api'
 import {
-  Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Podcast, Heart, Calendar,
+  Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Mic, Pause, Play, StopCircle, BarChart3, Shield, Sparkles,
   Menu, X, Loader2
 } from 'lucide-react'
@@ -17,14 +17,13 @@ const ChatSupervisor = lazy(() => import('../components/admin/ChatSupervisor'))
 const AdminSettings = lazy(() => import('../components/admin/AdminSettings'))
 const MusicManager = lazy(() => import('../components/admin/MusicManager'))
 const GuestSpeakerManager = lazy(() => import('../components/admin/GuestSpeakerManager'))
-const PodcastManager = lazy(() => import('../components/admin/PodcastManager'))
 const PrayerManager = lazy(() => import('../components/admin/PrayerManager'))
 const TestimonyManager = lazy(() => import('../components/admin/TestimonyManager'))
 const EventManager = lazy(() => import('../components/admin/EventManager'))
 
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
 
-type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'podcasts' | 'prayer' | 'testimonies' | 'events'
+type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events'
 
 function formatDuration(totalSeconds: number) {
   const h = Math.floor(totalSeconds / 3600)
@@ -172,7 +171,6 @@ export default function AdminDashboard() {
       <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
       <SL t="Ministry Management"/>
       <SB label="Sermons" tab="sermons" icon={BookOpen}/>
-      <SB label="Podcasts" tab="podcasts" icon={Podcast}/>
       <SB label="Speakers" tab="speakers" icon={Mic2}/>
       <SB label="Events" tab="events" icon={Calendar}/>
       <SB label="Prayer Requests" tab="prayer" icon={Heart} badge={prayers.length}/>
@@ -239,7 +237,6 @@ export default function AdminDashboard() {
                   {icon:Users,label:'Listeners Online',value:dashboard?.listenersOnline?.toLocaleString()||'0',chg:'Live',sub:'Active now',bg:'rgba(139,124,248,0.12)',col:'#8b7cf8'},
                   {icon:Headphones,label:'Total Listeners',value:dashboard?.totalListenersToday?.toLocaleString()||'0',chg:'24h',sub:'Total sessions',bg:'rgba(59,130,246,0.12)',col:'#3b82f6'},
                   {icon:BookOpen,label:'Sermons',value:dashboard?.sermonCount?.toLocaleString()||String(sermons.length||0),chg:'',sub:'Total Uploads',bg:'rgba(74,222,128,0.12)',col:'#4ade80'},
-                  {icon:Mic,label:'Podcasts',value:dashboard?.podcastCount?.toLocaleString()||'0',chg:'',sub:'Total Episodes',bg:'rgba(249,115,22,0.12)',col:'#f97316'},
                   {icon:Heart,label:'Prayer Requests',value:dashboard?.prayerCount?.toLocaleString()||String(prayers.length||0),chg:'',sub:`Pending`,bg:'rgba(239,68,68,0.12)',col:'#ef4444'},
                   {icon:DollarSign,label:'Total Donations',value:dashboard?.totalDonations?`$${Number(dashboard.totalDonations).toLocaleString()}`:'$0',chg:'',sub:'All time',bg:'rgba(201,162,39,0.12)',col:'#c9a227'},
                 ].map((c,i)=>{
@@ -494,11 +491,6 @@ export default function AdminDashboard() {
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Guest Speaker Spotlight</h2></div>
               <GuestSpeakerManager/>
-            </div>
-          ):activeTab==='podcasts'?(
-            <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
-              <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Podcast Management</h2></div>
-              <PodcastManager/>
             </div>
           ):activeTab==='prayer'?(
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">

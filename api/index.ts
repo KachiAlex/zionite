@@ -156,12 +156,6 @@ async function _doInitDb() {
     message TEXT, is_anonymous BOOLEAN DEFAULT FALSE, status TEXT DEFAULT 'completed',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
-  await dbQuery(`CREATE TABLE IF NOT EXISTS podcasts (
-    id TEXT PRIMARY KEY, title TEXT NOT NULL, speaker TEXT, duration TEXT,
-    audio_url TEXT, thumbnail_url TEXT, description TEXT, date TEXT,
-    category TEXT, is_featured BOOLEAN DEFAULT FALSE, listen_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS prayer_requests (
     id TEXT PRIMARY KEY, user_id TEXT, name TEXT, request TEXT NOT NULL, is_anonymous BOOLEAN DEFAULT FALSE,
     prayers_count INTEGER DEFAULT 0, is_answered BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -203,11 +197,6 @@ async function _doInitDb() {
   try { await dbQuery(`ALTER TABLE prayer_requests ADD COLUMN IF NOT EXISTS is_answered BOOLEAN DEFAULT FALSE`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS user_id TEXT`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`) } catch {}
-  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS thumbnail_url TEXT`) } catch {}
-  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS category TEXT`) } catch {}
-  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE`) } catch {}
-  try { await dbQuery(`ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS listen_count INTEGER DEFAULT 0`) } catch {}
-
   const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
     await dbQuery(`INSERT INTO schedule (id, title, day_of_week, time, type) VALUES ($1,$2,$3,$4,$5),($6,$7,$8,$9,$10),($11,$12,$13,$14,$15)`,
@@ -616,7 +605,7 @@ app.post('/uploads/image', auth, requireRole('admin'), uploadImage.single('image
 app.post('/uploads/audio', auth, requireRole('admin'), upload.single('audio'), async (req: AuthReq, res) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'Audio file required' }); return }
-    const audio_url = await uploadToCloudinary(req.file.buffer, 'zionite/podcasts/audio', 'video')
+    const audio_url = await uploadToCloudinary(req.file.buffer, 'zionite/audio', 'video')
     res.json({ audio_url })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -848,64 +837,6 @@ app.get('/events/:id/rsvps', auth, requireRole('admin'), async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-// ── Podcasts ───────────────────────────────────────────────────
-app.get('/podcasts', async (_req, res) => {
-  try {
-    await initDb()
-    const rows = await dbQuery(`SELECT id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured, listen_count, created_at FROM podcasts ORDER BY is_featured DESC, created_at DESC`)
-    res.json({ podcasts: rows })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
-app.get('/podcasts/:id', async (req, res) => {
-  try {
-    await initDb()
-    const row = await dbGet('SELECT id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured, listen_count, created_at FROM podcasts WHERE id=$1', [req.params.id])
-    if (!row) { res.status(404).json({ error: 'Not found' }); return }
-    res.json({ podcast: row })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
-app.post('/podcasts/:id/listen', async (req, res) => {
-  try {
-    await initDb()
-    await dbQuery('UPDATE podcasts SET listen_count = listen_count + 1 WHERE id=$1', [req.params.id])
-    res.json({ ok: true })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
-app.post('/podcasts', auth, requireRole('admin'), async (req: AuthReq, res) => {
-  try {
-    await initDb()
-    const { title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured } = req.body
-    if (!title) { res.status(400).json({ error: 'Title is required' }); return }
-    const id = uuidv4()
-    await dbQuery(`INSERT INTO podcasts (id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, title, speaker || '', duration || '', audio_url || '', thumbnail_url || '', description || '', date || '', category || '', is_featured === true])
-    res.status(201).json({ podcast: { id, title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured: is_featured === true, listen_count: 0 } })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
-app.patch('/podcasts/:id', auth, requireRole('admin'), async (req, res) => {
-  try {
-    await initDb()
-    const existing = await dbGet('SELECT * FROM podcasts WHERE id=$1', [req.params.id])
-    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
-    const { title, speaker, duration, audio_url, thumbnail_url, description, date, category, is_featured } = req.body
-    await dbQuery(`UPDATE podcasts SET title=$1, speaker=$2, duration=$3, audio_url=$4, thumbnail_url=$5, description=$6, date=$7, category=$8, is_featured=$9 WHERE id=$10`,
-      [title ?? existing.title, speaker ?? existing.speaker, duration ?? existing.duration, audio_url ?? existing.audio_url,
-       thumbnail_url ?? existing.thumbnail_url, description ?? existing.description, date ?? existing.date,
-       category ?? existing.category, is_featured ?? existing.is_featured, req.params.id])
-    const row = await dbGet('SELECT * FROM podcasts WHERE id=$1', [req.params.id])
-    res.json({ podcast: row })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
-app.delete('/podcasts/:id', auth, requireRole('admin'), async (req, res) => {
-  try { await initDb(); await dbQuery('DELETE FROM podcasts WHERE id=$1', [req.params.id]); res.json({ ok: true }) }
-  catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
 // ── Prayer Wall ────────────────────────────────────────────────
 app.get('/prayer', optionalAuth, async (req: AuthReq, res) => {
   try {
@@ -1116,7 +1047,6 @@ app.get('/analytics/dashboard', auth, requireRole('admin'), async (_req, res) =>
     const onlineResult = await dbGet(`SELECT COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '5 minutes'`)
     const todayResult = await dbGet(`SELECT COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '24 hours'`)
     const sermonsResult = await dbGet('SELECT COUNT(*) as count FROM sermons')
-    const podcastsResult = await dbGet('SELECT COUNT(*) as count FROM podcasts')
     const prayersResult = await dbGet('SELECT COUNT(*) as count FROM prayer_requests')
     const donationsResult = await dbGet('SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE status=$1', ['completed'])
     const platformRows = await dbQuery(`SELECT platform, COUNT(DISTINCT session_id) as count FROM stream_listeners WHERE last_seen > NOW() - INTERVAL '24 hours' GROUP BY platform`)
@@ -1131,7 +1061,7 @@ app.get('/analytics/dashboard', auth, requireRole('admin'), async (_req, res) =>
     const activeCampaigns = await dbQuery('SELECT id, title, goal_amount, current_amount FROM campaigns WHERE is_active=TRUE ORDER BY created_at DESC LIMIT 5')
     const transcripts = await dbQuery('SELECT t.id, s.title as sermon_title, t.created_at FROM transcripts t JOIN sermons s ON t.sermon_id = s.id ORDER BY t.created_at DESC LIMIT 5')
     res.json({
-      stats: { listenersOnline: onlineResult?.count || 0, totalListenersToday: todayResult?.count || 0, sermonCount: sermonsResult?.count || 0, podcastCount: podcastsResult?.count || 0, prayerCount: prayersResult?.count || 0, totalDonations: donationsResult?.total || 0 },
+      stats: { listenersOnline: onlineResult?.count || 0, totalListenersToday: todayResult?.count || 0, sermonCount: sermonsResult?.count || 0, prayerCount: prayersResult?.count || 0, totalDonations: donationsResult?.total || 0 },
       platformBreakdown, recentSermons, pendingTestimonies, recentDonations, activeCampaigns, transcripts
     })
   } catch (e: any) { res.status(500).json({ error: e.message }) }

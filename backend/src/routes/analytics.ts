@@ -27,10 +27,6 @@ router.get('/dashboard', authenticateToken, requireRole('admin'), async (req, re
     const sermonsResult = await db.get('SELECT COUNT(*) as count FROM sermons')
     const sermonCount = sermonsResult?.count || 0
 
-    // Podcast count
-    const podcastsResult = await db.get('SELECT COUNT(*) as count FROM podcasts')
-    const podcastCount = podcastsResult?.count || 0
-
     // Prayer request count
     const prayersResult = await db.get('SELECT COUNT(*) as count FROM prayer_requests')
     const prayerCount = prayersResult?.count || 0
@@ -94,7 +90,6 @@ router.get('/dashboard', authenticateToken, requireRole('admin'), async (req, re
         listenersOnline,
         totalListenersToday,
         sermonCount,
-        podcastCount,
         prayerCount,
         totalDonations
       },

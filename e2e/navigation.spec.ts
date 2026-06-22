@@ -22,11 +22,6 @@ test.describe('Navigation & Pages', () => {
     await expect(page.getByRole('heading', { name: /music/i })).toBeVisible()
   })
 
-  test('podcasts page loads', async ({ page }) => {
-    await page.goto('/podcasts')
-    await expect(page.getByRole('heading', { name: /podcasts/i })).toBeVisible()
-  })
-
   test('prayer wall page loads', async ({ page }) => {
     await page.goto('/prayer')
     await expect(page.getByRole('heading', { name: /prayer wall/i })).toBeVisible()
@@ -51,7 +46,7 @@ test.describe('Navigation & Pages', () => {
       await expect(input).toBeVisible()
       await input.fill('love')
       await page.waitForTimeout(500)
-      const results = page.locator('text=/sermons|podcasts|events|music|speakers/i')
+      const results = page.locator('text=/sermons|events|music|speakers/i')
       await expect(results.first()).toBeVisible({ timeout: 5000 })
     }
   })
