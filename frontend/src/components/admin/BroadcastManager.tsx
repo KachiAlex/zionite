@@ -22,6 +22,7 @@ interface Broadcast {
   thumbnail_url?: string
   speaker?: string
   recording_url?: string
+  recorded_at?: string
 }
 
 type StudioView = 'list' | 'setup' | 'studio'
@@ -354,9 +355,12 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                       </>
                     )}
                     {b.status === 'ended' && b.recording_url && (
-                      <a href={b.recording_url} target="_blank" rel="noopener noreferrer"
+                      <a
+                        href={`/api/broadcasts/${b.id}/recording/download`}
                         className="p-1.5 rounded-md bg-[#c9a227]/10 hover:bg-[#c9a227]/20 text-[#c9a227] transition-colors"
-                        title="Download / Listen to recording">
+                        title={`Download recording${b.recorded_at ? ` · expires ${new Date(new Date(b.recorded_at).getTime() + 90*24*60*60*1000).toLocaleDateString()}` : ''}`}
+                        download
+                      >
                         <Download className="w-3.5 h-3.5" />
                       </a>
                     )}

@@ -2,27 +2,54 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Navigation & Pages', () => {
   test('home page loads with hero section', async ({ page }) => {
+    await page.route('**/api/broadcasts/active', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ broadcast: null }) })
+    })
+    await page.route('**/api/sermons', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sermons: [] }) })
+    })
+    await page.route('**/api/music', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ music: [] }) })
+    })
+    await page.route('**/api/guest-speakers', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ speakers: [] }) })
+    })
+    await page.route('**/api/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
     await page.goto('/')
     await expect(page.getByText(/zionite\s*fm/i).first()).toBeVisible({ timeout: 10000 })
     await expect(page.getByText(/the voice of redemption/i).first()).toBeVisible({ timeout: 10000 })
   })
 
   test('archive page loads sermons', async ({ page }) => {
+    await page.route('**/api/sermons', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sermons: [] }) })
+    })
     await page.goto('/archive')
     await expect(page.getByRole('heading', { name: /sermon archive/i })).toBeVisible()
   })
 
   test('events page loads', async ({ page }) => {
+    await page.route('**/api/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
     await page.goto('/events')
     await expect(page.getByRole('heading', { name: /upcoming events/i })).toBeVisible()
   })
 
   test('music page loads', async ({ page }) => {
+    await page.route('**/api/music', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ music: [] }) })
+    })
     await page.goto('/music')
     await expect(page.getByRole('heading', { name: /music/i })).toBeVisible()
   })
 
   test('prayer wall page loads', async ({ page }) => {
+    await page.route('**/api/prayer', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ prayers: [] }) })
+    })
     await page.goto('/prayer')
     await expect(page.getByRole('heading', { name: /prayer wall/i })).toBeVisible()
   })
@@ -33,11 +60,32 @@ test.describe('Navigation & Pages', () => {
   })
 
   test('status page loads', async ({ page }) => {
+    await page.route('**/api/schedule', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ schedule: [] }) })
+    })
+    await page.route('**/api/broadcasts/active', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ broadcast: null }) })
+    })
     await page.goto('/status')
     await expect(page.getByRole('heading', { name: /status/i })).toBeVisible()
   })
 
   test('search overlay opens and shows results', async ({ page }) => {
+    await page.route('**/api/search', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) })
+    })
+    await page.route('**/api/sermons', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sermons: [] }) })
+    })
+    await page.route('**/api/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) })
+    })
+    await page.route('**/api/guest-speakers', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ speakers: [] }) })
+    })
+    await page.route('**/api/music', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ music: [] }) })
+    })
     await page.goto('/')
     const searchBtn = page.getByRole('button', { name: /search/i })
     if (await searchBtn.isVisible().catch(() => false)) {

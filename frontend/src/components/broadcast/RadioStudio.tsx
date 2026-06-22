@@ -495,10 +495,10 @@ export default function RadioStudio({
           <div className="flex items-center gap-2 text-xs px-4 py-2 rounded-lg"
             style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
             <CheckCircle className="w-3.5 h-3.5" />
-            Recording saved to cloud.
-            <a href={recordingUrl} target="_blank" rel="noopener noreferrer"
+            Recording saved. Auto-deletes in 90 days.
+            <a href={`/api/broadcasts/${broadcastId}/recording/download`} download
               className="ml-auto underline hover:opacity-80" style={{ color: '#c9a227' }}>
-              Listen / Download
+              Download
             </a>
           </div>
         )}

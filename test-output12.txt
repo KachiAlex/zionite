@@ -1,0 +1,8 @@
+﻿
+Running 14 tests using 1 worker
+
+  Γ£ô   1 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (8.7s)
+  Γ£ô   2 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (2.7s)
+  Γ£ô   3 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (3.4s)
+  Γ£ÿ   4 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (12.8s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:43:7 ΓÇ║ Navigation ΓÇ║ archive page loads (5.9s)

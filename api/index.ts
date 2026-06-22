@@ -133,6 +133,24 @@ async function _doInitDb() {
   try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS thumbnail_url TEXT`) } catch {}
   try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS speaker TEXT`) } catch {}
   try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS recording_url TEXT`) } catch {}
+  try { await dbQuery(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS recorded_at TIMESTAMP`) } catch {}
+
+  // Auto-delete broadcast recordings older than 90 days
+  try {
+    const expired = await dbQuery(
+      `SELECT id, recording_url FROM broadcasts WHERE recording_url IS NOT NULL AND recorded_at < NOW() - INTERVAL '90 days'`
+    )
+    for (const row of (expired || [])) {
+      try {
+        // Extract Cloudinary public_id from URL and destroy
+        const match = (row.recording_url as string).match(/\/v\d+\/(.+?)(?:\.[a-z0-9]+)?$/i)
+        if (match) {
+          await cloudinary.uploader.destroy(match[1], { resource_type: 'video' })
+        }
+      } catch {}
+      await dbQuery(`UPDATE broadcasts SET recording_url=NULL, recorded_at=NULL WHERE id=$1`, [row.id])
+    }
+  } catch {}
 
   // Add sermon columns if missing
   try { await dbQuery(`ALTER TABLE sermons ADD COLUMN IF NOT EXISTS video_url TEXT`) } catch {}
@@ -640,9 +658,35 @@ app.post('/broadcasts/:id/recording', auth, requireRole('admin', 'broadcaster'),
   try {
     if (!req.file) { res.status(400).json({ error: 'Recording file required' }); return }
     await initDb()
-    const recording_url = await uploadToCloudinary(req.file.buffer, 'zionite/broadcasts', 'video')
-    await dbQuery(`UPDATE broadcasts SET recording_url=$1 WHERE id=$2`, [recording_url, req.params.id])
+    const recording_url = await new Promise<string>((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        { folder: 'zionite/broadcasts', resource_type: 'video', tags: ['broadcast_recording'] },
+        (err, result) => {
+          if (err || !result) reject(err || new Error('Upload failed'))
+          else resolve(result.secure_url)
+        }
+      ).end(req.file!.buffer)
+    })
+    await dbQuery(`UPDATE broadcasts SET recording_url=$1, recorded_at=NOW() WHERE id=$2`, [recording_url, req.params.id])
     res.json({ recording_url })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/broadcasts/:id/recording/download', auth, async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const row = await dbGet(`SELECT title, recording_url FROM broadcasts WHERE id=$1`, [req.params.id])
+    if (!row?.recording_url) { res.status(404).json({ error: 'No recording found' }); return }
+    const response = await fetch(row.recording_url)
+    if (!response.ok) { res.status(502).json({ error: 'Could not fetch recording' }); return }
+    const safe = (row.title as string).replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    res.setHeader('Content-Type', 'audio/webm')
+    res.setHeader('Content-Disposition', `attachment; filename="${safe}.webm"`)
+    const reader = response.body as any
+    if (reader?.pipe) { reader.pipe(res) } else {
+      const buf = Buffer.from(await response.arrayBuffer())
+      res.send(buf)
+    }
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
