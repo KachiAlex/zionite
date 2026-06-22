@@ -25,7 +25,7 @@ function SectionHeader({ title, action, to }:{ title:string; action:string; to:s
 const SermonCard = memo(function SermonCard({ s }:{ s:Sermon }) {
   const { playTrack } = useAudioPlayer()
   return (
-    <div className="group block hover-lift">
+    <div className="group block hover-lift w-[150px] flex-shrink-0">
       <Link to={`/archive/${s.id}`}>
         <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
           {s.thumbnail_url ? (
@@ -89,7 +89,7 @@ const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
   }
 
   return (
-    <div className="group block hover-lift">
+    <div className="group block hover-lift w-[150px] flex-shrink-0">
       <div className="relative rounded-xl overflow-hidden aspect-square mb-2.5 bg-[#1c1d24]">
         {track.cover_url ? (
           <img src={track.cover_url} alt={`${track.title} album cover`} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -174,35 +174,38 @@ export default function Home() {
           {/* LEFT COLUMN (8/12) */}
           <div className="lg:col-span-8 space-y-5">
 
-            {/* Featured Sermons */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-              <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
-              {sermons.length > 0 ? (
-                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-                  {sermons.map(s => <SermonCard key={s.id} s={s} />)}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <BookOpen className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
-                  <p className="text-sm text-[#9c958a] font-semibold">No sermons available yet.</p>
-                </div>
-              )}
-            </section>
+            {/* Sermons + Music side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {/* Featured Sermons */}
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
+                {sermons.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {sermons.slice(0, 2).map(s => <SermonCard key={s.id} s={s} />)}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <BookOpen className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                    <p className="text-sm text-[#9c958a] font-semibold">No sermons yet.</p>
+                  </div>
+                )}
+              </section>
 
-            {/* Featured Music */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-              <SectionHeader title="Featured Music" action="View All" to="/music" />
-              {musicTracks.length > 0 ? (
-                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-                  {musicTracks.slice(0, 4).map(t => <MusicCard key={t.id} track={t} />)}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Music className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
-                  <p className="text-sm text-[#9c958a] font-semibold">No music available yet.</p>
-                </div>
-              )}
-            </section>
+              {/* Featured Music */}
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                <SectionHeader title="Featured Music" action="View All" to="/music" />
+                {musicTracks.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {musicTracks.slice(0, 2).map(t => <MusicCard key={t.id} track={t} />)}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Music className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                    <p className="text-sm text-[#9c958a] font-semibold">No music yet.</p>
+                  </div>
+                )}
+              </section>
+            </div>
 
             {/* Bottom row: 3 cards */}
             <div className="grid md:grid-cols-3 gap-5">
@@ -340,9 +343,9 @@ export default function Home() {
             <div>
               <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Quick Links</h4>
               <div className="space-y-2">
-                {["Home","Live Radio","Sermons","Podcasts","Prayer Wall","Events","About Us"].map(item=>{
-                  const paths = ["/","/live","/archive","/podcasts","/prayer","/events","/about"]
-                  const i = ["Home","Live Radio","Sermons","Podcasts","Prayer Wall","Events","About Us"].indexOf(item)
+                {["Home","Live Radio","Sermons","Prayer Wall","Events","About Us"].map(item=>{
+                  const paths = ["/","/live","/archive","/prayer","/events","/about"]
+                  const i = ["Home","Live Radio","Sermons","Prayer Wall","Events","About Us"].indexOf(item)
                   return (
                     <Link key={item} to={paths[i]} className="block text-xs text-[#9c958a] hover:text-[#c9a227] transition-colors">{item}</Link>
                   )
