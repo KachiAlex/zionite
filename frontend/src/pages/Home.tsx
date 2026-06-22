@@ -177,27 +177,31 @@ export default function Home() {
             {/* Featured Sermons */}
             <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
               <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {sermons.length>0 ? sermons.map(s=><SermonCard key={s.id} s={s} />) :
-                  <div className="col-span-full text-center py-8">
-                    <BookOpen className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
-                    <p className="text-sm text-[#9c958a] font-semibold">No sermons available yet.</p>
-                  </div>
-                }
-              </div>
+              {sermons.length > 0 ? (
+                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+                  {sermons.map(s => <SermonCard key={s.id} s={s} />)}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <BookOpen className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                  <p className="text-sm text-[#9c958a] font-semibold">No sermons available yet.</p>
+                </div>
+              )}
             </section>
 
             {/* Featured Music */}
             <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
               <SectionHeader title="Featured Music" action="View All" to="/music" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {musicTracks.length>0 ? musicTracks.slice(0,4).map(t=><MusicCard key={t.id} track={t} />) :
-                  <div className="col-span-full text-center py-8">
-                    <Music className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
-                    <p className="text-sm text-[#9c958a] font-semibold">No music available yet.</p>
-                  </div>
-                }
-              </div>
+              {musicTracks.length > 0 ? (
+                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+                  {musicTracks.slice(0, 4).map(t => <MusicCard key={t.id} track={t} />)}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Music className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                  <p className="text-sm text-[#9c958a] font-semibold">No music available yet.</p>
+                </div>
+              )}
             </section>
 
             {/* Bottom row: 3 cards */}
