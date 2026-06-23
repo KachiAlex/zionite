@@ -1,0 +1,19 @@
+﻿
+Running 14 tests using 1 worker
+
+  Γ£ô   1 [chromium] ΓÇ║ e2e\auth.spec.ts:4:7 ΓÇ║ Authentication ΓÇ║ can navigate to login page (5.4s)
+  Γ£ô   2 [chromium] ΓÇ║ e2e\auth.spec.ts:9:7 ΓÇ║ Authentication ΓÇ║ shows validation error for empty fields (1.8s)
+  Γ£ô   3 [chromium] ΓÇ║ e2e\auth.spec.ts:15:7 ΓÇ║ Authentication ΓÇ║ can toggle to registration (1.4s)
+  Γ£ô   4 [chromium] ΓÇ║ e2e\auth.spec.ts:23:7 ΓÇ║ Navigation ΓÇ║ home page loads (1.5s)
+  Γ£ô   5 [chromium] ΓÇ║ e2e\auth.spec.ts:43:7 ΓÇ║ Navigation ΓÇ║ archive page loads (1.3s)
+  Γ£ô   6 [chromium] ΓÇ║ e2e\music.spec.ts:4:7 ΓÇ║ Music Flow ΓÇ║ music page displays tracks from API (1.2s)
+  Γ£ô   7 [chromium] ΓÇ║ e2e\navigation.spec.ts:4:7 ΓÇ║ Navigation & Pages ΓÇ║ home page loads with hero section (2.7s)
+  Γ£ô   8 [chromium] ΓÇ║ e2e\navigation.spec.ts:25:7 ΓÇ║ Navigation & Pages ΓÇ║ archive page loads sermons (1.2s)
+  Γ£ô   9 [chromium] ΓÇ║ e2e\navigation.spec.ts:33:7 ΓÇ║ Navigation & Pages ΓÇ║ events page loads (1.2s)
+  Γ£ô  10 [chromium] ΓÇ║ e2e\navigation.spec.ts:41:7 ΓÇ║ Navigation & Pages ΓÇ║ music page loads (1.2s)
+  Γ£ô  11 [chromium] ΓÇ║ e2e\navigation.spec.ts:49:7 ΓÇ║ Navigation & Pages ΓÇ║ prayer wall page loads (1.1s)
+  Γ£ô  12 [chromium] ΓÇ║ e2e\navigation.spec.ts:57:7 ΓÇ║ Navigation & Pages ΓÇ║ about page loads (1.7s)
+  Γ£ô  13 [chromium] ΓÇ║ e2e\navigation.spec.ts:62:7 ΓÇ║ Navigation & Pages ΓÇ║ status page loads (2.5s)
+  Γ£ô  14 [chromium] ΓÇ║ e2e\navigation.spec.ts:73:7 ΓÇ║ Navigation & Pages ΓÇ║ search overlay opens and shows results (3.4s)
+
+  14 passed (39.1s)

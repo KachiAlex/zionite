@@ -229,10 +229,10 @@ export default function AdminDashboard() {
             <div className="hidden md:flex items-center gap-1.5 text-[11px] text-[#9c958a] border-l border-[rgba(243,238,228,0.1)] pl-3"><Calendar className="w-3 h-3"/><span>May 20, 2025</span></div>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
           {activeTab==='dashboard'?(
             <div className="space-y-5">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
                 {[
                   {icon:Users,label:'Listeners Online',value:dashboard?.listenersOnline?.toLocaleString()||'0',chg:'Live',sub:'Active now',bg:'rgba(139,124,248,0.12)',col:'#8b7cf8'},
                   {icon:Headphones,label:'Total Listeners',value:dashboard?.totalListenersToday?.toLocaleString()||'0',chg:'24h',sub:'Total sessions',bg:'rgba(59,130,246,0.12)',col:'#3b82f6'},
@@ -251,7 +251,7 @@ export default function AdminDashboard() {
                   )
                 })}
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
                 {(()=>{const live=broadcasts.find(b=>b.status==='live');return(
                 <div className="lg:col-span-5 p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3">

@@ -27,7 +27,7 @@ function SectionHeader({ title, action, to }:{ title:string; action:string; to:s
 const SermonCard = memo(function SermonCard({ s }:{ s:Sermon }) {
   const { playTrack } = useAudioPlayer()
   return (
-    <div className="group block hover-lift w-[150px] flex-shrink-0">
+    <div className="group block hover-lift w-full">
       <Link to={`/archive/${s.id}`}>
         <div className="relative rounded-xl overflow-hidden aspect-[4/3] mb-2.5 bg-[#1c1d24]">
           {s.thumbnail_url ? (
@@ -161,10 +161,10 @@ export default function Home() {
           <img src="https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=2000&q=80" alt="" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-[#0c0c12]/85 via-[#0c0c12]/70 to-[#0c0c12]" />
         </div>
-        <div className="relative max-w-[1440px] mx-auto px-4 md:px-6 py-16 md:py-28">
+        <div className="relative max-w-[1440px] mx-auto px-4 md:px-6 py-12 sm:py-16 md:py-28">
           <div className="max-w-3xl mx-auto text-center">
             <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-2 font-bold">Welcome to</p>
-            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">
+            <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">
               ZioniteFM –<br />The Voice of Redemption
             </h1>
             <p className="text-base text-[#9c958a] max-w-xl mx-auto leading-relaxed mb-8 font-semibold">
@@ -236,19 +236,19 @@ export default function Home() {
 
       {/* ====== MAIN DASHBOARD GRID ====== */}
       <div className="max-w-[1440px] mx-auto px-4 md:px-6 pb-5 animate-slide-up">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
 
           {/* LEFT COLUMN (8/12) */}
-          <div className="lg:col-span-8 space-y-5">
+          <div className="xl:col-span-8 space-y-5">
 
             {/* Sermons + Music side by side */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Featured Sermons */}
               <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Featured Sermons" action="View All" to="/archive" />
                 {sermons.length > 0 ? (
                   <>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                       {sermons.slice(0, 4).map(s => <SermonCard key={s.id} s={s} />)}
                     </div>
                     <Link to="/archive"
@@ -282,7 +282,7 @@ export default function Home() {
             </div>
 
             {/* Bottom row: 3 cards */}
-            <div className="grid md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {/* Sermon Transcripts */}
               <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Sermon Transcripts" action="View All" to="/archive" />
@@ -348,7 +348,7 @@ export default function Home() {
           </div>
 
           {/* RIGHT COLUMN (4/12) */}
-          <div className="lg:col-span-4 space-y-5">
+          <div className="xl:col-span-4 space-y-5">
 
             {/* Today's Schedule */}
             <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
@@ -396,7 +396,7 @@ export default function Home() {
       {/* ====== FOOTER ====== */}
       <footer className="border-t border-[rgba(243,238,228,0.08)] bg-[#14141a]">
         <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-10">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8">
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2.5 mb-3">
@@ -463,7 +463,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="border-t border-[rgba(243,238,228,0.06)] pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="border-t border-[rgba(243,238,228,0.06)] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-[10px] text-[#9c958a]">© 2025 ZioniteFM. All Rights Reserved.</p>
             <div className="flex items-center gap-4">
               <Link to="/privacy" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Privacy Policy</Link>

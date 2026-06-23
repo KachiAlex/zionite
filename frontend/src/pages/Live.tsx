@@ -295,7 +295,7 @@ function StreamPlayer({ broadcastId, title }: { broadcastId: string; title?: str
   }, [showVolume])
 
   return (
-    <div className="mx-4 mt-3 mb-4 rounded-xl p-4 bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
+    <div className="mx-2 sm:mx-4 mt-3 mb-4 rounded-xl p-3 sm:p-4 bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
@@ -529,7 +529,7 @@ export default function Live() {
     <div className="min-h-screen flex flex-col bg-[#0f1016] text-[#f3eee4]">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-[rgba(243,238,228,0.06)] bg-[#0f1016]/95 backdrop-blur-md">
-        <div className="max-w-[1440px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-xs text-[#9c958a] hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back</span>
           </Link>
@@ -597,7 +597,7 @@ export default function Live() {
 
         {/* Chat Section */}
         {chatOpen && (
-          <div className="w-full md:w-80 border-l border-[rgba(243,238,228,0.06)] flex flex-col bg-[#14141a]">
+          <div className="w-full md:w-80 lg:w-96 border-l border-[rgba(243,238,228,0.06)] flex flex-col bg-[#14141a] max-h-[calc(100dvh-3.5rem)] md:max-h-none">
             {/* Chat Header */}
             <div className="p-4 border-b border-[rgba(243,238,228,0.06)]">
               <div className="flex items-center justify-between mb-2.5">
