@@ -64,6 +64,7 @@ function StreamPlayer({ broadcastId, title }: { broadcastId: string; title?: str
   const [isPlaying, setIsPlaying] = useState(false)
   const [listenerCount, setListenerCount] = useState(0)
   const [volume, setVolume] = useState(80)
+  const [showVolume, setShowVolume] = useState(false)
   const [statusText, setStatusText] = useState('Waiting...')
 
   const decodedRef = useRef<AudioBuffer[]>([])
@@ -283,6 +284,16 @@ function StreamPlayer({ broadcastId, title }: { broadcastId: string; title?: str
 
   const VolumeIcon = volume === 0 ? VolumeX : volume > 50 ? Volume2 : Volume1
 
+  useEffect(() => {
+    if (!showVolume) return
+    function dismiss(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      if (!t.closest('[data-volume-ctrl]')) setShowVolume(false)
+    }
+    document.addEventListener('click', dismiss, true)
+    return () => document.removeEventListener('click', dismiss, true)
+  }, [showVolume])
+
   return (
     <div className="mx-4 mt-3 mb-4 rounded-xl p-4 bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
       <div className="flex items-center justify-between mb-3">
@@ -316,12 +327,35 @@ function StreamPlayer({ broadcastId, title }: { broadcastId: string; title?: str
           <div className="flex-1 min-w-0">
             <AudioBars active={isPlaying} />
           </div>
-          <div className="flex items-center gap-2 shrink-0 w-20">
-            <VolumeIcon className="w-3.5 h-3.5 text-[#9c958a]" />
-            <input type="range" min={0} max={100} value={volume}
-              onChange={e => setVolume(parseInt(e.target.value))}
-              className="flex-1 h-1 rounded-full appearance-none cursor-pointer"
-              style={{ background: `linear-gradient(to right, #c9a227 ${volume}%, rgba(243,238,228,0.08) ${volume}%)` }} />
+          <div data-volume-ctrl="1" className="relative shrink-0 flex flex-col items-center">
+            {/* Vertical slider popover */}
+            {showVolume && (
+              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pb-2 pt-3 px-2 rounded-xl bg-[#1c1d24] border border-[rgba(243,238,228,0.1)] shadow-xl z-30"
+                style={{ height: 120 }}>
+                <span className="text-[9px] font-mono text-[#9c958a]">{volume}</span>
+                <input
+                  type="range" min={0} max={100} value={volume}
+                  onChange={e => setVolume(parseInt(e.target.value))}
+                  className="appearance-none cursor-pointer rounded-full"
+                  style={{
+                    writingMode: 'vertical-lr' as any,
+                    direction: 'rtl',
+                    width: 4,
+                    height: 72,
+                    background: `linear-gradient(to top, #c9a227 ${volume}%, rgba(243,238,228,0.08) ${volume}%)`,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            )}
+            <button
+              onClick={() => setShowVolume(v => !v)}
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+              style={{ background: showVolume ? 'rgba(201,162,39,0.15)' : 'transparent' }}
+              title={`Volume: ${volume}%`}
+            >
+              <VolumeIcon className="w-3.5 h-3.5" style={{ color: showVolume ? '#c9a227' : '#9c958a' }} />
+            </button>
           </div>
         </div>
       )}
