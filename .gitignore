@@ -27,3 +27,9 @@ npm-debug.log*
 # Test artifacts
 test-results/
 playwright-report/
+
+# Capacitor / Android (generated — rebuild with: npm run build:android)
+frontend/android/
+frontend/.gradle/
+*.apk
+*.aab
