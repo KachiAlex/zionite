@@ -1,4 +1,5 @@
 ﻿import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
+import { API_BASE } from '../lib/api'
 
 export interface Track {
   id: string
