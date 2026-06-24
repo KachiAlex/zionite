@@ -5,6 +5,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 17px;
+  }
+
   :root {
     --ink: #0c0c12;
     --ink-2: #15161c;
@@ -23,11 +27,14 @@
     background: var(--ink);
     color: var(--parchment);
     font-family: 'Work Sans', sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
   }
   
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
     font-family: 'Fraunces', serif;
+    line-height: 1.25;
   }
 }
 
