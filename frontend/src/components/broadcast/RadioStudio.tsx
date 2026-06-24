@@ -4,7 +4,7 @@ import { API_BASE } from '../../lib/api'
 import {
   Radio, Pause, Play, Square, Mic, MicOff, Volume2, Volume1, VolumeX,
   Copy, CheckCircle, Activity, Share2, Headphones, Wifi, Zap, HardDrive,
-  Disc, Loader2
+  Disc, Loader2, Music2, Upload, RotateCcw, StopCircle
 } from 'lucide-react'
 import { getRecordingConfig } from '../../lib/recording'
 import AudioWaveVisualizer from './AudioWaveVisualizer'
@@ -148,6 +148,22 @@ export default function RadioStudio({
 }: Props) {
   const [micMuted, setMicMuted] = useState(false)
   const [micGain, setMicGain] = useState(80)
+
+  /* ── Background music mixer state ── */
+  const [musicFile, setMusicFile] = useState<File | null>(null)
+  const [musicVolume, setMusicVolume] = useState(25)
+  const [musicPlaying, setMusicPlaying] = useState(false)
+  const [musicLoop, setMusicLoop] = useState(true)
+  const [musicName, setMusicName] = useState('')
+  const [musicLoading, setMusicLoading] = useState(false)
+
+  /* ── Mixer Audio graph refs ── */
+  const mixerCtxRef = useRef<AudioContext | null>(null)
+  const mixerDestRef = useRef<MediaStreamAudioDestinationNode | null>(null)
+  const micGainNodeRef = useRef<GainNode | null>(null)
+  const musicGainNodeRef = useRef<GainNode | null>(null)
+  const musicSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const musicBufferRef = useRef<AudioBuffer | null>(null)
   const [copied, setCopied] = useState(false)
   const [listenerCount, setListenerCount] = useState(0)
   const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
@@ -219,14 +235,96 @@ export default function RadioStudio({
     return () => stopStreaming()
   }, [isLive, activeDeviceId, broadcastId])
 
+  /* ── Mixer helpers ── */
+  function getOrCreateMixer(): { ctx: AudioContext; dest: MediaStreamAudioDestinationNode; micGain: GainNode; musicGain: GainNode } {
+    if (mixerCtxRef.current && mixerDestRef.current && micGainNodeRef.current && musicGainNodeRef.current) {
+      return { ctx: mixerCtxRef.current, dest: mixerDestRef.current, micGain: micGainNodeRef.current, musicGain: musicGainNodeRef.current }
+    }
+    const ctx = new AudioContext()
+    mixerCtxRef.current = ctx
+    const dest = ctx.createMediaStreamDestination()
+    mixerDestRef.current = dest
+    const micG = ctx.createGain()
+    micG.gain.value = micGain / 100
+    micG.connect(dest)
+    micGainNodeRef.current = micG
+    const musG = ctx.createGain()
+    musG.gain.value = musicVolume / 100
+    musG.connect(dest)
+    musicGainNodeRef.current = musG
+    return { ctx, dest, micGain: micG, musicGain: musG }
+  }
+
+  function teardownMixer() {
+    stopMusicPlayback()
+    if (mixerCtxRef.current) { mixerCtxRef.current.close().catch(() => {}); mixerCtxRef.current = null }
+    mixerDestRef.current = null
+    micGainNodeRef.current = null
+    musicGainNodeRef.current = null
+  }
+
+  function stopMusicPlayback() {
+    if (musicSourceRef.current) {
+      try { musicSourceRef.current.stop() } catch {}
+      musicSourceRef.current.disconnect()
+      musicSourceRef.current = null
+    }
+    setMusicPlaying(false)
+  }
+
+  function startMusicPlayback() {
+    const buf = musicBufferRef.current
+    const musicGain = musicGainNodeRef.current
+    const ctx = mixerCtxRef.current
+    if (!buf || !musicGain || !ctx) return
+    stopMusicPlayback()
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    src.loop = musicLoop
+    src.connect(musicGain)
+    src.onended = () => { if (!src.loop) setMusicPlaying(false) }
+    src.start(0)
+    musicSourceRef.current = src
+    setMusicPlaying(true)
+  }
+
+  async function loadMusicFile(file: File) {
+    setMusicLoading(true)
+    setMusicName(file.name)
+    try {
+      const arrayBuf = await file.arrayBuffer()
+      const ctx = mixerCtxRef.current || new AudioContext()
+      if (!mixerCtxRef.current) {
+        mixerCtxRef.current = ctx
+      }
+      const decoded = await ctx.decodeAudioData(arrayBuf)
+      musicBufferRef.current = decoded
+      setMusicLoading(false)
+    } catch {
+      setMusicLoading(false)
+      alert('Could not decode audio file. Try a different format.')
+    }
+  }
+
   async function startStreaming() {
     try {
       const deviceId = activeDeviceIdRef.current
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const rawMicStream = await navigator.mediaDevices.getUserMedia({
         audio: deviceId ? { deviceId: { exact: deviceId } } : true
       })
+
+      /* ── Build mixer graph ── */
+      const { ctx, dest, micGain: micGNode } = getOrCreateMixer()
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+
+      // Connect raw mic into mixer's mic gain node
+      const micSource = ctx.createMediaStreamSource(rawMicStream)
+      micSource.connect(micGNode)
+
+      // Mixed stream (mic + any music) goes to all recorders
+      const stream = dest.stream
       streamRef.current = stream
-      setMicStream(stream)
+      setMicStream(rawMicStream)
       recordNextChunk()
 
       // Start local recording alongside server streaming
@@ -319,6 +417,7 @@ export default function RadioStudio({
   }
 
   function stopStreaming(triggerUpload = false) {
+    teardownMixer()
     shouldRecordRef.current = false
     if (chunkTimeoutRef.current) { clearTimeout(chunkTimeoutRef.current); chunkTimeoutRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -558,7 +657,11 @@ export default function RadioStudio({
               {micMuted ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4" style={{ color: 'var(--gold)' }} />}
               Microphone Input
             </span>
-            <button onClick={() => setMicMuted(!micMuted)}
+            <button onClick={() => {
+                const muted = !micMuted
+                setMicMuted(muted)
+                if (micGainNodeRef.current) micGainNodeRef.current.gain.value = muted ? 0 : micGain / 100
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{
                 background: micMuted ? 'rgba(220,38,38,0.15)' : 'rgba(34,197,94,0.1)',
@@ -575,12 +678,100 @@ export default function RadioStudio({
               <VolumeX className="w-4 h-4" style={{ color: 'var(--dim)' }} />
             )}
             <input type="range" min={0} max={100} value={micGain}
-              onChange={e => setMicGain(parseInt(e.target.value))}
+              onChange={e => {
+                const v = parseInt(e.target.value)
+                setMicGain(v)
+                if (micGainNodeRef.current && !micMuted) micGainNodeRef.current.gain.value = v / 100
+              }}
               disabled={micMuted}
               className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
               style={{ background: `linear-gradient(to right, var(--gold) ${micGain}%, var(--line) ${micGain}%)`, opacity: micMuted ? 0.4 : 1 }} />
             <span className="text-xs font-mono w-8 text-right">{micGain}%</span>
           </div>
+        </div>
+
+        {/* Background Music Mixer */}
+        <div className="rounded-xl p-4" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Music2 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Background Music
+              <span className="text-xs font-normal" style={{ color: 'var(--dim)' }}>(mixed into stream)</span>
+            </span>
+            {musicFile && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    const newLoop = !musicLoop
+                    setMusicLoop(newLoop)
+                    if (musicSourceRef.current) musicSourceRef.current.loop = newLoop
+                  }}
+                  title={musicLoop ? 'Loop on' : 'Loop off'}
+                  className="p-1.5 rounded-lg text-xs transition-colors"
+                  style={{ background: musicLoop ? 'rgba(201,162,39,0.15)' : 'var(--ink-2)', color: musicLoop ? 'var(--gold)' : 'var(--dim)', border: '1px solid var(--line)' }}>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (musicPlaying) { stopMusicPlayback() }
+                    else { startMusicPlayback() }
+                  }}
+                  disabled={!musicBufferRef.current || !mixerCtxRef.current}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-40"
+                  style={{
+                    background: musicPlaying ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.1)',
+                    color: musicPlaying ? '#fca5a5' : '#4ade80',
+                    border: `1px solid ${musicPlaying ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.2)'}`
+                  }}>
+                  {musicPlaying ? <><StopCircle className="w-3.5 h-3.5" /> Stop</> : <><Play className="w-3.5 h-3.5" /> Play</>}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* File picker */}
+          <label className="flex items-center gap-2 cursor-pointer mb-3 px-3 py-2 rounded-lg transition-colors"
+            style={{ background: 'var(--ink-2)', border: '1px dashed var(--line)' }}>
+            <Upload className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--gold)' }} />
+            <span className="text-xs truncate" style={{ color: musicName ? 'var(--parchment)' : 'var(--dim)' }}>
+              {musicLoading ? 'Decoding audio...' : musicName || 'Upload background music (MP3, WAV, OGG…)'}
+            </span>
+            {musicLoading && <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto flex-shrink-0" style={{ color: 'var(--gold)' }} />}
+            <input type="file" accept="audio/*" className="hidden"
+              onChange={async e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setMusicFile(file)
+                stopMusicPlayback()
+                musicBufferRef.current = null
+                await loadMusicFile(file)
+              }} />
+          </label>
+
+          {/* Music volume */}
+          <div className="flex items-center gap-3">
+            {musicVolume === 0 ? <VolumeX className="w-4 h-4" style={{ color: 'var(--dim)' }} /> :
+              musicVolume > 50 ? <Volume2 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> :
+              <Volume1 className="w-4 h-4" style={{ color: 'var(--gold)' }} />}
+            <input type="range" min={0} max={100} value={musicVolume}
+              onChange={e => {
+                const v = parseInt(e.target.value)
+                setMusicVolume(v)
+                if (musicGainNodeRef.current) musicGainNodeRef.current.gain.value = v / 100
+              }}
+              className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+              style={{ background: `linear-gradient(to right, #c9a227 ${musicVolume}%, var(--line) ${musicVolume}%)` }} />
+            <span className="text-xs font-mono w-8 text-right">{musicVolume}%</span>
+          </div>
+          {!isLive && musicFile && (
+            <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
+              Music will play when the broadcast goes live. Start it with the Play button above.
+            </p>
+          )}
+          {isLive && !musicFile && (
+            <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
+              Upload a track and press Play — it will be mixed into your live stream.
+            </p>
+          )}
         </div>
 
         {/* Stream URL */}
