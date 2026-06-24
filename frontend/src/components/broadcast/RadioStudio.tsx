@@ -568,6 +568,28 @@ export default function RadioStudio({
     }
   }
 
+  async function downloadRecording(id: string) {
+    try {
+      setRecordingStatus('Starting download...')
+      const res = await fetch(`${API_BASE}/api/broadcasts/${id}/recording/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/)?.[1] || `broadcast_${id}.webm`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setRecordingStatus('Download started.')
+    } catch (e: any) {
+      setRecordingStatus('Download failed: ' + (e.message || 'Unknown error'))
+    }
+  }
+
   useEffect(() => {
     if (!broadcastId) return
     return () => {
@@ -694,10 +716,11 @@ export default function RadioStudio({
             style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
             <CheckCircle className="w-3.5 h-3.5" />
             Recording saved. Auto-deletes in 90 days.
-            <a href={`${API_BASE}/api/broadcasts/${broadcastId}/recording/download`} download
+            <button
+              onClick={() => downloadRecording(broadcastId)}
               className="ml-auto underline hover:opacity-80" style={{ color: '#c9a227' }}>
               Download
-            </a>
+            </button>
           </div>
         )}
         {uploadProgress === 'error' && (

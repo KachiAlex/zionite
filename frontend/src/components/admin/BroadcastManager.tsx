@@ -67,6 +67,26 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     setAudioPlaying(false)
   }
 
+  async function downloadRecording(id: string) {
+    try {
+      const res = await fetch(`${API_BASE}/api/broadcasts/${id}/recording/download`, {
+        headers: { Authorization: `Bearer ${token || ''}` }
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/)?.[1] || `broadcast_${id}.webm`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert('Download failed: ' + (e.message || 'Unknown error'))
+    }
+  }
+
   /* ── Setup form state ── */
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -174,13 +194,12 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                     Saved {new Date(b.recorded_at).toLocaleDateString()} · expires {new Date(new Date(b.recorded_at).getTime() + 90*24*60*60*1000).toLocaleDateString()}
                   </p>
                 )}
-                <a
-                  href={`${API_BASE}/api/broadcasts/${b.id}/recording/download`}
+                <button
+                  onClick={() => downloadRecording(b.id)}
                   className="mt-3 flex items-center gap-1.5 w-fit text-[11px] font-medium text-[#c9a227] hover:text-[#e0bd5a] transition-colors"
-                  download
                 >
                   <Download className="w-3.5 h-3.5" /> Download recording
-                </a>
+                </button>
               </div>
             ) : b.status === 'ended' ? (
               <div className="px-4 py-4 border-b border-[rgba(243,238,228,0.04)]">
