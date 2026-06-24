@@ -2,8 +2,17 @@ import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()
-export const API_BASE = isNative ? 'https://zionite.online' : ''
+export const API_BASE = isNative ? 'https://www.zionite.online' : ''
 export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 15000 })
+
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token && token !== 'undefined' && token !== 'null') {
+    config.headers = config.headers ?? {}
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
 
 export interface Broadcast { id: string; title: string; description?: string; scripture_reference?: string; status: string; started_at?: string; broadcaster_id: string; speaker?: string; thumbnail_url?: string }
 export interface Sermon { id: string; title: string; scripture_reference?: string; speaker?: string; series?: string; duration?: number; date: string; audio_url?: string; video_url?: string; thumbnail_url?: string; is_featured?: boolean }
