@@ -5,22 +5,35 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
 
-// Keep all audio playing when app is backgrounded on Android
+// Keep all audio playing when app is backgrounded on Android / browser
+function resumeAllAudioContexts() {
+  const win = window as any
+  if (win.__audioContexts) {
+    win.__audioContexts.forEach((ctx: AudioContext) => {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+    })
+  }
+}
+
+// Poll every 8s — Android WebView may suspend AudioContext silently;
+// this keeps it alive whether the app is foregrounded or backgrounded.
+setInterval(resumeAllAudioContexts, 8000)
+
+// Also resume on visibility change (tab switch, screen lock, app switch)
+document.addEventListener('visibilitychange', () => {
+  resumeAllAudioContexts()
+})
+
 ;(async () => {
   const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()
   if (isNative) {
     try {
       const { App: CapApp } = await import('@capacitor/app')
-      CapApp.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) {
-          // App went to background — resume any suspended AudioContexts
-          const win = window as any
-          if (win.__audioContexts) {
-            win.__audioContexts.forEach((ctx: AudioContext) => {
-              if (ctx.state === 'suspended') ctx.resume().catch(() => {})
-            })
-          }
-        }
+      // isActive=true means app came back to foreground — resume any paused contexts
+      // isActive=false means backgrounded — still attempt resume as Android may not
+      // immediately suspend but we want to pre-emptively keep audio alive
+      CapApp.addListener('appStateChange', ({ isActive: _ }) => {
+        resumeAllAudioContexts()
       })
     } catch {}
   }

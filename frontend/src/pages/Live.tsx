@@ -149,27 +149,40 @@ function StreamPlayer({ broadcastId, title }: { broadcastId: string; title?: str
     if (gainRef.current) gainRef.current.gain.value = volume / 100
   }, [volume])
 
-  // Resume AudioContext on visibility change (both background and foreground)
+  // Resume AudioContext on both foreground and background visibility changes
   useEffect(() => {
     function onVisibilityChange() {
       const ctx = ctxRef.current
       if (!ctx || userPausedRef.current) return
-      if (document.visibilityState === 'hidden') {
-        // Going to background — ensure keep-alive audio is looping
-        keepAliveAudioRef.current?.play().catch(() => {})
-      } else {
-        // Returning to foreground — resume suspended context
-        if (ctx.state === 'suspended') {
-          ctx.resume().then(() => {
-            keepAliveAudioRef.current?.play().catch(() => {})
-            if (!playingRef.current && decodedRef.current.length > 0) scheduleNext()
-          }).catch(() => {})
-        }
+      // Always keep the keep-alive audio element running
+      keepAliveAudioRef.current?.play().catch(() => {})
+      // Resume suspended context regardless of direction
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          keepAliveAudioRef.current?.play().catch(() => {})
+          if (!playingRef.current && decodedRef.current.length > 0) scheduleNext()
+        }).catch(() => {})
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [])
+
+  // Self-healing: resume AudioContext every 5s in case Android silently suspends it
+  useEffect(() => {
+    if (!started) return
+    const iv = setInterval(() => {
+      const ctx = ctxRef.current
+      if (!ctx || userPausedRef.current) return
+      keepAliveAudioRef.current?.play().catch(() => {})
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          if (!playingRef.current && decodedRef.current.length > 0) scheduleNext()
+        }).catch(() => {})
+      }
+    }, 5000)
+    return () => clearInterval(iv)
+  }, [started])
 
   useEffect(() => {
     return () => {
