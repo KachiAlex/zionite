@@ -93,7 +93,19 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [creating, setCreating] = useState(false)
 
   /* ── Broadcast detail panel ── */
-  function BroadcastDetailPanel({ b }: { b: Broadcast }) {
+  function BroadcastDetailPanel({ b: initialB }: { b: Broadcast }) {
+    const [b, setB] = useState<Broadcast>(initialB)
+    const [detailLoading, setDetailLoading] = useState(false)
+
+    useEffect(() => {
+      setDetailLoading(true)
+      axios.get(`${API_BASE}/api/broadcasts/${initialB.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(({ data }) => {
+        if (data.broadcast) setB(data.broadcast)
+      }).catch(() => {}).finally(() => setDetailLoading(false))
+    }, [initialB.id])
+
     const duration = b.started_at && b.ended_at
       ? Math.round((new Date(b.ended_at).getTime() - new Date(b.started_at).getTime()) / 60000)
       : null
@@ -363,12 +375,16 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     } finally { setActionLoading(false) }
   }
 
-  async function stopBroadcast() {
+  async function stopBroadcast(uploadDone?: Promise<void>) {
     if (!broadcastId) return
     setActionLoading(true)
     try {
       await axios.patch(`${API_BASE}/api/broadcasts/${broadcastId}/end`, {}, { headers: { Authorization: `Bearer ${token}` } })
     } catch { /* ignore */ }
+    // Wait for cloud recording upload to finish before navigating away
+    if (uploadDone) {
+      try { await uploadDone } catch {}
+    }
     setStatus('idle')
     setBroadcastId('')
     setStartTime(null)
@@ -735,7 +751,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         thumbnailUrl={thumbnailUrl}
         onPause={pauseBroadcast}
         onResume={resumeBroadcast}
-        onEnd={stopBroadcast}
+        onEnd={(uploadDone) => stopBroadcast(uploadDone)}
         actionLoading={actionLoading}
         recordEnabled={recordEnabled}
       />

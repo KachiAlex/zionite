@@ -77,7 +77,7 @@ interface Props {
   thumbnailUrl?: string
   onPause: () => void
   onResume: () => void
-  onEnd: () => void
+  onEnd: (uploadDone: Promise<void>) => void
   actionLoading: boolean
   recordEnabled?: boolean
 }
@@ -416,7 +416,7 @@ export default function RadioStudio({
     }, 2000)
   }
 
-  function stopStreaming(triggerUpload = false) {
+  function stopStreaming(triggerUpload = false): Promise<void> {
     teardownMixer()
     shouldRecordRef.current = false
     if (chunkTimeoutRef.current) { clearTimeout(chunkTimeoutRef.current); chunkTimeoutRef.current = null }
@@ -438,19 +438,51 @@ export default function RadioStudio({
     localRecorderRef.current = null
     setRecordingStatus('')
 
-    // Stop cloud recorder and upload if this is an intentional end
-    if (cloudRecorderRef.current && cloudRecorderRef.current.state !== 'inactive') {
-      if (triggerUpload) {
-        cloudRecorderRef.current.onstop = () => uploadRecordingToCloud()
+    // Snapshot blobs NOW before the recorder is nulled
+    const blobsSnapshot = [...cloudBlobsRef.current]
+    const mimeSnapshot = cloudMimeRef.current
+    const idSnapshot = broadcastId
+
+    // Return a Promise that resolves only after the cloud upload completes
+    const uploadPromise = new Promise<void>((resolve) => {
+      if (!triggerUpload || blobsSnapshot.length === 0 || !idSnapshot) { resolve(); return }
+
+      async function doUpload(blobs: Blob[]) {
+        setUploadProgress('uploading')
+        setRecordingStatus('Uploading recording to cloud...')
+        try {
+          const blob = new Blob(blobs, { type: mimeSnapshot })
+          const formData = new FormData()
+          formData.append('recording', blob, `broadcast_${idSnapshot}.webm`)
+          const { data } = await axios.post(`${API_BASE}/api/broadcasts/${idSnapshot}/recording`, formData, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' }
+          })
+          setRecordingUrl(data.recording_url)
+          setUploadProgress('done')
+          setRecordingStatus('Recording saved to cloud.')
+          cloudBlobsRef.current = []
+        } catch (e: any) {
+          setUploadProgress('error')
+          setRecordingStatus('Cloud upload failed: ' + (e.response?.data?.error || e.message || 'Unknown error'))
+        } finally { resolve() }
       }
-      cloudRecorderRef.current.stop()
-    } else if (triggerUpload && cloudBlobsRef.current.length > 0) {
-      uploadRecordingToCloud()
-    }
+
+      if (cloudRecorderRef.current && cloudRecorderRef.current.state !== 'inactive') {
+        cloudRecorderRef.current.onstop = () => {
+          const finalBlobs = [...blobsSnapshot, ...cloudBlobsRef.current.slice(blobsSnapshot.length)]
+          doUpload(finalBlobs.length > 0 ? finalBlobs : blobsSnapshot)
+        }
+        cloudRecorderRef.current.stop()
+      } else {
+        doUpload(blobsSnapshot)
+      }
+    })
+
     cloudRecorderRef.current = null
+    return uploadPromise
   }
 
-  async function uploadRecordingToCloud() {
+  async function retryUpload() {
     if (cloudBlobsRef.current.length === 0 || !broadcastId) return
     setUploadProgress('uploading')
     setRecordingStatus('Uploading recording to cloud...')
@@ -544,7 +576,7 @@ export default function RadioStudio({
               <Play className="w-4 h-4" /> Resume
             </button>
           )}
-          <button onClick={() => { stopStreaming(true); onEnd() }} disabled={actionLoading || uploadProgress === 'uploading'}
+          <button onClick={() => { onEnd(stopStreaming(true)) }} disabled={actionLoading || uploadProgress === 'uploading'}
             className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
             style={{ background: 'rgba(220,38,38,0.3)', color: '#fca5a5' }}>
             <Square className="w-4 h-4" /> End
@@ -606,7 +638,7 @@ export default function RadioStudio({
           <div className="flex items-center gap-2 text-xs px-4 py-2 rounded-lg"
             style={{ background: 'rgba(220,38,38,0.1)', color: '#fca5a5', border: '1px solid rgba(220,38,38,0.2)' }}>
             <Wifi className="w-3.5 h-3.5" /> {recordingStatus}
-            <button onClick={uploadRecordingToCloud} className="ml-auto underline hover:opacity-80 text-[#c9a227]">Retry</button>
+            <button onClick={retryUpload} className="ml-auto underline hover:opacity-80 text-[#c9a227]">Retry</button>
           </div>
         )}
         {uploadProgress === 'idle' && recordingStatus && (
