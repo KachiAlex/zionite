@@ -33,3 +33,6 @@ frontend/android/
 frontend/.gradle/
 *.apk
 *.aab
+
+.vercel
+.env*
