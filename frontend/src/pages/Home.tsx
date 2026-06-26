@@ -443,13 +443,13 @@ export default function Home() {
               {subState === 'done' ? (
                 <p className="text-xs text-green-400 py-2">✓ Subscribed! Thank you.</p>
               ) : (
-                <form onSubmit={handleSubscribe} className="flex gap-2">
+                <form onSubmit={handleSubscribe} className="flex flex-col gap-2">
                   <input type="email" required placeholder="Enter your email" value={subEmail}
                     onChange={e => setSubEmail(e.target.value)}
-                    className="flex-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white placeholder-[#9c958a] outline-none" />
+                    className="w-full bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2.5 text-xs text-white placeholder-[#9c958a] outline-none" />
                   <button type="submit" disabled={subState === 'loading'}
-                    className="bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60">
-                    {subState === 'loading' ? '...' : 'Subscribe'}
+                    className="w-full bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-60">
+                    {subState === 'loading' ? 'Subscribing…' : 'Subscribe'}
                   </button>
                 </form>
               )}
