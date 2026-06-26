@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState, useRef } from 'react'
+import Hls from 'hls.js'
 import { Link, useParams } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
@@ -71,6 +72,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const [statusText, setStatusText] = useState('Tap to listen')
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const hlsRef = useRef<Hls | null>(null)
   const sessionIdRef = useRef('')
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const infoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -114,6 +116,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play().catch(() => {}))
     navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause())
     navigator.mediaSession.setActionHandler('stop', () => {
+      destroyHls()
       const a = audioRef.current
       if (a) { a.pause(); a.src = '' }
     })
@@ -234,10 +237,65 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     })
   }
 
+  function destroyHls() {
+    if (hlsRef.current) {
+      hlsRef.current.destroy()
+      hlsRef.current = null
+    }
+  }
+
+  function startHlsPlayback() {
+    const audio = audioRef.current
+    if (!audio) return
+    destroyHls()
+
+    if (!Hls.isSupported()) {
+      startPlayback()
+      return
+    }
+
+    const hls = new Hls({
+      enableWorker: false,
+      liveSyncDurationCount: 2,
+      maxMaxBufferLength: 30,
+      backBufferLength: 10,
+      startLevel: -1,
+    })
+    hlsRef.current = hls
+
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        setStatusText('HLS error — falling back…')
+        destroyHls()
+        startPlayback()
+      }
+    })
+
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      hls.loadSource(`${API_BASE}/api/stream/${broadcastId}/playlist.m3u8`)
+    })
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      audio.play().then(() => {
+        setIsPlaying(true)
+        setStatusText('Live')
+        setupMediaSession(title || 'Live Broadcast')
+        isLoadingRef.current = false
+      }).catch(() => {
+        setStatusText('Tap play to start')
+        isLoadingRef.current = false
+      })
+    })
+
+    hls.attachMedia(audio)
+  }
+
   function handleStart() {
     if (!audioRef.current) return
     setStarted(true)
     isLiveRef.current = true
+    isLoadingRef.current = true
+    setStatusText('Connecting…')
 
     // Listener tracking
     sessionIdRef.current = Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -278,7 +336,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       }
     } catch {}
 
-    startPlayback()
+    // Try HLS first, fallback to simple concat if not supported or errors
+    startHlsPlayback()
   }
 
   function togglePlay() {
@@ -287,7 +346,11 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (audio.paused) {
       const needsRestart = !audio.src || audio.src === '' || audio.error || audio.ended
       if (needsRestart) {
-        if (isLiveRef.current) startPlayback()
+        if (isLiveRef.current) {
+          // Prefer HLS restart if it was active before; hlsRef is null after destroy
+          if (Hls.isSupported()) startHlsPlayback()
+          else startPlayback()
+        }
         return
       }
       audio.play().catch(() => {})
@@ -304,7 +367,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       if (!audio) return
       if (audio.paused || audio.ended || audio.error) {
         setStatusText('Reconnecting…')
-        startPlayback()
+        if (Hls.isSupported()) startHlsPlayback()
+        else startPlayback()
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -315,6 +379,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   useEffect(() => {
     return () => {
       isLiveRef.current = false
+      destroyHls()
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
       if (keepAliveRef.current) clearInterval(keepAliveRef.current)

@@ -966,7 +966,10 @@ app.get('/stream/:id/chunk/:index', async (req, res) => {
       [req.params.id, req.params.index])
     if (!row) { res.status(404).json({ error: 'Chunk not found' }); return }
     const buffer = (globalThis as any).Buffer.from(row.chunk_data, 'base64')
-    res.setHeader('Content-Type', 'audio/webm')
+    res.setHeader('Content-Type', 'audio/webm;codecs=opus')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
     res.send(buffer)
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -999,6 +1002,33 @@ app.get('/stream/:id/concat', async (req, res) => {
     res.setHeader('Access-Control-Expose-Headers', 'X-Latest-Chunk')
     res.setHeader('X-Latest-Chunk', String(latestIndex))
     res.send(combined)
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// HLS playlist endpoint: live M3U8 with last 8 chunks (~16s buffer)
+app.get('/stream/:id/playlist.m3u8', async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const rows = await dbQuery(
+      `SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 8`,
+      [id]
+    )
+    if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
+
+    const indices = rows.map(r => r.chunk_index).sort((a: number, b: number) => a - b)
+    const mediaSeq = indices[0]
+
+    let m3u8 = '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:' + mediaSeq + '\n'
+    for (const idx of indices) {
+      m3u8 += '#EXTINF:2.0,\nchunk/' + idx + '\n'
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    res.send(m3u8)
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
