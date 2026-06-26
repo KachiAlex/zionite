@@ -138,7 +138,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       const res = await fetch(`${API_BASE}/api/stream/${broadcastId}/concat?from=${fromChunk}&_=${Date.now()}`)
       if (!res.ok) return false
       const latest = parseInt(res.headers.get('X-Latest-Chunk') || '-1', 10)
-      if (latest >= 0) lastKnownChunkRef.current = latest
+      // The blob contains chunks from fromChunk up to min(fromChunk + 29, latest)
+      if (latest >= 0) lastKnownChunkRef.current = Math.min(fromChunk + 29, latest)
       const blob = await res.blob()
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
       const url = URL.createObjectURL(blob)
@@ -183,17 +184,16 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     audio.onended = async () => {
       setIsPlaying(false); updateMediaSession(false)
       if (!isLiveRef.current) return
-      // Check if new chunks actually exist before trying to resume
+      // Resume from the chunk right after what we just played
+      const resumeFrom = lastKnownChunkRef.current + 1
       const freshLatest = await fetchLatestChunk()
       if (freshLatest < 0) {
         isLoadingRef.current = false
         audio.src = ''
         return
       }
-      lastKnownChunkRef.current = Math.max(lastKnownChunkRef.current, freshLatest)
-      const resumeFrom = lastKnownChunkRef.current + 1
       if (resumeFrom > freshLatest) {
-        // No new chunks yet — wait briefly and check again
+        // Caught up to live edge — wait for broadcaster to produce more
         isLoadingRef.current = false
         if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
         retryTimeoutRef.current = setTimeout(() => {
