@@ -336,8 +336,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       }
     } catch {}
 
-    // Try HLS first, fallback to simple concat if not supported or errors
-    startHlsPlayback()
+    startPlayback()
   }
 
   function togglePlay() {
@@ -346,11 +345,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (audio.paused) {
       const needsRestart = !audio.src || audio.src === '' || audio.error || audio.ended
       if (needsRestart) {
-        if (isLiveRef.current) {
-          // Prefer HLS restart if it was active before; hlsRef is null after destroy
-          if (Hls.isSupported()) startHlsPlayback()
-          else startPlayback()
-        }
+        if (isLiveRef.current) startPlayback()
         return
       }
       audio.play().catch(() => {})
@@ -367,8 +362,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       if (!audio) return
       if (audio.paused || audio.ended || audio.error) {
         setStatusText('Reconnecting…')
-        if (Hls.isSupported()) startHlsPlayback()
-        else startPlayback()
+        startPlayback()
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
