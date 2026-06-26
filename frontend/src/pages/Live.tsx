@@ -82,6 +82,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const isLoadingRef = useRef(false)
   const lastKnownChunkRef = useRef(-1)
   const blobUrlRef = useRef<string | null>(null)
+  const nextBlobUrlRef = useRef<string | null>(null)
+  const nextBlobAbortRef = useRef<AbortController | null>(null)
 
   // Create the <audio> element once on mount
   useEffect(() => {
@@ -138,8 +140,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       const res = await fetch(`${API_BASE}/api/stream/${broadcastId}/concat?from=${fromChunk}&_=${Date.now()}`)
       if (!res.ok) return false
       const latest = parseInt(res.headers.get('X-Latest-Chunk') || '-1', 10)
-      // The blob contains chunks from fromChunk up to min(fromChunk + 29, latest)
-      if (latest >= 0) lastKnownChunkRef.current = Math.min(fromChunk + 29, latest)
+      // The blob contains chunks from fromChunk up to min(fromChunk + 119, latest)
+      if (latest >= 0) lastKnownChunkRef.current = Math.min(fromChunk + 119, latest)
       const blob = await res.blob()
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
       const url = URL.createObjectURL(blob)
@@ -148,6 +150,29 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       audio.volume = volume / 100
       return true
     } catch { return false }
+  }
+
+  async function preloadNextBlob(fromChunk: number) {
+    if (nextBlobAbortRef.current) nextBlobAbortRef.current.abort()
+    const controller = new AbortController()
+    nextBlobAbortRef.current = controller
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/stream/${broadcastId}/concat?from=${fromChunk}&_=${Date.now()}`,
+        { signal: controller.signal }
+      )
+      if (!res.ok) return
+      const latest = parseInt(res.headers.get('X-Latest-Chunk') || '-1', 10)
+      const blob = await res.blob()
+      if (nextBlobUrlRef.current) URL.revokeObjectURL(nextBlobUrlRef.current)
+      nextBlobUrlRef.current = URL.createObjectURL(blob)
+      // Track what this preloaded blob covers
+      if (latest >= 0) {
+        (nextBlobUrlRef as any)._lastChunk = Math.min(fromChunk + 119, latest)
+      }
+    } catch {
+      // Preload failed silently — we'll fetch on-demand in onended
+    }
   }
 
   async function startPlayback() {
@@ -178,13 +203,15 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       return
     }
 
+    // Start preloading the next blob while current plays (~4 min buffer)
+    preloadNextBlob(lastKnownChunkRef.current + 1)
+
     // Wire up event handlers (clear any old ones first)
     audio.onplay = () => { setIsPlaying(true); updateMediaSession(true) }
     audio.onpause = () => { setIsPlaying(false); updateMediaSession(false) }
     audio.onended = async () => {
       setIsPlaying(false); updateMediaSession(false)
       if (!isLiveRef.current) return
-      // Resume from the chunk right after what we just played
       const resumeFrom = lastKnownChunkRef.current + 1
       const freshLatest = await fetchLatestChunk()
       if (freshLatest < 0) {
@@ -193,7 +220,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         return
       }
       if (resumeFrom > freshLatest) {
-        // Caught up to live edge — wait for broadcaster to produce more
         isLoadingRef.current = false
         if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
         retryTimeoutRef.current = setTimeout(() => {
@@ -201,9 +227,23 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }, 3000)
         return
       }
+      // Use preloaded blob if available for instant transition
+      if (nextBlobUrlRef.current) {
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = nextBlobUrlRef.current
+        nextBlobUrlRef.current = null
+        const nextLast = (blobUrlRef as any)._lastChunk as number | undefined
+        if (nextLast !== undefined) lastKnownChunkRef.current = nextLast
+        audio.src = blobUrlRef.current
+        audio.play().catch(() => {})
+        // Preload the one after that in background
+        preloadNextBlob(lastKnownChunkRef.current + 1)
+        return
+      }
       const loaded2 = await loadAudioSrc(resumeFrom)
       if (loaded2) {
         audio.play().catch(() => {})
+        preloadNextBlob(lastKnownChunkRef.current + 1)
       } else {
         isLoadingRef.current = false
         if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
@@ -378,6 +418,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       if (keepAliveRef.current) clearInterval(keepAliveRef.current)
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
+      if (nextBlobUrlRef.current) { URL.revokeObjectURL(nextBlobUrlRef.current); nextBlobUrlRef.current = null }
+      if (nextBlobAbortRef.current) { nextBlobAbortRef.current.abort(); nextBlobAbortRef.current = null }
       if (sessionIdRef.current) {
         fetch(`${API_BASE}/api/stream/${broadcastId}/leave`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },

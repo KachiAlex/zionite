@@ -975,14 +975,14 @@ app.get('/stream/:id/chunk/:index', async (req, res) => {
 })
 
 // Concat endpoint: returns chunks as a single continuous blob for <audio> element
-// Query: ?from={chunkIndex} — only include chunks from that index onward (max 30 for ~1min buffer)
+// Query: ?from={chunkIndex} — only include chunks from that index onward (max 120 for ~4min buffer)
 app.get('/stream/:id/concat', async (req, res) => {
   try {
     await initDb()
     const { id } = req.params
     const fromIndex = parseInt(req.query.from as string || '0', 10)
     const rows = await dbQuery(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 30`,
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 120`,
       [id, fromIndex]
     )
     if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
