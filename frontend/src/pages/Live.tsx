@@ -194,13 +194,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     gainRef.current = gain
     nextStartRef.current = ctx.currentTime + 0.3
 
-    // Hidden audio element wired to MediaStream keeps AudioContext alive in background
-    const dest = ctx.createMediaStreamDestination()
-    gain.connect(dest)
-    const hiddenAudio = new Audio()
-    hiddenAudio.srcObject = dest.stream
-    hiddenAudio.play().catch(() => {})
-
     // Real-time socket for chunks
     const socket = io(SOCKET_BASE, { path: '/socket.io', transports: ['websocket', 'polling'] })
     socketRef.current = socket
