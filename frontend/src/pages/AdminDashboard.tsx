@@ -20,10 +20,11 @@ const GuestSpeakerManager = lazy(() => import('../components/admin/GuestSpeakerM
 const PrayerManager = lazy(() => import('../components/admin/PrayerManager'))
 const TestimonyManager = lazy(() => import('../components/admin/TestimonyManager'))
 const EventManager = lazy(() => import('../components/admin/EventManager'))
+const DailyVerseManager = lazy(() => import('../components/admin/DailyVerseManager'))
 
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
 
-type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events'
+type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse'
 
 function formatDuration(totalSeconds: number) {
   const h = Math.floor(totalSeconds / 3600)
@@ -200,6 +201,8 @@ export default function AdminDashboard() {
       <SB label="Chat Moderation" tab="chat" icon={MessageSquare} badge={chatMessages.length}/>
       <SB label="User Management" tab="users" icon={Users}/>
       <SB label="Reported Content" tab="chat" icon={Shield}/>
+      <SL t="Engagement"/>
+      <SB label="Daily Word" tab="dailyverse" icon={BookOpen}/>
       <SL t="Settings"/>
       <SB label="System Settings" tab="settings" icon={Settings}/>
     </div>
@@ -582,6 +585,13 @@ export default function AdminDashboard() {
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Event Management</h2></div>
               <EventManager/>
+            </div>
+          ):activeTab==='dailyverse'?(
+            <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
+              <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Daily Word — Push Notifications</h2></div>
+              <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+                <DailyVerseManager/>
+              </Suspense>
             </div>
           ):null}
         </div>

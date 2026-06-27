@@ -19,6 +19,7 @@ import analyticsRoutes from './routes/analytics.js'
 import searchRoutes from './routes/search.js'
 import relayRoutes from './routes/relay.js'
 import streamRoutes from './routes/stream.js'
+import pushRoutes from './routes/push.js'
 import { cacheMiddleware } from './middleware/cache.js'
 
 // Sentry init
@@ -28,7 +29,7 @@ if (process.env.SENTRY_DSN) {
 
 const app = express()
 
-app.use(cors({ origin: '*', credentials: true }))
+app.use(cors({ origin: '*', credentials: false }))
 app.use(compression() as any)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
@@ -82,6 +83,7 @@ app.use('/analytics', analyticsRoutes)
 app.use('/search', cacheMiddleware(30000), searchRoutes)
 app.use('/relay', relayRoutes)
 app.use('/stream', streamRoutes)
+app.use('/push', pushRoutes)
 
 // Sentry error handler (must be before 404)
 if (process.env.SENTRY_DSN) {

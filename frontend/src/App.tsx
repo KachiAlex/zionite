@@ -11,6 +11,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 // Code-split pages for smaller initial bundle
 const Home = lazy(() => import('./pages/Home'))
 const Login = lazy(() => import('./pages/Login'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Broadcast = lazy(() => import('./pages/Broadcast'))
 const Archive = lazy(() => import('./pages/Archive'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
@@ -41,6 +43,8 @@ function AnimatedRoutes() {
       <Routes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/sermons/:id" element={<SermonDetail />} />
         <Route path="/status" element={<Status />} />

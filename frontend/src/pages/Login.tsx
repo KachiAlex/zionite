@@ -148,6 +148,9 @@ export default function Login() {
                   minLength={6}
                 />
                 <p className="text-xs mt-2" style={{ color: 'var(--dim)' }}>Must be at least 6 characters</p>
+                {!isRegister && (
+                  <Link to="/forgot-password" className="text-xs mt-1 inline-block hover:underline" style={{ color: 'var(--gold)' }}>Forgot password?</Link>
+                )}
               </div>
               <button
                 type="submit"

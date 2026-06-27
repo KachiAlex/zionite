@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { v4 as uuidv4 } from 'uuid'
 import { db, initDb, dbReady } from '../db.js'
 import { JWT_SECRET, authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
+import { sendEmail } from '../lib/email.js'
 
 const router = Router()
 
@@ -17,6 +18,15 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+})
+
+const forgotSchema = z.object({
+  email: z.string().email('Invalid email address'),
+})
+
+const resetSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
 router.post('/register', async (req, res) => {
@@ -109,6 +119,73 @@ router.put('/users/:id/role', authenticateToken, requireRole('admin'), async (re
   } catch (err: any) {
     console.error('[AUTH] update role error:', err.message)
     res.status(500).json({ error: 'Failed to update role' })
+  }
+})
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    if (!dbReady) { res.status(503).json({ error: 'Database not configured' }); return }
+    await initDb()
+    const parsed = forgotSchema.safeParse(req.body)
+    if (!parsed.success) { res.status(400).json({ error: 'Invalid email' }); return }
+    const { email } = parsed.data
+
+    const user = await db.get('SELECT id, email, name FROM users WHERE email = $1', [email])
+    if (!user) {
+      // Return success even if user not found (security through obscurity)
+      res.json({ success: true, message: 'If an account exists, a reset link has been sent.' })
+      return
+    }
+
+    const token = uuidv4()
+    const expires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+    await db.run(
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
+      [token, expires.toISOString(), user.id]
+    )
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://www.zionite.online'}/reset-password?token=${token}`
+    await sendEmail({
+      to: user.email,
+      toName: user.name,
+      subject: 'Reset your ZioniteFM password',
+      htmlContent: `<p>Hello ${user.name || 'there'},</p>
+        <p>You requested a password reset. Click the link below to set a new password (expires in 1 hour):</p>
+        <p><a href="${resetUrl}" style="padding:10px 20px;background:#c9a227;color:#1b1208;text-decoration:none;border-radius:6px;">Reset Password</a></p>
+        <p>Or copy this link: ${resetUrl}</p>
+        <p>If you didn't request this, ignore this email.</p>`,
+    })
+
+    res.json({ success: true, message: 'If an account exists, a reset link has been sent.' })
+  } catch (err: any) {
+    console.error('[AUTH] forgot-password error:', err.message)
+    res.status(500).json({ error: 'Failed to send reset email' })
+  }
+})
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    if (!dbReady) { res.status(503).json({ error: 'Database not configured' }); return }
+    await initDb()
+    const parsed = resetSchema.safeParse(req.body)
+    if (!parsed.success) { res.status(400).json({ error: 'Invalid input' }); return }
+    const { token, password } = parsed.data
+
+    const user = await db.get(
+      'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+      [token]
+    )
+    if (!user) { res.status(400).json({ error: 'Invalid or expired token' }); return }
+
+    const hash = await bcrypt.hash(password, 10)
+    await db.run(
+      'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
+      [hash, user.id]
+    )
+    res.json({ success: true, message: 'Password updated successfully' })
+  } catch (err: any) {
+    console.error('[AUTH] reset-password error:', err.message)
+    res.status(500).json({ error: 'Failed to reset password' })
   }
 })
 

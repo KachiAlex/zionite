@@ -249,7 +249,10 @@ export default function Home() {
                 {sermons.length > 0 ? (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                      {sermons.slice(0, 4).map(s => <SermonCard key={s.id} s={s} />)}
+                      {sermons.slice(0, 2).map(s => <SermonCard key={s.id} s={s} />)}
+                      {sermons.slice(2, 4).map(s => (
+                        <div key={s.id} className="hidden md:block"><SermonCard s={s} /></div>
+                      ))}
                     </div>
                     <Link to="/archive"
                       className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition-colors hover:text-[#c9a227]"
