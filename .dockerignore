@@ -1,0 +1,9 @@
+node_modules
+.git
+frontend
+api
+dist
+*.log
+.env
+.env.local
+.DS_Store
