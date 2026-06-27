@@ -97,7 +97,7 @@ async function startFetchLoop(broadcastId: string) {
 
 // Continuous HTTP stream for <audio> element
 router.get('/:broadcastId/stream', async (req: Request, res: Response) => {
-  const { broadcastId } = req.params
+  const broadcastId = req.params.broadcastId as string
 
   try {
     await initDb()
@@ -151,7 +151,7 @@ router.get('/:broadcastId/stream', async (req: Request, res: Response) => {
 router.get('/:broadcastId/status', async (req: Request, res: Response) => {
   try {
     await initDb()
-    const { broadcastId } = req.params
+    const broadcastId = req.params.broadcastId as string
     const relay = relays.get(broadcastId)
     const broadcast = await db.get('SELECT status FROM broadcasts WHERE id = $1', [broadcastId])
     res.json({
