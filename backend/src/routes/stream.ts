@@ -32,24 +32,13 @@ function mergeWebMChunks(chunks: Buffer[]): Buffer {
 }
 
 // Upload chunk (broadcaster)
-// chunkIndex=0 is always the WebM init segment (header only, no audio)
-// chunkIndex>0 are WebM Cluster segments (pure audio data)
+// All chunks (including chunk 0 which contains the init segment) are stored in stream_chunks
 router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     await initDb()
     const { chunkIndex, chunkData } = req.body
     if (typeof chunkData !== 'string' || chunkData.length === 0) {
       res.status(400).json({ error: 'Invalid chunk data' }); return
-    }
-
-    // Chunk 0 = init segment (WebM header): store in broadcasts table for fast access
-    if (chunkIndex === 0) {
-      await db.query(
-        `UPDATE broadcasts SET init_segment=$1 WHERE id=$2`,
-        [chunkData, req.params.id]
-      )
-      res.json({ success: true })
-      return
     }
 
     const chunkId = uuidv4()
@@ -92,46 +81,56 @@ router.get('/:id/chunk/:index', async (req: Request, res: Response) => {
   }
 })
 
-// Concat endpoint: returns init_segment + requested data chunks as one decodable WebM blob
-// Always prepends the stored init segment so decodeAudioData always works
+// Concat endpoint: returns a decodable WebM blob for AudioContext.decodeAudioData
+// Always includes chunk 0 (init segment) + requested data chunks
 router.get('/:id/concat', async (req: Request, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
     const fromIndex = parseInt(req.query.from as string || '1', 10)
 
-    // Fetch the stored init segment
-    const broadcast = await db.get(`SELECT init_segment FROM broadcasts WHERE id=$1`, [id])
-    if (!broadcast?.init_segment) {
-      res.status(404).json({ error: 'No stream data' }); return
+    // Fetch chunk 0 (WebM init/header — contains EBML + Segment + Tracks)
+    // Fall back to broadcasts.init_segment for compatibility with old schema
+    const initRow = await db.get(
+      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+      [id]
+    )
+    let initBuf: Buffer | null = null
+    if (initRow) {
+      initBuf = Buffer.from(initRow.chunk_data, 'base64')
+    } else {
+      const bcast = await db.get(`SELECT init_segment FROM broadcasts WHERE id=$1`, [id])
+      if (bcast?.init_segment) initBuf = Buffer.from(bcast.init_segment, 'base64')
     }
-    const initBuf = Buffer.from(broadcast.init_segment, 'base64')
+    if (!initBuf) {
+      res.status(404).json({ error: 'No stream data yet' }); return
+    }
 
-    // Fetch data chunks from the requested index
+    // Fetch requested data chunks (chunk_index >= fromIndex, skip chunk 0)
     let rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 20`,
-      [id, fromIndex]
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 AND chunk_index > 0 ORDER BY chunk_index ASC LIMIT 20`,
+      [id, Math.max(fromIndex, 1)]
     )
 
-    // No new data chunks yet — return just the init segment (client waits for next poll)
+    // If no new chunks, fall back to latest 5 data chunks
     if (!rows.length) {
-      // Also try the latest few so mid-stream listeners get something immediately
       rows = await db.all(
-        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 5`,
+        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 ORDER BY chunk_index DESC LIMIT 5`,
         [id]
       )
       if (!rows.length) {
-        res.status(404).json({ error: 'No chunks yet' }); return
+        res.status(404).json({ error: 'No audio chunks yet' }); return
       }
       rows = rows.reverse()
     }
 
-    // Build: init header + raw cluster data (no mergeWebMChunks needed — clusters are just concatenated)
+    // Build: chunk 0 (full, as-is from MediaRecorder — EBML+Segment+Tracks+first Cluster)
+    // + cluster-only data from subsequent chunks
     const parts: Buffer[] = [initBuf]
     let latestIndex = -1
     for (const row of rows) {
       const chunkBuf = Buffer.from(row.chunk_data, 'base64')
-      // Strip any init header from cluster chunks (just in case MediaRecorder included it)
+      // Extract only the Cluster portion (strip any accidental re-emitted header)
       let clusterStart = 0
       for (let j = 0; j <= chunkBuf.length - 4; j++) {
         if (chunkBuf[j] === CLUSTER_ID[0] && chunkBuf[j+1] === CLUSTER_ID[1] &&
