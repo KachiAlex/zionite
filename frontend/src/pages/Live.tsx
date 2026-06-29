@@ -61,7 +61,11 @@ function AudioBars({ active }: { active: boolean }) {
   )
 }
 
-/* ── StreamPlayer (simple <audio> with backend live stream) ─────────────────────────────────── */
+/* ── StreamPlayer: AudioContext polling with gapless scheduling & auto-reconnect ─── */
+const POLL_INTERVAL_MS = 2200    // slightly longer than broadcaster chunk interval
+const LOOK_AHEAD_S    = 0.3     // schedule audio this far ahead
+const MAX_QUEUE       = 8       // max pending decoded buffers
+
 function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: string; title?: string; thumbnailUrl?: string }) {
   const [started, setStarted] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -70,11 +74,17 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const [showVolume, setShowVolume] = useState(false)
   const [statusText, setStatusText] = useState('Tap to listen')
 
-  const sessionIdRef = useRef('')
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const infoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const userPausedRef = useRef(false)
+  const sessionIdRef     = useRef('')
+  const heartbeatRef     = useRef<ReturnType<typeof setInterval> | null>(null)
+  const infoIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const acRef            = useRef<AudioContext | null>(null)
+  const gainRef          = useRef<GainNode | null>(null)
+  const nextStartTimeRef = useRef(0)
+  const lastChunkRef     = useRef(-1)
+  const userPausedRef    = useRef(false)
+  const runningRef       = useRef(false)
+  const queueRef         = useRef(0)
 
   function updateMediaSession(playing: boolean) {
     if (!('mediaSession' in navigator)) return
@@ -89,18 +99,86 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     navigator.mediaSession.metadata = new MediaMetadata({
       title: broadcastTitle, artist: 'ZioniteFM', album: 'The Voice of Redemption', artwork
     })
-    navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play().catch(() => {}))
-    navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause())
-    navigator.mediaSession.setActionHandler('stop', () => {
-      const a = audioRef.current; if (a) { a.pause(); a.src = '' }
-    })
+    navigator.mediaSession.setActionHandler('play', () => { acRef.current?.resume(); userPausedRef.current = false; setIsPlaying(true) })
+    navigator.mediaSession.setActionHandler('pause', () => { acRef.current?.suspend(); userPausedRef.current = true; setIsPlaying(false) })
   }
 
-  function handleStart() {
-    if (!audioRef.current) return
+  async function fetchAndSchedule() {
+    if (!runningRef.current || userPausedRef.current) return
+    if (queueRef.current >= MAX_QUEUE) {
+      schedulePoll()
+      return
+    }
+
+    const ac = acRef.current
+    const gain = gainRef.current
+    if (!ac || !gain) return
+
+    try {
+      // Fetch the latest N chunks from backend as a merged WebM blob
+      const fromChunk = lastChunkRef.current < 0 ? 0 : lastChunkRef.current + 1
+      const url = `${API_BASE}/api/stream/${broadcastId}/concat?from=${fromChunk}`
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) { schedulePoll(); return }
+
+      const latestHeader = res.headers.get('X-Latest-Chunk')
+      const latestChunk = latestHeader ? parseInt(latestHeader, 10) : -1
+      if (latestChunk <= lastChunkRef.current) { schedulePoll(); return }
+
+      const arrayBuf = await res.arrayBuffer()
+      if (!arrayBuf.byteLength) { schedulePoll(); return }
+
+      const decoded = await ac.decodeAudioData(arrayBuf)
+
+      // Schedule after any previously queued audio
+      const now = ac.currentTime
+      const startAt = Math.max(now + LOOK_AHEAD_S, nextStartTimeRef.current)
+      nextStartTimeRef.current = startAt + decoded.duration
+
+      const src = ac.createBufferSource()
+      src.buffer = decoded
+      src.connect(gain)
+      src.start(startAt)
+
+      queueRef.current++
+      src.onended = () => { queueRef.current = Math.max(0, queueRef.current - 1) }
+
+      lastChunkRef.current = latestChunk
+      setStatusText('Live')
+      setIsPlaying(true)
+    } catch (e: any) {
+      // decodeAudioData can fail if we get partial/bad data — just retry
+      console.warn('[STREAM] decode error:', e?.message)
+    }
+
+    schedulePoll()
+  }
+
+  function schedulePoll() {
+    if (!runningRef.current) return
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+    pollTimerRef.current = setTimeout(() => fetchAndSchedule(), POLL_INTERVAL_MS)
+  }
+
+  function startAudioContext() {
+    const ac = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const gain = ac.createGain()
+    gain.gain.value = volume / 100
+    gain.connect(ac.destination)
+    acRef.current = ac
+    gainRef.current = gain
+    nextStartTimeRef.current = 0
+  }
+
+  async function handleStart() {
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
+    runningRef.current = true
+
+    startAudioContext()
+    setupMediaSession(title || 'Live Broadcast')
+    updateMediaSession(true)
 
     sessionIdRef.current = Math.random().toString(36).slice(2) + Date.now().toString(36)
     fetch(`${API_BASE}/api/stream/${broadcastId}/join`, {
@@ -122,14 +200,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       } catch {}
     }, 10000)
 
-    // Point to backend live stream endpoint
-    audioRef.current.src = `${SOCKET_BASE}/api/stream/${broadcastId}/live`
-    audioRef.current.volume = volume / 100
-    audioRef.current.play().then(() => {
-      setIsPlaying(true)
-      setStatusText('Live')
-      setupMediaSession(title || 'Live Broadcast')
-    }).catch(() => { setStatusText('Tap play to start') })
+    // Kick off polling immediately
+    await fetchAndSchedule()
 
     try {
       const android = (window as any).AndroidAudio
@@ -138,33 +210,38 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   }
 
   function togglePlay() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (audio.paused) { audio.play().catch(() => {}); userPausedRef.current = false }
-    else { audio.pause(); userPausedRef.current = true }
+    const ac = acRef.current
+    if (!ac) return
+    if (userPausedRef.current) {
+      // Resume: reset scheduling so we jump to current live edge
+      lastChunkRef.current = -1
+      nextStartTimeRef.current = 0
+      queueRef.current = 0
+      userPausedRef.current = false
+      ac.resume().then(() => {
+        setIsPlaying(true)
+        updateMediaSession(true)
+        setStatusText('Connecting…')
+        fetchAndSchedule()
+      })
+    } else {
+      userPausedRef.current = true
+      ac.suspend().then(() => {
+        setIsPlaying(false)
+        updateMediaSession(false)
+        setStatusText('Paused')
+      })
+    }
   }
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume / 100
+    if (gainRef.current) gainRef.current.gain.value = volume / 100
   }, [volume])
 
   useEffect(() => {
-    const audio = document.createElement('audio')
-    audio.setAttribute('playsinline', 'true')
-    audio.setAttribute('webkit-playsinline', 'true')
-    audio.setAttribute('preload', 'none')
-    audio.onplay = () => { setIsPlaying(true); updateMediaSession(true); userPausedRef.current = false }
-    audio.onpause = () => { setIsPlaying(false); updateMediaSession(false); userPausedRef.current = true }
-    audio.onplaying = () => { setStatusText('Live') }
-    audio.onwaiting = () => { setStatusText('Buffering…') }
-    audio.onstalled = () => { setStatusText('Stalled') }
-    audio.onerror = () => { setStatusText('Connection error') }
-    audioRef.current = audio
-    return () => { audio.pause(); audio.src = ''; audioRef.current = null }
-  }, [])
-
-  useEffect(() => {
     return () => {
+      runningRef.current = false
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
       if (sessionIdRef.current) {
@@ -173,8 +250,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
           body: JSON.stringify({ sessionId: sessionIdRef.current })
         }).catch(() => {})
       }
-      const a = audioRef.current
-      if (a) { a.pause(); a.src = '' }
+      try { acRef.current?.close() } catch {}
       try {
         const android = (window as any).AndroidAudio
         if (android && typeof android.stopAudioService === 'function') android.stopAudioService()

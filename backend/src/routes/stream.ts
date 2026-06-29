@@ -78,17 +78,29 @@ router.get('/:id/chunk/:index', async (req: Request, res: Response) => {
   }
 })
 
-// Concat endpoint: returns chunks as a single continuous blob
+// Concat endpoint: returns chunks as a single decodable WebM blob
 router.get('/:id/concat', async (req: Request, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
     const fromIndex = parseInt(req.query.from as string || '0', 10)
-    const rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 120`,
+
+    let rows = await db.all(
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 30`,
       [id, fromIndex]
     )
-    if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
+
+    // If no new chunks exist for requested fromIndex, fall back to the most recent window
+    // (happens when a listener joins mid-stream with a stale fromIndex)
+    if (!rows.length) {
+      rows = await db.all(
+        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 8`,
+        [id]
+      )
+      if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
+      // Return in ascending order so WebM header comes first
+      rows = rows.reverse()
+    }
 
     const chunks: Buffer[] = []
     let latestIndex = -1
