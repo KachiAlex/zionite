@@ -1,6 +1,9 @@
 # Backend Docker image for Fly.io
 FROM node:20
 
+# Install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy backend package files (has correct @types dev deps)

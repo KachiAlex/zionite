@@ -3,6 +3,8 @@ import cors from 'cors'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import * as Sentry from '@sentry/node'
+import path from 'path'
+import fs from 'fs'
 import authRoutes from './routes/auth.js'
 import broadcastRoutes from './routes/broadcasts.js'
 import sermonRoutes from './routes/sermons.js'
@@ -84,6 +86,25 @@ app.use('/search', cacheMiddleware(30000), searchRoutes)
 app.use('/relay', relayRoutes)
 app.use('/stream', streamRoutes)
 app.use('/push', pushRoutes)
+
+// HLS live stream serving
+const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'
+app.use('/live', (req: Request, res: Response, next: NextFunction) => {
+  const filePath = path.join(HLS_ROOT, req.path)
+  if (!filePath.startsWith(HLS_ROOT)) { res.status(403).end(); return }
+  if (!fs.existsSync(filePath)) { res.status(404).end(); return }
+
+  // Set correct MIME types and CORS
+  if (req.path.endsWith('.m3u8')) {
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  } else if (req.path.endsWith('.ts')) {
+    res.setHeader('Content-Type', 'video/MP2T')
+    res.setHeader('Cache-Control', 'public, max-age=2')
+  }
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.sendFile(filePath)
+})
 
 // Sentry error handler (must be before 404)
 if (process.env.SENTRY_DSN) {

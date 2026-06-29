@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()
 export const API_BASE = isNative ? 'https://zionite.fly.dev' : ''
+export const STREAM_BASE = 'https://zionite.fly.dev'
 export const SOCKET_BASE = 'https://zionite.fly.dev'
 export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 15000 })
 

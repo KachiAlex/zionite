@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { EventEmitter } from 'events'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
+import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive, getHlsManifestUrl } from '../hls.js'
 
 const router = Router()
 const liveEmitter = new EventEmitter()
@@ -53,6 +54,9 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
       [req.params.id, chunkIndex - 300]
     )
     res.json({ success: true })
+    // Feed HLS encoder
+    startHlsBroadcast(req.params.id)
+    feedHlsChunk(req.params.id, chunkData)
     // Notify live listeners that a new chunk is available
     liveEmitter.emit(`chunk:${req.params.id}`, chunkIndex)
   } catch (err: any) {

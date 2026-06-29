@@ -513,7 +513,11 @@ export default function RadioStudio({
   function stopStreaming(triggerUpload = false): Promise<void> {
     teardownMixer()
     shouldRecordRef.current = false
-    if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null }
+    if (socketRef.current) {
+      if (broadcastId) socketRef.current.emit('end_broadcast_hls', broadcastId)
+      socketRef.current.disconnect()
+      socketRef.current = null
+    }
     if (chunkTimeoutRef.current) { clearTimeout(chunkTimeoutRef.current); chunkTimeoutRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()

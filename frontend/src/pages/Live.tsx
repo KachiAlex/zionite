@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import axios from 'axios'
-import { API_BASE } from '../lib/api'
+import { API_BASE, STREAM_BASE } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {
@@ -61,13 +61,8 @@ function AudioBars({ active }: { active: boolean }) {
   )
 }
 
-/* ── StreamPlayer: MSE + SSE live streaming ─── */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes.buffer
-}
+/* ── StreamPlayer: HLS live streaming via hls.js ─── */
+import Hls from 'hls.js'
 
 function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: string; title?: string; thumbnailUrl?: string }) {
   const [started, setStarted] = useState(false)
@@ -81,13 +76,10 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const heartbeatRef    = useRef<ReturnType<typeof setInterval> | null>(null)
   const infoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const audioRef        = useRef<HTMLAudioElement | null>(null)
-  const msRef           = useRef<MediaSource | null>(null)
-  const sbRef           = useRef<SourceBuffer | null>(null)
-  const bufQueueRef     = useRef<ArrayBuffer[]>([])
-  const esRef           = useRef<EventSource | null>(null)
-  const initDoneRef     = useRef(false)
-  const runningRef      = useRef(false)
+  const hlsRef          = useRef<Hls | null>(null)
   const userPausedRef   = useRef(false)
+
+  const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
 
   function updateMediaSession(playing: boolean) {
     if (!('mediaSession' in navigator)) return
@@ -106,85 +98,80 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     navigator.mediaSession.setActionHandler('pause', () => { userPausedRef.current = true; audioRef.current?.pause(); setIsPlaying(false); updateMediaSession(false); setStatusText('Paused') })
   }
 
-  function flushQueue() {
-    const sb = sbRef.current
-    if (!sb || sb.updating || bufQueueRef.current.length === 0) return
-    try { sb.appendBuffer(bufQueueRef.current.shift()!) }
-    catch (e: any) { console.warn('[MSE] append error:', e.message) }
-  }
-
-  function connectSSE() {
-    if (esRef.current) { esRef.current.close(); esRef.current = null }
-    const es = new EventSource(`${API_BASE}/api/stream/${broadcastId}/live-sse`)
-    esRef.current = es
-
-    es.addEventListener('init', (e: MessageEvent) => {
-      if (initDoneRef.current) return
-      bufQueueRef.current.push(base64ToArrayBuffer(e.data))
-      flushQueue()
-      initDoneRef.current = true
-      setStatusText('Live')
-      setIsPlaying(true)
-      audioRef.current?.play().catch(() => {})
-    })
-
-    es.addEventListener('cluster', (e: MessageEvent) => {
-      bufQueueRef.current.push(base64ToArrayBuffer(e.data))
-      flushQueue()
-    })
-
-    es.addEventListener('error', () => {
-      console.warn('[SSE] error, reconnecting…')
-      setTimeout(() => { if (runningRef.current) connectSSE() }, 3000)
-    })
-  }
-
   function handleStart() {
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
-    runningRef.current = true
-    initDoneRef.current = false
-    bufQueueRef.current = []
 
     const audio = new Audio()
     audio.volume = volume / 100
     audioRef.current = audio
 
-    const ms = new MediaSource()
-    msRef.current = ms
-    audio.src = URL.createObjectURL(ms)
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+      })
+      hlsRef.current = hls
+      hls.loadSource(hlsUrl)
+      hls.attachMedia(audio)
 
-    ms.addEventListener('sourceopen', () => {
-      if (initDoneRef.current) return
-      const mime = 'audio/webm;codecs=opus'
-      if (!MediaSource.isTypeSupported(mime)) {
-        setStatusText('Browser does not support WebM Opus')
-        return
-      }
-      const sb = ms.addSourceBuffer(mime)
-      sbRef.current = sb
-      sb.addEventListener('updateend', flushQueue)
-      sb.addEventListener('error', (e) => console.warn('[MSE] SB error:', e))
-      connectSSE()
-    })
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        audio.play().then(() => {
+          setIsPlaying(true)
+          setStatusText('Live')
+          updateMediaSession(true)
+        }).catch(() => {
+          setStatusText('Tap play to start')
+        })
+      })
 
-    ms.addEventListener('error', (e) => {
-      console.warn('[MSE] MediaSource error:', e)
-      setStatusText('Stream error')
-    })
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.warn('[HLS] Network error — retrying…')
+              hls.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.warn('[HLS] Media error — recovering…')
+              hls.recoverMediaError()
+              break
+            default:
+              console.error('[HLS] Fatal error')
+              hls.destroy()
+              setStatusText('Stream error')
+          }
+        }
+      })
+    } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      audio.src = hlsUrl
+      audio.play().then(() => {
+        setIsPlaying(true)
+        setStatusText('Live')
+        updateMediaSession(true)
+      }).catch(() => {
+        setStatusText('Tap play to start')
+      })
+    } else {
+      setStatusText('HLS not supported in this browser')
+      return
+    }
 
     setupMediaSession(title || 'Live Broadcast')
     updateMediaSession(true)
 
     sessionIdRef.current = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    fetch(`${API_BASE}/api/stream/${broadcastId}/join`, {
+    fetch(`${STREAM_BASE}/api/stream/${broadcastId}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: sessionIdRef.current })
     }).catch(() => {})
 
     heartbeatRef.current = setInterval(() => {
-      fetch(`${API_BASE}/api/stream/${broadcastId}/heartbeat`, {
+      fetch(`${STREAM_BASE}/api/stream/${broadcastId}/heartbeat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: sessionIdRef.current })
       }).catch(() => {})
@@ -192,7 +179,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     infoIntervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/stream/${broadcastId}/info`)
+        const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/info`)
         if (res.ok) { const info = await res.json(); setListenerCount(info.listenerCount || 0) }
       } catch {}
     }, 10000)
@@ -224,18 +211,16 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
   useEffect(() => {
     return () => {
-      runningRef.current = false
-      if (esRef.current) { esRef.current.close(); esRef.current = null }
+      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
       if (sessionIdRef.current) {
-        fetch(`${API_BASE}/api/stream/${broadcastId}/leave`, {
+        fetch(`${STREAM_BASE}/api/stream/${broadcastId}/leave`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sessionIdRef.current })
         }).catch(() => {})
       }
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
-      if (msRef.current && msRef.current.readyState !== 'closed') { try { msRef.current.endOfStream() } catch {} }
       try {
         const android = (window as any).AndroidAudio
         if (android && typeof android.stopAudioService === 'function') android.stopAudioService()
