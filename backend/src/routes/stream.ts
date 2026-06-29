@@ -276,71 +276,115 @@ router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), as
   }
 })
 
-// Live continuous stream endpoint
-router.get('/:id/live', async (req: Request, res: Response) => {
+// Helper: extract init segment (EBML + Segment + Tracks, up to first Cluster)
+function extractInit(buf: Buffer): Buffer | null {
+  for (let j = 0; j <= buf.length - 4; j++) {
+    if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
+        buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
+      return buf.subarray(0, j)
+    }
+  }
+  return null // no cluster found — invalid
+}
+
+// Helper: extract cluster data (from first Cluster to end)
+function extractCluster(buf: Buffer): Buffer {
+  for (let j = 0; j <= buf.length - 4; j++) {
+    if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
+        buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
+      return buf.subarray(j)
+    }
+  }
+  return buf // fallback
+}
+
+// MSE init segment endpoint
+router.get('/:id/init', async (req: Request, res: Response) => {
+  try {
+    await initDb()
+    const row = await db.get(
+      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+      [req.params.id]
+    )
+    if (!row) { res.status(404).json({ error: 'No stream data' }); return }
+    const buf = Buffer.from(row.chunk_data, 'base64')
+    const init = extractInit(buf)
+    if (!init) { res.status(404).json({ error: 'Invalid chunk 0' }); return }
+    res.setHeader('Content-Type', 'audio/webm;codecs=opus')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.send(init)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// MSE live SSE: sends init then clusters as they arrive
+router.get('/:id/live-sse', async (req: Request, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
 
-    // Send all existing chunks merged
-    const rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index ASC LIMIT 120`,
-      [id]
-    )
-    if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
-
-    const chunks: Buffer[] = []
-    let latestIndex = -1
-    for (const row of rows) {
-      chunks.push(Buffer.from(row.chunk_data, 'base64'))
-      latestIndex = Math.max(latestIndex, row.chunk_index)
-    }
-
-    res.setHeader('Content-Type', 'audio/webm;codecs=opus')
+    res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-    res.setHeader('Pragma', 'no-cache')
-    res.setHeader('Expires', '0')
-    res.setHeader('Transfer-Encoding', 'chunked')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    // Send merged init + all existing clusters
-    res.write(mergeWebMChunks(chunks))
+    // Send init segment
+    const initRow = await db.get(
+      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+      [id]
+    )
+    if (!initRow) { res.write('event: error\ndata: no stream\n\n'); res.end(); return }
+    const initBuf = Buffer.from(initRow.chunk_data, 'base64')
+    const init = extractInit(initBuf)
+    if (!init) { res.write('event: error\ndata: invalid init\n\n'); res.end(); return }
+    res.write(`event: init\ndata: ${init.toString('base64')}\n\n`)
+
+    let latestSent = -1
+
+    // Send existing clusters
+    const rows = await db.all(
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 ORDER BY chunk_index ASC LIMIT 120`,
+      [id]
+    )
+    for (const row of rows) {
+      const buf = Buffer.from(row.chunk_data, 'base64')
+      const cluster = extractCluster(buf)
+      res.write(`event: cluster\ndata: ${cluster.toString('base64')}\n\n`)
+      latestSent = row.chunk_index
+    }
 
     // Listen for new chunks
     const onChunk = async (chunkIndex: number) => {
       try {
-        if (chunkIndex <= latestIndex) return
+        if (chunkIndex <= latestSent) return
         const row = await db.get(
           `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=$2`,
           [id, chunkIndex]
         )
         if (!row) return
         const buf = Buffer.from(row.chunk_data, 'base64')
-        // Strip init header, keep only cluster data
-        let found = false
-        for (let j = 0; j <= buf.length - 4; j++) {
-          if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
-              buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
-            res.write(buf.subarray(j))
-            found = true
-            break
-          }
-        }
-        if (!found) res.write(buf) // fallback
-        latestIndex = chunkIndex
+        const cluster = extractCluster(buf)
+        res.write(`event: cluster\ndata: ${cluster.toString('base64')}\n\n`)
+        latestSent = chunkIndex
       } catch (err: any) {
-        console.error('[LIVE] chunk relay error:', err.message)
+        console.error('[SSE] chunk relay error:', err.message)
       }
     }
 
     liveEmitter.on(`chunk:${id}`, onChunk)
 
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => { res.write(':ping\n\n') }, 15000)
+
     req.on('close', () => {
+      clearInterval(heartbeat)
       liveEmitter.off(`chunk:${id}`, onChunk)
     })
   } catch (err: any) {
-    res.status(500).json({ error: err.message })
+    console.error('[SSE] error:', err.message)
+    if (!res.headersSent) res.status(500).end()
+    else res.end()
   }
 })
 
