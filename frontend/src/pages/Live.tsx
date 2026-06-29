@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import axios from 'axios'
-import { API_BASE, SOCKET_BASE } from '../lib/api'
+import { API_BASE } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {

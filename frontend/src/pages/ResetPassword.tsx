@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -9,7 +9,6 @@ export default function ResetPassword() {
   usePageTitle('Reset Password')
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
-  const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
