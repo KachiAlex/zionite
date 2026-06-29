@@ -3,12 +3,27 @@ import { db, initDb } from '../db.js'
 
 const router = Router()
 
+// Matroska Cluster element ID: 0x1F43B675
+const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
+
+function extractCluster(buf: Buffer): Buffer {
+  for (let j = 0; j <= buf.length - 4; j++) {
+    if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
+        buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
+      return buf.subarray(j)
+    }
+  }
+  return buf
+}
+
 // Map broadcastId -> active relay state
 const relays = new Map<string, {
   latestChunk: number
   listeners: Set<Response>
   fetchTimer: ReturnType<typeof setInterval> | null
   ended: boolean
+  nextIndex: number
+  initSent: Set<Response>
 }>()
 
 function getRelay(broadcastId: string) {
@@ -17,7 +32,9 @@ function getRelay(broadcastId: string) {
       latestChunk: -1,
       listeners: new Set(),
       fetchTimer: null,
-      ended: false
+      ended: false,
+      nextIndex: 0,
+      initSent: new Set()
     })
   }
   return relays.get(broadcastId)!
@@ -31,62 +48,71 @@ function stopRelay(broadcastId: string) {
     try { res.end() } catch {}
   }
   relay.listeners.clear()
+  relay.initSent.clear()
   relays.delete(broadcastId)
   console.log(`[RELAY] stopped ${broadcastId}`)
 }
 
+async function sendInitToListener(broadcastId: string, res: Response) {
+  const relay = getRelay(broadcastId)
+  if (relay.initSent.has(res)) return
+  try {
+    const row = await db.get(
+      'SELECT chunk_data FROM stream_chunks WHERE broadcast_id = $1 AND chunk_index = 0',
+      [broadcastId]
+    )
+    if (!row) return
+    const buf = Buffer.from(row.chunk_data, 'base64')
+    res.write(buf) // send chunk 0 as-is (contains init + first cluster)
+    relay.initSent.add(res)
+  } catch {}
+}
+
 async function startFetchLoop(broadcastId: string) {
   const relay = getRelay(broadcastId)
-  if (relay.fetchTimer) return // already running
-
-  // Start near live — fetch latest chunk and begin 3 chunks behind
-  let nextIndex = -1
-  const latestRow = await db.get<{ chunk_index: number }>(
-    'SELECT chunk_index FROM stream_chunks WHERE broadcast_id = $1 ORDER BY chunk_index DESC LIMIT 1',
-    [broadcastId]
-  )
-  if (latestRow) {
-    nextIndex = Math.max(0, latestRow.chunk_index - 3)
-  }
+  if (relay.fetchTimer) return
 
   relay.fetchTimer = setInterval(async () => {
     try {
-      // Check if broadcast is still live
-      const broadcast = await db.get(
-        'SELECT status FROM broadcasts WHERE id = $1',
-        [broadcastId]
-      )
+      const broadcast = await db.get('SELECT status FROM broadcasts WHERE id = $1', [broadcastId])
       if (!broadcast || broadcast.status !== 'live') {
-        // Broadcast ended — drain remaining chunks then stop
+        // Drain remaining then stop
         const remaining = await db.all(
           'SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id = $1 AND chunk_index >= $2 ORDER BY chunk_index ASC',
-          [broadcastId, nextIndex]
+          [broadcastId, relay.nextIndex]
         )
         for (const row of remaining) {
-          const buf = Buffer.from(row.chunk_data, 'base64')
+          const buf = row.chunk_index === 0
+            ? Buffer.from(row.chunk_data, 'base64')
+            : extractCluster(Buffer.from(row.chunk_data, 'base64'))
           for (const res of relay.listeners) {
             try { res.write(buf) } catch {}
           }
-          nextIndex = row.chunk_index + 1
+          relay.nextIndex = row.chunk_index + 1
         }
         stopRelay(broadcastId)
         return
       }
 
-      // Fetch new chunks
       const rows = await db.all<{ chunk_index: number; chunk_data: string }>(
         'SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id = $1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 30',
-        [broadcastId, nextIndex]
+        [broadcastId, relay.nextIndex]
       )
 
       if (rows.length === 0) return
 
       for (const row of rows) {
-        const buf = Buffer.from(row.chunk_data, 'base64')
+        const raw = Buffer.from(row.chunk_data, 'base64')
+        // Chunk 0: send as-is (init + first cluster). Chunks 1+: strip init, keep cluster only.
+        const buf = row.chunk_index === 0 ? raw : extractCluster(raw)
         for (const res of relay.listeners) {
+          // Ensure each listener gets init first
+          if (row.chunk_index > 0 && !relay.initSent.has(res)) {
+            await sendInitToListener(broadcastId, res)
+          }
           try { res.write(buf) } catch {}
         }
-        nextIndex = row.chunk_index + 1
+        relay.nextIndex = row.chunk_index + 1
         relay.latestChunk = row.chunk_index
       }
     } catch (err: any) {
