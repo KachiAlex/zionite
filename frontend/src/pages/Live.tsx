@@ -61,7 +61,14 @@ function AudioBars({ active }: { active: boolean }) {
   )
 }
 
-/* ── StreamPlayer: simple <audio> with HTTP chunked relay stream ─── */
+/* ── StreamPlayer: MSE + SSE live streaming ─── */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
 function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: string; title?: string; thumbnailUrl?: string }) {
   const [started, setStarted] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -74,11 +81,13 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const heartbeatRef    = useRef<ReturnType<typeof setInterval> | null>(null)
   const infoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const audioRef        = useRef<HTMLAudioElement | null>(null)
-  const reconnectRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const msRef           = useRef<MediaSource | null>(null)
+  const sbRef           = useRef<SourceBuffer | null>(null)
+  const bufQueueRef     = useRef<ArrayBuffer[]>([])
+  const esRef           = useRef<EventSource | null>(null)
+  const initDoneRef     = useRef(false)
+  const runningRef      = useRef(false)
   const userPausedRef   = useRef(false)
-  const startedAtRef    = useRef(0)
-
-  const streamUrl = `${API_BASE}/api/relay/${broadcastId}/stream`
 
   function updateMediaSession(playing: boolean) {
     if (!('mediaSession' in navigator)) return
@@ -97,28 +106,36 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     navigator.mediaSession.setActionHandler('pause', () => { userPausedRef.current = true; audioRef.current?.pause(); setIsPlaying(false); updateMediaSession(false); setStatusText('Paused') })
   }
 
-  function startStream() {
-    if (userPausedRef.current) return
-    const audio = audioRef.current
-    if (!audio) return
+  function flushQueue() {
+    const sb = sbRef.current
+    if (!sb || sb.updating || bufQueueRef.current.length === 0) return
+    try { sb.appendBuffer(bufQueueRef.current.shift()!) }
+    catch (e: any) { console.warn('[MSE] append error:', e.message) }
+  }
 
-    // If stream stalled for > 8s, reload to jump to live edge
-    if (Date.now() - startedAtRef.current > 8000 && !audio.paused) {
-      audio.src = streamUrl + '?t=' + Date.now()
-      audio.play().catch(() => {})
-      startedAtRef.current = Date.now()
-      return
-    }
+  function connectSSE() {
+    if (esRef.current) { esRef.current.close(); esRef.current = null }
+    const es = new EventSource(`${API_BASE}/api/stream/${broadcastId}/live-sse`)
+    esRef.current = es
 
-    audio.play().then(() => {
-      setIsPlaying(true)
-      updateMediaSession(true)
+    es.addEventListener('init', (e: MessageEvent) => {
+      if (initDoneRef.current) return
+      bufQueueRef.current.push(base64ToArrayBuffer(e.data))
+      flushQueue()
+      initDoneRef.current = true
       setStatusText('Live')
-    }).catch(() => {
-      // Autoplay blocked or other error — keep trying
-      if (!userPausedRef.current) {
-        reconnectRef.current = setTimeout(startStream, 2000)
-      }
+      setIsPlaying(true)
+      audioRef.current?.play().catch(() => {})
+    })
+
+    es.addEventListener('cluster', (e: MessageEvent) => {
+      bufQueueRef.current.push(base64ToArrayBuffer(e.data))
+      flushQueue()
+    })
+
+    es.addEventListener('error', () => {
+      console.warn('[SSE] error, reconnecting…')
+      setTimeout(() => { if (runningRef.current) connectSSE() }, 3000)
     })
   }
 
@@ -126,50 +143,40 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
-    startedAtRef.current = Date.now()
+    runningRef.current = true
+    initDoneRef.current = false
+    bufQueueRef.current = []
 
     const audio = new Audio()
     audio.volume = volume / 100
-    audio.src = streamUrl
     audioRef.current = audio
 
-    // Auto-reconnect on error / stall
-    audio.addEventListener('error', () => {
-      console.warn('[AUDIO] error, reconnecting…')
-      if (userPausedRef.current) return
-      reconnectRef.current = setTimeout(() => {
-        if (audioRef.current && !userPausedRef.current) {
-          audioRef.current.src = streamUrl + '?t=' + Date.now()
-          startStream()
-        }
-      }, 3000)
+    const ms = new MediaSource()
+    msRef.current = ms
+    audio.src = URL.createObjectURL(ms)
+
+    ms.addEventListener('sourceopen', () => {
+      if (initDoneRef.current) return
+      const mime = 'audio/webm;codecs=opus'
+      if (!MediaSource.isTypeSupported(mime)) {
+        setStatusText('Browser does not support WebM Opus')
+        return
+      }
+      const sb = ms.addSourceBuffer(mime)
+      sbRef.current = sb
+      sb.addEventListener('updateend', flushQueue)
+      sb.addEventListener('error', (e) => console.warn('[MSE] SB error:', e))
+      connectSSE()
     })
 
-    audio.addEventListener('stalled', () => {
-      console.warn('[AUDIO] stalled, reconnecting…')
-      if (userPausedRef.current) return
-      reconnectRef.current = setTimeout(() => {
-        if (audioRef.current && !userPausedRef.current) {
-          audioRef.current.src = streamUrl + '?t=' + Date.now()
-          startStream()
-        }
-      }, 3000)
-    })
-
-    audio.addEventListener('waiting', () => {
-      setStatusText('Buffering…')
-    })
-
-    audio.addEventListener('playing', () => {
-      setStatusText('Live')
-      setIsPlaying(true)
-      startedAtRef.current = Date.now()
+    ms.addEventListener('error', (e) => {
+      console.warn('[MSE] MediaSource error:', e)
+      setStatusText('Stream error')
     })
 
     setupMediaSession(title || 'Live Broadcast')
     updateMediaSession(true)
 
-    // Analytics
     sessionIdRef.current = Math.random().toString(36).slice(2) + Date.now().toString(36)
     fetch(`${API_BASE}/api/stream/${broadcastId}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -190,8 +197,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       } catch {}
     }, 10000)
 
-    startStream()
-
     try {
       const android = (window as any).AndroidAudio
       if (android && typeof android.startAudioService === 'function') android.startAudioService()
@@ -203,8 +208,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (!audio) return
     if (userPausedRef.current) {
       userPausedRef.current = false
-      audio.src = streamUrl + '?t=' + Date.now()
-      startStream()
+      audio.play().then(() => { setIsPlaying(true); updateMediaSession(true); setStatusText('Live') }).catch(() => {})
     } else {
       userPausedRef.current = true
       audio.pause()
@@ -220,7 +224,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
   useEffect(() => {
     return () => {
-      if (reconnectRef.current) clearTimeout(reconnectRef.current)
+      runningRef.current = false
+      if (esRef.current) { esRef.current.close(); esRef.current = null }
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
       if (sessionIdRef.current) {
@@ -230,6 +235,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }).catch(() => {})
       }
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
+      if (msRef.current && msRef.current.readyState !== 'closed') { try { msRef.current.endOfStream() } catch {} }
       try {
         const android = (window as any).AndroidAudio
         if (android && typeof android.stopAudioService === 'function') android.stopAudioService()

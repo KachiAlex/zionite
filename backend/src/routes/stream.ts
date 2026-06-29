@@ -298,6 +298,52 @@ function extractCluster(buf: Buffer): Buffer {
   return buf // fallback
 }
 
+const SEGMENT_ID = Buffer.from([0x18, 0x53, 0x80, 0x67])
+
+// EBML VINT unknown-size encodings by class
+const UNKNOWN_SIZE: Record<number, Buffer> = {
+  1: Buffer.from([0x7F]),
+  2: Buffer.from([0x7F, 0xFF]),
+  3: Buffer.from([0x3F, 0xFF, 0xFF]),
+  4: Buffer.from([0x1F, 0xFF, 0xFF, 0xFF]),
+  5: Buffer.from([0x0F, 0xFF, 0xFF, 0xFF, 0xFF]),
+  6: Buffer.from([0x07, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+  7: Buffer.from([0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+  8: Buffer.from([0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+}
+
+function vintWidth(firstByte: number): number {
+  if (firstByte >= 0x80) return 1
+  if (firstByte >= 0x40) return 2
+  if (firstByte >= 0x20) return 3
+  if (firstByte >= 0x10) return 4
+  if (firstByte >= 0x08) return 5
+  if (firstByte >= 0x04) return 6
+  if (firstByte >= 0x02) return 7
+  return 8
+}
+
+// Modify init segment so Segment has unknown size (required for MSE streaming)
+function makeStreamingInit(buf: Buffer): Buffer | null {
+  const init = extractInit(buf)
+  if (!init) return null
+  // Find Segment element ID
+  for (let i = 0; i <= init.length - 4; i++) {
+    if (init[i] === SEGMENT_ID[0] && init[i+1] === SEGMENT_ID[1] &&
+        init[i+2] === SEGMENT_ID[2] && init[i+3] === SEGMENT_ID[3]) {
+      const sizeStart = i + 4
+      if (sizeStart >= init.length) break
+      const width = vintWidth(init[sizeStart])
+      const unk = UNKNOWN_SIZE[width]
+      if (!unk) break
+      const before = init.subarray(0, sizeStart)
+      const after = init.subarray(sizeStart + width)
+      return Buffer.concat([before, unk, after])
+    }
+  }
+  return init // fallback: return unmodified
+}
+
 // MSE init segment endpoint
 router.get('/:id/init', async (req: Request, res: Response) => {
   try {
@@ -308,7 +354,7 @@ router.get('/:id/init', async (req: Request, res: Response) => {
     )
     if (!row) { res.status(404).json({ error: 'No stream data' }); return }
     const buf = Buffer.from(row.chunk_data, 'base64')
-    const init = extractInit(buf)
+    const init = makeStreamingInit(buf)
     if (!init) { res.status(404).json({ error: 'Invalid chunk 0' }); return }
     res.setHeader('Content-Type', 'audio/webm;codecs=opus')
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -336,7 +382,7 @@ router.get('/:id/live-sse', async (req: Request, res: Response) => {
     )
     if (!initRow) { res.write('event: error\ndata: no stream\n\n'); res.end(); return }
     const initBuf = Buffer.from(initRow.chunk_data, 'base64')
-    const init = extractInit(initBuf)
+    const init = makeStreamingInit(initBuf)
     if (!init) { res.write('event: error\ndata: invalid init\n\n'); res.end(); return }
     res.write(`event: init\ndata: ${init.toString('base64')}\n\n`)
 
