@@ -115,23 +115,35 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (!ac || !gain) return
 
     try {
-      // Fetch the latest N chunks from backend as a merged WebM blob
-      const fromChunk = lastChunkRef.current < 0 ? 0 : lastChunkRef.current + 1
+      // Start from chunk 1 — chunk 0 (init segment) is stored separately on server
+      // and is always prepended by the /concat endpoint
+      const fromChunk = lastChunkRef.current < 1 ? 1 : lastChunkRef.current + 1
       const url = `${API_BASE}/api/stream/${broadcastId}/concat?from=${fromChunk}`
       const res = await fetch(url, { cache: 'no-store' })
+
+      if (res.status === 404) {
+        // No stream data yet — broadcaster hasn't started or no chunks available
+        setStatusText('Waiting for stream…')
+        schedulePoll()
+        return
+      }
       if (!res.ok) { schedulePoll(); return }
 
       const latestHeader = res.headers.get('X-Latest-Chunk')
       const latestChunk = latestHeader ? parseInt(latestHeader, 10) : -1
+
+      // No new chunks since last poll
       if (latestChunk <= lastChunkRef.current) { schedulePoll(); return }
 
       const arrayBuf = await res.arrayBuffer()
       if (!arrayBuf.byteLength) { schedulePoll(); return }
 
-      const decoded = await ac.decodeAudioData(arrayBuf)
+      const decoded = await ac.decodeAudioData(arrayBuf.slice(0))
 
-      // Schedule after any previously queued audio
+      // Schedule gaplessly after any previously queued audio
       const now = ac.currentTime
+      // If we've fallen behind (gap > 3s), jump to now to avoid huge delay
+      if (nextStartTimeRef.current < now - 3) nextStartTimeRef.current = now
       const startAt = Math.max(now + LOOK_AHEAD_S, nextStartTimeRef.current)
       nextStartTimeRef.current = startAt + decoded.duration
 
@@ -147,8 +159,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       setStatusText('Live')
       setIsPlaying(true)
     } catch (e: any) {
-      // decodeAudioData can fail if we get partial/bad data — just retry
-      console.warn('[STREAM] decode error:', e?.message)
+      // decodeAudioData fails on bad/partial data — just retry, don't crash
+      console.warn('[STREAM] decode error:', (e as Error)?.message)
     }
 
     schedulePoll()

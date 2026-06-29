@@ -32,6 +32,8 @@ function mergeWebMChunks(chunks: Buffer[]): Buffer {
 }
 
 // Upload chunk (broadcaster)
+// chunkIndex=0 is always the WebM init segment (header only, no audio)
+// chunkIndex>0 are WebM Cluster segments (pure audio data)
 router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     await initDb()
@@ -39,9 +41,21 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
     if (typeof chunkData !== 'string' || chunkData.length === 0) {
       res.status(400).json({ error: 'Invalid chunk data' }); return
     }
+
+    // Chunk 0 = init segment (WebM header): store in broadcasts table for fast access
+    if (chunkIndex === 0) {
+      await db.query(
+        `UPDATE broadcasts SET init_segment=$1 WHERE id=$2`,
+        [chunkData, req.params.id]
+      )
+      res.json({ success: true })
+      return
+    }
+
     const chunkId = uuidv4()
     await db.query(
-      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)`,
+      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`,
       [chunkId, req.params.id, chunkIndex, chunkData]
     )
     // Keep last 300 chunks (~10 minutes at 2s interval)
@@ -78,37 +92,58 @@ router.get('/:id/chunk/:index', async (req: Request, res: Response) => {
   }
 })
 
-// Concat endpoint: returns chunks as a single decodable WebM blob
+// Concat endpoint: returns init_segment + requested data chunks as one decodable WebM blob
+// Always prepends the stored init segment so decodeAudioData always works
 router.get('/:id/concat', async (req: Request, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
-    const fromIndex = parseInt(req.query.from as string || '0', 10)
+    const fromIndex = parseInt(req.query.from as string || '1', 10)
 
+    // Fetch the stored init segment
+    const broadcast = await db.get(`SELECT init_segment FROM broadcasts WHERE id=$1`, [id])
+    if (!broadcast?.init_segment) {
+      res.status(404).json({ error: 'No stream data' }); return
+    }
+    const initBuf = Buffer.from(broadcast.init_segment, 'base64')
+
+    // Fetch data chunks from the requested index
     let rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 30`,
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 20`,
       [id, fromIndex]
     )
 
-    // If no new chunks exist for requested fromIndex, fall back to the most recent window
-    // (happens when a listener joins mid-stream with a stale fromIndex)
+    // No new data chunks yet — return just the init segment (client waits for next poll)
     if (!rows.length) {
+      // Also try the latest few so mid-stream listeners get something immediately
       rows = await db.all(
-        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 8`,
+        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 5`,
         [id]
       )
-      if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
-      // Return in ascending order so WebM header comes first
+      if (!rows.length) {
+        res.status(404).json({ error: 'No chunks yet' }); return
+      }
       rows = rows.reverse()
     }
 
-    const chunks: Buffer[] = []
+    // Build: init header + raw cluster data (no mergeWebMChunks needed — clusters are just concatenated)
+    const parts: Buffer[] = [initBuf]
     let latestIndex = -1
     for (const row of rows) {
-      chunks.push(Buffer.from(row.chunk_data, 'base64'))
+      const chunkBuf = Buffer.from(row.chunk_data, 'base64')
+      // Strip any init header from cluster chunks (just in case MediaRecorder included it)
+      let clusterStart = 0
+      for (let j = 0; j <= chunkBuf.length - 4; j++) {
+        if (chunkBuf[j] === CLUSTER_ID[0] && chunkBuf[j+1] === CLUSTER_ID[1] &&
+            chunkBuf[j+2] === CLUSTER_ID[2] && chunkBuf[j+3] === CLUSTER_ID[3]) {
+          clusterStart = j
+          break
+        }
+      }
+      parts.push(chunkBuf.subarray(clusterStart))
       latestIndex = Math.max(latestIndex, row.chunk_index)
     }
-    const combined = mergeWebMChunks(chunks)
+    const combined = Buffer.concat(parts)
 
     res.setHeader('Content-Type', 'audio/webm;codecs=opus')
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
