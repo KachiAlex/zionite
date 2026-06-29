@@ -71,6 +71,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const [volume, setVolume] = useState(80)
   const [showVolume, setShowVolume] = useState(false)
   const [statusText, setStatusText] = useState('Tap to listen')
+  const [debug, setDebug] = useState(false)
+  const [stats, setStats] = useState({ latency: 0, buffer: 0, bitrate: 0 })
 
   const sessionIdRef    = useRef('')
   const heartbeatRef    = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -78,6 +80,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const audioRef        = useRef<HTMLAudioElement | null>(null)
   const hlsRef          = useRef<Hls | null>(null)
   const userPausedRef   = useRef(false)
+  const statsTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
 
@@ -110,9 +113,11 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (Hls.isSupported()) {
       const hls = new Hls({
         lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
+        liveSyncDurationCount: 2,      // Start playing 2 segments from live edge
+        liveMaxLatencyDurationCount: 5,  // If >5 segments behind, snap to live
+        backBufferLength: 15,
+        maxBufferLength: 8,            // Lower buffer = faster startup
+        maxMaxBufferLength: 15,
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)
@@ -127,6 +132,36 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
           setStatusText('Tap play to start')
         })
       })
+
+      // Snap to live edge if we fall too far behind (tab backgrounded, etc)
+      hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+        const d = data.details
+        if (d && d.fragments && d.fragments.length > 0) {
+          const lastFrag = d.fragments[d.fragments.length - 1]
+          const liveEdge = lastFrag ? lastFrag.start + lastFrag.duration : 0
+          if (audio && liveEdge > 0) {
+            const behind = liveEdge - audio.currentTime
+            if (behind > 12 && !audio.paused) {
+              // Snap to near-live edge
+              const target = Math.max(0, liveEdge - 4)
+              console.warn(`[HLS] Snapping to live edge: ${behind.toFixed(1)}s behind → ${target.toFixed(1)}s`)
+              audio.currentTime = target
+            }
+          }
+        }
+      })
+
+      // Stats polling
+      statsTimerRef.current = setInterval(() => {
+        if (!hls || !audio) return
+        const levels = hls.levels[hls.currentLevel]
+        const bitrate = levels?.bitrate ? Math.round(levels.bitrate / 1000) : 0
+        const latency = hls.latency || 0
+        const buffer = audio.buffered.length > 0
+          ? audio.buffered.end(audio.buffered.length - 1) - audio.currentTime
+          : 0
+        setStats({ latency, buffer, bitrate })
+      }, 2000)
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
@@ -212,6 +247,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   useEffect(() => {
     return () => {
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+      if (statsTimerRef.current) clearInterval(statsTimerRef.current)
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
       if (sessionIdRef.current) {
@@ -255,6 +291,9 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
             <Users className="w-3 h-3" /> {listenerCount}
           </span>
           <span className="text-[10px] font-mono text-[#9c958a]">{statusText}</span>
+          <button onClick={() => setDebug(d => !d)} className="text-[9px] font-mono text-[#5a5550] hover:text-[#c9a227] transition-colors" title="Toggle debug stats">
+            {debug ? '×' : '◈'}
+          </button>
         </div>
       </div>
 
@@ -264,7 +303,15 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
           <Headphones className="w-4 h-4" /> Tap to Start Listening
         </button>
       ) : (
-        <div className="flex items-center gap-3">
+        <div>
+          {debug && (
+            <div className="mb-2 flex items-center gap-3 text-[9px] font-mono text-[#5a5550] border-b border-[rgba(243,238,228,0.04)] pb-1.5">
+              <span>LAT {stats.latency.toFixed(1)}s</span>
+              <span>BUF {stats.buffer.toFixed(1)}s</span>
+              <span>{stats.bitrate > 0 ? `${stats.bitrate}kbps` : '---'}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-3">
           <button onClick={togglePlay}
             className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
             style={{ background: isPlaying ? '#c9a227' : '#1c1d24', border: `2px solid ${isPlaying ? '#c9a227' : 'rgba(243,238,228,0.08)'}` }}>
@@ -302,6 +349,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
             >
               <VolumeIcon className="w-3.5 h-3.5" style={{ color: showVolume ? '#c9a227' : '#9c958a' }} />
             </button>
+          </div>
           </div>
         </div>
       )}

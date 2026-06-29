@@ -38,13 +38,10 @@ export function getHlsManifestUrl(broadcastId: string): string | null {
   return `/live/${broadcastId}/stream.m3u8`
 }
 
-export function startHlsBroadcast(broadcastId: string) {
-  if (active.has(broadcastId)) {
-    console.warn(`[HLS] Already active for ${broadcastId}`)
-    return
-  }
+function doStart(blsId: string) {
+  if (active.has(blsId)) return
 
-  const dir = path.join(HLS_ROOT, broadcastId)
+  const dir = path.join(HLS_ROOT, blsId)
   ensureDir(dir)
   const manifest = path.join(dir, 'stream.m3u8')
 
@@ -61,6 +58,9 @@ export function startHlsBroadcast(broadcastId: string) {
     '-f', 'webm',                   // Input is WebM
     '-i', 'pipe:0',                 // Read from stdin
 
+    // Audio normalization
+    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+
     // Audio encoding
     '-c:a', 'aac',
     '-b:a', '128k',
@@ -69,8 +69,8 @@ export function startHlsBroadcast(broadcastId: string) {
 
     // HLS output
     '-f', 'hls',
-    '-hls_time', '4',               // 4-second segments
-    '-hls_list_size', '6',          // Keep 6 segments (~24s window)
+    '-hls_time', '2',               // 2-second segments (lower latency)
+    '-hls_list_size', '12',         // Keep 12 segments (~24s window)
     '-hls_flags', 'delete_segments+append_list+omit_endlist',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
@@ -79,21 +79,37 @@ export function startHlsBroadcast(broadcastId: string) {
 
   ffmpeg.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim()
-    if (msg) console.error(`[FFmpeg ${broadcastId}]`, msg)
+    if (msg) console.error(`[FFmpeg ${blsId}]`, msg)
   })
 
   ffmpeg.on('close', (code) => {
-    console.log(`[FFmpeg ${broadcastId}] exited with code ${code}`)
-    active.delete(broadcastId)
+    console.log(`[FFmpeg ${blsId}] exited with code ${code}`)
+    const s = active.get(blsId)
+    if (s && !s.ended) {
+      console.warn(`[HLS] ${blsId} crashed, restarting…`)
+      active.delete(blsId)
+      doStart(blsId)
+    } else {
+      active.delete(blsId)
+    }
   })
 
   ffmpeg.on('error', (err) => {
-    console.error(`[FFmpeg ${broadcastId}] error:`, err.message)
-    active.delete(broadcastId)
+    console.error(`[FFmpeg ${blsId}] error:`, err.message)
+    active.delete(blsId)
   })
 
-  active.set(broadcastId, { ffmpeg, dir, manifest, ended: false, initSent: false })
-  console.log(`[HLS] Started ${broadcastId} → ${dir}`)
+  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false }
+  active.set(blsId, state)
+  console.log(`[HLS] Started ${blsId} → ${dir}`)
+}
+
+export function startHlsBroadcast(broadcastId: string) {
+  if (active.has(broadcastId)) {
+    console.warn(`[HLS] Already active for ${broadcastId}`)
+    return
+  }
+  doStart(broadcastId)
 }
 
 export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
