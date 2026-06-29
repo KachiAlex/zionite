@@ -103,13 +103,11 @@ async function startFetchLoop(broadcastId: string) {
 
       for (const row of rows) {
         const raw = Buffer.from(row.chunk_data, 'base64')
-        // Chunk 0: send as-is (init + first cluster). Chunks 1+: strip init, keep cluster only.
+        // Chunk 0: skip if already sent init (late joiners got it on connect).
+        // Chunks 1+: strip init, keep cluster only.
         const buf = row.chunk_index === 0 ? raw : extractCluster(raw)
         for (const res of relay.listeners) {
-          // Ensure each listener gets init first
-          if (row.chunk_index > 0 && !relay.initSent.has(res)) {
-            await sendInitToListener(broadcastId, res)
-          }
+          if (row.chunk_index === 0 && relay.initSent.has(res)) continue
           try { res.write(buf) } catch {}
         }
         relay.nextIndex = row.chunk_index + 1
@@ -142,6 +140,9 @@ router.get('/:broadcastId/stream', async (req: Request, res: Response) => {
 
     const relay = getRelay(broadcastId)
     relay.listeners.add(res)
+
+    // Send init segment to this listener immediately so they're ready for clusters
+    sendInitToListener(broadcastId, res)
 
     // Start fetch loop on first listener
     if (relay.listeners.size === 1) {
