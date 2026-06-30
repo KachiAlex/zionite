@@ -1107,7 +1107,7 @@ app.get('/relay/:broadcastId/stream', async (req, res) => {
           res.end()
           return
         }
-        const rows = await dbQuery<{ chunk_index: number; chunk_data: string }>(
+        const rows = await dbQuery(
           'SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id = $1 AND chunk_index >= $2 ORDER BY chunk_index ASC LIMIT 30',
           [broadcastId, nextIndex]
         )

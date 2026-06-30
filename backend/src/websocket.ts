@@ -3,7 +3,7 @@ import { Server as SocketIOServer } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import { JWT_SECRET } from './middleware/auth.js'
 import { db, initDb } from './db.js'
-import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast } from './hls.js'
+import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive } from './hls.js'
 
 let io: SocketIOServer | null = null
 
@@ -97,8 +97,8 @@ export function initWebSocket(httpServer: HttpServer) {
         )
         // Relay to all listeners in real-time
         io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })
-        // Feed HLS encoder
-        startHlsBroadcast(broadcastId)
+        // Feed HLS encoder (start only if not already active — avoids restart loop)
+        if (!isHlsActive(broadcastId)) startHlsBroadcast(broadcastId)
         feedHlsChunk(broadcastId, chunkData)
       } catch (err: any) {
         console.error('[WS] broadcast_chunk error:', err.message)
