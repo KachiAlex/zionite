@@ -13,7 +13,7 @@ import RadioStudio from '../broadcast/RadioStudio'
 interface Broadcast {
   id: string
   title: string
-  status: 'scheduled' | 'live' | 'ended'
+  status: 'scheduled' | 'live' | 'paused' | 'ended'
   started_at?: string
   created_at: string
   description?: string
@@ -308,6 +308,18 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
             <div className="px-4 py-3 border-t border-[rgba(243,238,228,0.06)] flex gap-2 flex-shrink-0">
               <button onClick={() => { closeBroadcastDetail(); openStudio(b) }}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-[#4ade80]/10 hover:bg-[#4ade80]/20 text-[#4ade80] text-[11px] font-medium py-2 rounded-lg transition-colors">
+                <Monitor className="w-3.5 h-3.5" /> Open Studio
+              </button>
+              <button onClick={() => { closeBroadcastDetail(); stopBroadcast() }} disabled={actionLoading}
+                className="flex items-center justify-center gap-1.5 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] text-[11px] font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+                <Square className="w-3.5 h-3.5" /> End
+              </button>
+            </div>
+          )}
+          {b.status === 'paused' && (
+            <div className="px-4 py-3 border-t border-[rgba(243,238,228,0.06)] flex gap-2 flex-shrink-0">
+              <button onClick={() => { closeBroadcastDetail(); openStudio(b) }}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-[#eab308]/10 hover:bg-[#eab308]/20 text-[#eab308] text-[11px] font-medium py-2 rounded-lg transition-colors">
                 <Monitor className="w-3.5 h-3.5" /> Open Studio
               </button>
               <button onClick={() => { closeBroadcastDetail(); stopBroadcast() }} disabled={actionLoading}

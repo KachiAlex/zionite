@@ -12,6 +12,7 @@ interface BroadcastHls {
   manifest: string
   ended: boolean
   initSent: boolean
+  chunksReceived: boolean
 }
 
 const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
@@ -97,15 +98,38 @@ function doStart(blsId: string) {
     active.delete(blsId)
   })
 
-  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false }
+  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false, chunksReceived: false }
   active.set(blsId, state)
   console.log(`[HLS] Started ${blsId} → ${dir}`)
 }
 
+function forceStop(blsId: string) {
+  const hls = active.get(blsId)
+  if (!hls) return
+  hls.ended = true
+  try {
+    hls.ffmpeg.stdin?.end()
+    if (!hls.ffmpeg.killed) hls.ffmpeg.kill('SIGKILL')
+  } catch {}
+  active.delete(blsId)
+  // Clean old files so listeners get fresh manifest
+  try {
+    for (const f of fs.readdirSync(hls.dir)) fs.unlinkSync(path.join(hls.dir, f))
+  } catch {}
+}
+
 export function startHlsBroadcast(broadcastId: string) {
-  if (active.has(broadcastId)) {
-    console.warn(`[HLS] Already active for ${broadcastId}`)
-    return
+  const existing = active.get(broadcastId)
+  if (existing) {
+    if (existing.chunksReceived) {
+      // Broadcaster refreshed/reconnected — restart for fresh MediaRecorder timeline
+      console.warn(`[HLS] Restarting ${broadcastId} for broadcaster reconnect`)
+      forceStop(broadcastId)
+    } else {
+      // First start, still waiting for first chunk — don't duplicate
+      console.warn(`[HLS] Already active for ${broadcastId}, waiting for first chunk`)
+      return
+    }
   }
   doStart(broadcastId)
 }
@@ -114,6 +138,7 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
   const hls = active.get(broadcastId)
   if (!hls || hls.ended) return
   try {
+    hls.chunksReceived = true
     const buf = Buffer.from(base64Chunk, 'base64')
     // FFmpeg expects a continuous WebM stream. Self-contained chunks
     // from MediaRecorder each have their own EBML+Segment+Tracks init.
