@@ -13,6 +13,8 @@ interface BroadcastHls {
   ended: boolean
   initSent: boolean
   chunksReceived: boolean
+  lastChunkAt: number
+  timeoutRef: NodeJS.Timeout | null
 }
 
 const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
@@ -164,8 +166,20 @@ function doStart(blsId: string) {
     active.delete(blsId)
   })
 
-  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false, chunksReceived: false }
+  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false, chunksReceived: false, lastChunkAt: Date.now(), timeoutRef: null }
   active.set(blsId, state)
+
+  // Auto-stop if broadcaster goes silent for 60s (disconnect / crash)
+  state.timeoutRef = setInterval(() => {
+    const s = active.get(blsId)
+    if (!s || s.ended) { clearInterval(state.timeoutRef!); return }
+    if (Date.now() - s.lastChunkAt > 60000) {
+      console.warn(`[HLS] ${blsId} idle timeout — no chunks for 60s, stopping FFmpeg`)
+      clearInterval(state.timeoutRef!)
+      forceStop(blsId)
+    }
+  }, 5000)
+
   console.log(`[HLS] Started ${blsId} → ${dir}`)
 }
 
@@ -173,6 +187,7 @@ function forceStop(blsId: string) {
   const hls = active.get(blsId)
   if (!hls) return
   hls.ended = true
+  if (hls.timeoutRef) { clearInterval(hls.timeoutRef); hls.timeoutRef = null }
   try {
     hls.ffmpeg.stdin?.end()
     if (!hls.ffmpeg.killed) hls.ffmpeg.kill('SIGKILL')
@@ -209,6 +224,7 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
   }
   try {
     hls.chunksReceived = true
+    hls.lastChunkAt = Date.now()
     const buf = Buffer.from(base64Chunk, 'base64')
     // FFmpeg expects a continuous WebM stream. Self-contained chunks
     // from MediaRecorder each have their own EBML+Segment+Tracks init.

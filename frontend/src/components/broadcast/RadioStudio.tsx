@@ -244,7 +244,15 @@ export default function RadioStudio({
   useEffect(() => {
     shouldRecordRef.current = isLive
     if (shouldRecordRef.current) { startStreaming() } else { stopStreaming() }
-    return () => { void stopStreaming() }
+    // On unmount/refresh: only disconnect socket, do NOT stop FFmpeg so listeners aren't interrupted
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+        socketRef.current = null
+      }
+      teardownMixer()
+      shouldRecordRef.current = false
+    }
   }, [isLive, activeDeviceId, broadcastId])
 
   // Start/stop mix monitor when broadcaster toggles it during live broadcast

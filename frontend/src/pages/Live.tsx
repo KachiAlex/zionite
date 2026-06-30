@@ -83,6 +83,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const statsTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function updateMediaSession(playing: boolean) {
     if (!('mediaSession' in navigator)) return
@@ -101,14 +103,55 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     navigator.mediaSession.setActionHandler('pause', () => { userPausedRef.current = true; audioRef.current?.pause(); setIsPlaying(false); updateMediaSession(false); setStatusText('Paused') })
   }
 
+  function cleanup() {
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+    if (statsTimerRef.current) { clearInterval(statsTimerRef.current); statsTimerRef.current = null }
+    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+    if (infoIntervalRef.current) { clearInterval(infoIntervalRef.current); infoIntervalRef.current = null }
+    if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+    if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
+    try {
+      const android = (window as any).AndroidAudio
+      if (android && typeof android.stopAudioService === 'function') android.stopAudioService()
+    } catch {}
+  }
+
   function handleStart() {
+    cleanup()
+    // Clear any previous retry polling
+    if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
 
+    // Connection timeout: if manifest never parses, broadcaster may be offline
+    connectionTimeoutRef.current = setTimeout(() => {
+      console.warn('[HLS] Connection timeout — broadcaster offline?')
+      cleanup()
+      setStarted(false)
+      setStatusText('Broadcaster offline')
+      // Start polling to auto-reconnect when broadcaster returns
+      startRetryPoll()
+    }, 15000)
+
     const audio = new Audio()
     audio.volume = volume / 100
     audioRef.current = audio
+
+    // Detect unexpected stalls / errors on the audio element
+    audio.addEventListener('stalled', () => {
+      console.warn('[Audio] stalled')
+    })
+    audio.addEventListener('error', (e) => {
+      console.error('[Audio] error:', (e.target as HTMLAudioElement).error)
+    })
+    audio.addEventListener('ended', () => {
+      console.warn('[Audio] ended — live stream should not end, restarting…')
+      cleanup()
+      setStarted(false)
+      startRetryPoll()
+    })
 
     if (Hls.isSupported()) {
       const hls = new Hls({
@@ -135,6 +178,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       })
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+        if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
         console.log('[HLS] Manifest parsed, levels:', data.levels?.length)
         audio.play().then(() => {
           setIsPlaying(true)
@@ -209,8 +254,14 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
               break
             default:
               console.error('[HLS] Fatal error, destroying player')
-              hls.destroy()
+              if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+              cleanup()
               setStatusText('Stream error')
+              setTimeout(() => {
+                setStarted(false)
+                setStatusText('Tap to listen')
+                startRetryPoll()
+              }, 2000)
           }
         }
       })
@@ -273,28 +324,55 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     }
   }
 
+  function startRetryPoll() {
+    if (retryPollRef.current) return
+    retryPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/hls-status`, { method: 'GET' })
+        if (!res.ok) return
+        const status = await res.json()
+        if (status.hlsActive) {
+          console.log('[HLS] Broadcaster back online — auto-reconnecting')
+          clearInterval(retryPollRef.current!)
+          retryPollRef.current = null
+          handleStart()
+        }
+      } catch {}
+    }, 5000)
+  }
+
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100
   }, [volume])
 
+  // Restart stream when tab returns to foreground (mobile browsers suspend background tabs)
+  useEffect(() => {
+    function handleVisibility() {
+      if (!document.hidden && started && !userPausedRef.current && audioRef.current?.paused) {
+        console.warn('[HLS] Tab visible but audio paused — attempting resume')
+        audioRef.current?.play().catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [started])
+
   useEffect(() => {
     return () => {
-      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
-      if (statsTimerRef.current) clearInterval(statsTimerRef.current)
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current)
-      if (infoIntervalRef.current) clearInterval(infoIntervalRef.current)
+      cleanup()
       if (sessionIdRef.current) {
         fetch(`${STREAM_BASE}/api/stream/${broadcastId}/leave`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sessionIdRef.current })
         }).catch(() => {})
       }
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
-      try {
-        const android = (window as any).AndroidAudio
-        if (android && typeof android.stopAudioService === 'function') android.stopAudioService()
-      } catch {}
     }
+  }, [broadcastId])
+
+  // Auto-start polling if broadcast is live but stream not active on mount
+  useEffect(() => {
+    startRetryPoll()
+    return () => { if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null } }
   }, [broadcastId])
 
   const VolumeIcon = volume === 0 ? VolumeX : volume > 50 ? Volume2 : Volume1
