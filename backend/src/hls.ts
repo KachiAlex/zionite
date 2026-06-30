@@ -135,8 +135,20 @@ function doStart(blsId: string) {
     if (msg) console.error(`[FFmpeg ${blsId}]`, msg)
   })
 
+  ffmpeg.stdout?.on('data', (data: Buffer) => {
+    const msg = data.toString().trim()
+    if (msg) console.log(`[FFmpeg ${blsId} stdout]`, msg)
+  })
+
   ffmpeg.on('close', (code) => {
     console.log(`[FFmpeg ${blsId}] exited with code ${code}`)
+    // Log directory state on exit for debugging
+    try {
+      const files = fs.readdirSync(dir)
+      console.log(`[HLS] ${blsId} dir state on exit:`, files)
+    } catch (e: any) {
+      console.log(`[HLS] ${blsId} dir read error on exit:`, e.message)
+    }
     const s = active.get(blsId)
     if (s && !s.ended) {
       console.warn(`[HLS] ${blsId} crashed, restarting…`)
@@ -173,6 +185,7 @@ function forceStop(blsId: string) {
 }
 
 export function startHlsBroadcast(broadcastId: string) {
+  console.log(`[HLS] startHlsBroadcast called for ${broadcastId}`)
   const existing = active.get(broadcastId)
   if (existing) {
     if (existing.chunksReceived) {
@@ -190,7 +203,10 @@ export function startHlsBroadcast(broadcastId: string) {
 
 export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
   const hls = active.get(broadcastId)
-  if (!hls || hls.ended) return
+  if (!hls || hls.ended) {
+    console.log(`[HLS] feedHlsChunk skipped for ${broadcastId}: active=${!!hls} ended=${hls?.ended}`)
+    return
+  }
   try {
     hls.chunksReceived = true
     const buf = Buffer.from(base64Chunk, 'base64')
@@ -208,11 +224,24 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
         data = buf // fallback
       }
       hls.initSent = true
+      console.log(`[HLS] ${broadcastId} first chunk fed (init+cluster, ${data.length} bytes)`)
     } else {
       data = extractCluster(buf)
     }
     if (hls.ffmpeg.stdin?.writable) {
       hls.ffmpeg.stdin.write(data)
+      console.log(`[HLS] ${broadcastId} fed chunk: ${data.length} bytes (initSent=${hls.initSent})`)
+      // Periodically log directory contents so we can see if files are being created
+      if (Math.random() < 0.05) { // ~5% of chunks
+        try {
+          const files = fs.readdirSync(hls.dir)
+          console.log(`[HLS] ${broadcastId} dir contents:`, files)
+        } catch (e: any) {
+          console.log(`[HLS] ${broadcastId} dir read error:`, e.message)
+        }
+      }
+    } else {
+      console.warn(`[HLS] ${broadcastId} stdin not writable, dropping ${data.length} bytes`)
     }
   } catch (err: any) {
     console.error(`[HLS] feed error ${broadcastId}:`, err.message)

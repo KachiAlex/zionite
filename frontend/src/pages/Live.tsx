@@ -126,7 +126,16 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       hls.loadSource(hlsUrl)
       hls.attachMedia(audio)
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.on(Hls.Events.MANIFEST_LOADING, (_event, data) => {
+        console.log('[HLS] Manifest loading:', data.url)
+      })
+
+      hls.on(Hls.Events.MANIFEST_LOADED, (_event, data) => {
+        console.log('[HLS] Manifest loaded:', data.url, 'levels:', data.levels?.length)
+      })
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        console.log('[HLS] Manifest parsed, levels:', data.levels?.length)
         audio.play().then(() => {
           setIsPlaying(true)
           setStatusText('Live')
@@ -146,6 +155,14 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
             audio.play().catch(() => {})
           }
         }
+      })
+
+      hls.on(Hls.Events.LEVEL_LOADING, (_event, data) => {
+        console.log('[HLS] Level loading:', data.url)
+      })
+
+      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+        console.log('[HLS] Level loaded, fragments:', data.details?.fragments?.length)
       })
 
       // Snap to live edge if we fall too far behind (tab backgrounded, etc)
@@ -179,18 +196,19 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       }, 2000)
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('[HLS] Error:', data.type, data.details, data.fatal ? 'FATAL' : 'recoverable', data.response?.code, data.response?.text)
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.warn('[HLS] Network error — retrying…')
+              console.warn('[HLS] Fatal network error — retrying…')
               hls.startLoad()
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.warn('[HLS] Media error — recovering…')
+              console.warn('[HLS] Fatal media error — recovering…')
               hls.recoverMediaError()
               break
             default:
-              console.error('[HLS] Fatal error')
+              console.error('[HLS] Fatal error, destroying player')
               hls.destroy()
               setStatusText('Stream error')
           }

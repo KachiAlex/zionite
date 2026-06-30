@@ -90,7 +90,10 @@ app.use('/push', pushRoutes)
 // HLS live stream serving
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'
 app.use('/live', (req: Request, res: Response, next: NextFunction) => {
-  const filePath = path.join(HLS_ROOT, req.path)
+  // req.path starts with '/' (e.g. '/abc123/stream.m3u8'); strip it so path.join works
+  const relativePath = req.path.replace(/^\//, '')
+  const filePath = path.join(HLS_ROOT, relativePath)
+  console.log(`[HLS] serve ${req.path} → ${filePath} (exists=${fs.existsSync(filePath)})`)
   if (!filePath.startsWith(HLS_ROOT)) { res.status(403).end(); return }
   if (!fs.existsSync(filePath)) { res.status(404).end(); return }
 

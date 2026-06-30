@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { EventEmitter } from 'events'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
-import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive, getHlsManifestUrl } from '../hls.js'
+import fs from 'fs'
+import path from 'path'
+import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive, getHlsManifestUrl, getHlsDir } from '../hls.js'
 
 const router = Router()
 const liveEmitter = new EventEmitter()
@@ -456,6 +458,39 @@ router.get('/:id/listeners/geo', authenticateToken, requireRole('admin'), async 
       [req.params.id])
     res.json({ locations: rows, byCountry })
   } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// HLS diagnostics — exposes manifest, segment list, and ffmpeg state for a broadcast
+router.get('/:id/hls-status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const hlsDir = getHlsDir(id)
+    const active = isHlsActive(id)
+    const manifestUrl = getHlsManifestUrl(id)
+
+    let files: string[] = []
+    let manifestContent: string | null = null
+    if (hlsDir && fs.existsSync(hlsDir)) {
+      files = fs.readdirSync(hlsDir)
+      const manifestPath = path.join(hlsDir, 'stream.m3u8')
+      if (fs.existsSync(manifestPath)) {
+        manifestContent = fs.readFileSync(manifestPath, 'utf-8')
+      }
+    }
+
+    res.json({
+      broadcastId: id,
+      hlsActive: active,
+      hlsDir,
+      manifestUrl,
+      files,
+      manifestContent,
+      timestamp: new Date().toISOString()
+    })
+  } catch (err: any) {
+    console.error('[Stream] hls-status error:', err.message)
     res.status(500).json({ error: err.message })
   }
 })
