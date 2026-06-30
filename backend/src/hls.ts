@@ -16,6 +16,40 @@ interface BroadcastHls {
 }
 
 const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
+const SEGMENT_ID = Buffer.from([0x18, 0x53, 0x80, 0x67])
+
+// EBML VINT unknown-size encodings by class
+const UNKNOWN_SIZE: Record<number, Buffer> = {
+  1: Buffer.from([0x7F]),
+  2: Buffer.from([0x7F, 0xFF]),
+  3: Buffer.from([0x3F, 0xFF, 0xFF]),
+  4: Buffer.from([0x1F, 0xFF, 0xFF, 0xFF]),
+  5: Buffer.from([0x0F, 0xFF, 0xFF, 0xFF, 0xFF]),
+  6: Buffer.from([0x07, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+  7: Buffer.from([0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+  8: Buffer.from([0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+}
+
+function vintWidth(firstByte: number): number {
+  if (firstByte >= 0x80) return 1
+  if (firstByte >= 0x40) return 2
+  if (firstByte >= 0x20) return 3
+  if (firstByte >= 0x10) return 4
+  if (firstByte >= 0x08) return 5
+  if (firstByte >= 0x04) return 6
+  if (firstByte >= 0x02) return 7
+  return 8
+}
+
+function extractInit(buf: Buffer): Buffer | null {
+  for (let j = 0; j <= buf.length - 4; j++) {
+    if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
+        buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
+      return buf.subarray(0, j)
+    }
+  }
+  return null
+}
 
 function extractCluster(buf: Buffer): Buffer {
   for (let j = 0; j <= buf.length - 4; j++) {
@@ -25,6 +59,26 @@ function extractCluster(buf: Buffer): Buffer {
     }
   }
   return buf // fallback
+}
+
+// Modify init segment so Segment has unknown size (required for streaming via pipe)
+function makeStreamingInit(buf: Buffer): Buffer | null {
+  const init = extractInit(buf)
+  if (!init) return null
+  for (let i = 0; i <= init.length - 4; i++) {
+    if (init[i] === SEGMENT_ID[0] && init[i+1] === SEGMENT_ID[1] &&
+        init[i+2] === SEGMENT_ID[2] && init[i+3] === SEGMENT_ID[3]) {
+      const sizeStart = i + 4
+      if (sizeStart >= init.length) break
+      const width = vintWidth(init[sizeStart])
+      const unk = UNKNOWN_SIZE[width]
+      if (!unk) break
+      const before = init.subarray(0, sizeStart)
+      const after = init.subarray(sizeStart + width)
+      return Buffer.concat([before, unk, after])
+    }
+  }
+  return init // fallback
 }
 
 const active = new Map<string, BroadcastHls>()
@@ -142,9 +196,21 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
     const buf = Buffer.from(base64Chunk, 'base64')
     // FFmpeg expects a continuous WebM stream. Self-contained chunks
     // from MediaRecorder each have their own EBML+Segment+Tracks init.
-    // Feed the full first chunk (contains init), then only cluster data.
-    const data = hls.initSent ? extractCluster(buf) : buf
-    hls.initSent = true
+    // Feed the full first chunk with Segment size set to unknown so FFmpeg
+    // keeps reading clusters indefinitely. Subsequent chunks are stripped.
+    let data: Buffer
+    if (!hls.initSent) {
+      const init = makeStreamingInit(buf)
+      if (init) {
+        const cluster = extractCluster(buf)
+        data = Buffer.concat([init, cluster])
+      } else {
+        data = buf // fallback
+      }
+      hls.initSent = true
+    } else {
+      data = extractCluster(buf)
+    }
     if (hls.ffmpeg.stdin?.writable) {
       hls.ffmpeg.stdin.write(data)
     }
