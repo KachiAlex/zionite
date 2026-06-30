@@ -112,9 +112,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        lowLatencyMode: true,
-        liveSyncDuration: 2,           // Start after ~2s buffered (1 segment)
-        liveMaxLatencyDuration: 10,    // Snap to live if >10s behind
+        liveSyncDurationCount: 1,      // Start 1 segment behind live edge
+        liveMaxLatencyDurationCount: 5, // Snap if >5 segments behind
         backBufferLength: 10,
         maxBufferLength: 6,
         maxMaxBufferLength: 10,
@@ -131,6 +130,18 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }).catch(() => {
           setStatusText('Tap play to start')
         })
+      })
+
+      // First fragment buffered = audio is truly ready
+      let firstFrag = true
+      hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+        if (firstFrag && data.frag.type === 'main') {
+          firstFrag = false
+          console.log('[HLS] First fragment buffered, latency:', hls.latency?.toFixed(2))
+          if (audio.paused) {
+            audio.play().catch(() => {})
+          }
+        }
       })
 
       // Snap to live edge if we fall too far behind (tab backgrounded, etc)
