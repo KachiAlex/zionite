@@ -121,8 +121,8 @@ function doStart(blsId: string) {
 
     // HLS output
     '-f', 'hls',
-    '-hls_time', '1',               // 1-second segments = faster first download
-    '-hls_init_time', '0.5',        // First segment at 0.5s for near-instant manifest
+    '-hls_time', '2',               // 2-second segments (matches MediaRecorder chunk interval)
+    '-hls_init_time', '1',        // First segment after 1s for quick startup
     '-hls_list_size', '24',         // Keep 24 segments (~24s window)
     '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
     '-hls_segment_type', 'mpegts',
