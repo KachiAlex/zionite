@@ -112,11 +112,15 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        liveSyncDurationCount: 1,      // Start 1 segment behind live edge
+        liveSyncDurationCount: 1,       // Start 1 segment behind live edge
         liveMaxLatencyDurationCount: 5, // Snap if >5 segments behind
         backBufferLength: 10,
         maxBufferLength: 6,
         maxMaxBufferLength: 10,
+        manifestLoadingRetryDelay: 500,
+        manifestLoadingMaxRetry: 20,
+        levelLoadingRetryDelay: 500,
+        levelLoadingMaxRetry: 20,
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)

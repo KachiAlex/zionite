@@ -105,6 +105,10 @@ export function initWebSocket(httpServer: HttpServer) {
       }
     })
 
+    socket.on('start_broadcast_hls', (broadcastId: string) => {
+      startHlsBroadcast(broadcastId)
+    })
+
     socket.on('end_broadcast_hls', (broadcastId: string) => {
       stopHlsBroadcast(broadcastId)
     })

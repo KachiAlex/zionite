@@ -389,7 +389,12 @@ export default function RadioStudio({
       // Connect socket for real-time chunk relay
       const socket = io(SOCKET_BASE, { path: '/socket.io', transports: ['websocket', 'polling'] })
       socketRef.current = socket
-      socket.on('connect', () => { if (broadcastId) socket.emit('join_broadcast', broadcastId) })
+      socket.on('connect', () => {
+        if (broadcastId) {
+          socket.emit('join_broadcast', broadcastId)
+          socket.emit('start_broadcast_hls', broadcastId) // Pre-start FFmpeg before first chunk
+        }
+      })
 
       const deviceId = activeDeviceIdRef.current
       const rawMicStream = await navigator.mediaDevices.getUserMedia({
