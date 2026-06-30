@@ -58,9 +58,6 @@ function doStart(blsId: string) {
     '-f', 'webm',                   // Input is WebM
     '-i', 'pipe:0',                 // Read from stdin
 
-    // Audio normalization
-    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-
     // Audio encoding
     '-c:a', 'aac',
     '-b:a', '128k',
@@ -70,6 +67,7 @@ function doStart(blsId: string) {
     // HLS output
     '-f', 'hls',
     '-hls_time', '2',               // 2-second segments (lower latency)
+    '-hls_init_time', '1',          // First segment ~1s for faster startup
     '-hls_list_size', '12',         // Keep 12 segments (~24s window)
     '-hls_flags', 'delete_segments+append_list+omit_endlist',
     '-hls_segment_type', 'mpegts',
