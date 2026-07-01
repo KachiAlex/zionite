@@ -26,7 +26,9 @@ export async function runMigrations() {
 
     console.log(`[MIGRATION] applying ${name}...`)
     const sql = readFileSync(join(migrationDir, file), 'utf-8')
-    const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0 && !s.startsWith('--'))
+    // Strip single-line and block comments before splitting
+    const cleanSql = sql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    const statements = cleanSql.split(';').map(s => s.trim()).filter(s => s.length > 0)
 
     for (const stmt of statements) {
       try {
