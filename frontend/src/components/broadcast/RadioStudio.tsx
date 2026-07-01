@@ -329,18 +329,24 @@ export default function RadioStudio({
   }
 
   /* ── Mixer helpers ── */
-  function createNoiseGate(ctx: AudioContext, threshold = 0.003): ScriptProcessorNode {
+  function createNoiseGate(ctx: AudioContext, openThreshold = 0.005, closeThreshold = 0.0015): ScriptProcessorNode {
     const gate = ctx.createScriptProcessor(4096, 1, 1)
     let envelope = 0
-    const attack = 0.02
-    const release = 0.15
+    let gain = 0
+    const attack = 0.01
+    const release = 0.35
     gate.onaudioprocess = (e) => {
       const input = e.inputBuffer.getChannelData(0)
       const output = e.outputBuffer.getChannelData(0)
       for (let i = 0; i < input.length; i++) {
         const abs = Math.abs(input[i])
+        // Smooth envelope follower
         envelope = abs > envelope ? abs * attack + envelope * (1 - attack) : abs * release + envelope * (1 - release)
-        output[i] = envelope < threshold ? 0 : input[i]
+        // Hysteresis: open gate when loud enough, close only when much quieter
+        if (envelope > openThreshold) gain = 1
+        else if (envelope < closeThreshold) gain = 0
+        // Smooth gain transitions to avoid clicks/pops
+        output[i] = input[i] * gain
       }
     }
     return gate
@@ -355,20 +361,23 @@ export default function RadioStudio({
     const dest = ctx.createMediaStreamDestination()
     mixerDestRef.current = dest
 
-    // Mic chain: gain -> highpass (rumble) -> noise gate -> compressor -> mix
+    // Mic chain: gain -> highpass (rumble) -> lowpass (hiss) -> noise gate -> compressor -> mix
     const micG = ctx.createGain()
     micG.gain.value = micGain / 100
     const micHp = ctx.createBiquadFilter()
     micHp.type = 'highpass'
-    micHp.frequency.value = 120
-    const micGate = createNoiseGate(ctx, 0.003)
+    micHp.frequency.value = 100
+    const micLp = ctx.createBiquadFilter()
+    micLp.type = 'lowpass'
+    micLp.frequency.value = 8000
+    const micGate = createNoiseGate(ctx, 0.005, 0.0015)
     const micComp = ctx.createDynamicsCompressor()
     micComp.threshold.value = -24
     micComp.knee.value = 12
     micComp.ratio.value = 12
     micComp.attack.value = 0.003
     micComp.release.value = 0.25
-    micG.connect(micHp).connect(micGate).connect(micComp).connect(dest)
+    micG.connect(micHp).connect(micLp).connect(micGate).connect(micComp).connect(dest)
     micGainNodeRef.current = micG
     micHighpassRef.current = micHp
     micNoiseGateRef.current = micGate
