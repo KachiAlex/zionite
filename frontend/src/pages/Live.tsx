@@ -141,7 +141,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       setStatusText('Broadcaster offline')
       // Start polling to auto-reconnect when broadcaster returns
       startRetryPoll()
-    }, 15000)
+    }, 30000)
 
     const audio = new Audio()
     audio.volume = volume / 100
@@ -201,6 +201,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       // First fragment buffered = audio is truly ready
       let firstFrag = true
       hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+        if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
         if (firstFrag && data.frag.type === 'main') {
           firstFrag = false
           console.log('[HLS] First fragment buffered, latency:', hls.latency?.toFixed(2))
@@ -375,7 +376,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
           cleanup()
           setStarted(false)
           setStatusText('Reconnecting…')
-          setTimeout(() => handleStart(), 500)
+          setTimeout(() => handleStart(), 1500)
         }
       } else {
         if (stallCountRef.current > 0) {
