@@ -109,6 +109,41 @@ export function useDonations() {
   }})
 }
 
+export function usePlaylists() {
+  return useQuery({ queryKey: ['playlists'], queryFn: async () => {
+    const { data } = await api.get('/playlists')
+    return data.playlists as any[]
+  }})
+}
+
+export function usePlaylist(id: string) {
+  return useQuery({ queryKey: ['playlists', id], queryFn: async () => {
+    const { data } = await api.get(`/playlists/${id}`)
+    return data as { playlist: any; items: any[] }
+  }, enabled: !!id })
+}
+
+export function useRadioSchedules() {
+  return useQuery({ queryKey: ['radio-schedules'], queryFn: async () => {
+    const { data } = await api.get('/radio-schedules')
+    return data.schedules as any[]
+  }})
+}
+
+export function useActiveRadioSchedule() {
+  return useQuery({ queryKey: ['radio-schedules', 'active'], queryFn: async () => {
+    const { data } = await api.get('/radio-schedules/active')
+    return data.schedule as any | null
+  }})
+}
+
+export function useRadioCurrent() {
+  return useQuery({ queryKey: ['sermons', 'radio', 'current'], queryFn: async () => {
+    const { data } = await api.get('/sermons/radio/current')
+    return data as any
+  }, refetchInterval: 10000 })
+}
+
 export function useUsers() {
   return useQuery<User[]>({ queryKey: ['users'], queryFn: async () => {
     const { data } = await api.get('/auth/users')

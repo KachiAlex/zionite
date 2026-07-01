@@ -21,10 +21,11 @@ const PrayerManager = lazy(() => import('../components/admin/PrayerManager'))
 const TestimonyManager = lazy(() => import('../components/admin/TestimonyManager'))
 const EventManager = lazy(() => import('../components/admin/EventManager'))
 const DailyVerseManager = lazy(() => import('../components/admin/DailyVerseManager'))
+const SermonRadioManager = lazy(() => import('../components/admin/SermonRadioManager'))
 
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
 
-type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse'
+type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse' | 'radio'
 
 function formatDuration(totalSeconds: number) {
   const h = Math.floor(totalSeconds / 3600)
@@ -195,6 +196,7 @@ export default function AdminDashboard() {
       <SB label="Testimonies" tab="testimonies" icon={Sparkles}/>
       <SL t="Broadcast Management"/>
       <SB label="Live Broadcast" tab="broadcasts" icon={Radio}/>
+      <SB label="Sermon Radio" tab="radio" icon={Headphones}/>
       <SB label="Auto DJ" tab="music" icon={Music}/>
       <SB label="Stream Analytics" tab="dashboard" icon={BarChart3}/>
       <SL t="Community"/>
@@ -591,6 +593,13 @@ export default function AdminDashboard() {
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Daily Word — Push Notifications</h2></div>
               <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
                 <DailyVerseManager/>
+              </Suspense>
+            </div>
+          ):activeTab==='radio'?(
+            <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
+              <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Sermon Radio</h2></div>
+              <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+                <SermonRadioManager onRefresh={refresh}/>
               </Suspense>
             </div>
           ):null}

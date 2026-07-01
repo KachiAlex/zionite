@@ -22,6 +22,9 @@ import searchRoutes from './routes/search.js'
 import relayRoutes from './routes/relay.js'
 import streamRoutes from './routes/stream.js'
 import pushRoutes from './routes/push.js'
+import radioRoutes from './routes/radio.js'
+import radioScheduleRoutes from './routes/radio-schedules.js'
+import playlistRoutes from './routes/playlists.js'
 import { cacheMiddleware } from './middleware/cache.js'
 
 // Sentry init
@@ -86,6 +89,9 @@ app.use('/search', cacheMiddleware(30000), searchRoutes)
 app.use('/relay', relayRoutes)
 app.use('/stream', streamRoutes)
 app.use('/push', pushRoutes)
+app.use('/radio', radioRoutes)
+app.use('/radio-schedules', radioScheduleRoutes)
+app.use('/playlists', playlistRoutes)
 
 // HLS live stream serving
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'

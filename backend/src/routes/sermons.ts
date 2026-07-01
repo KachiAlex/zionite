@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { getRadioStatus } from '../sermon-radio.js'
 
 const router = Router()
 
@@ -123,6 +124,82 @@ router.post('/:id/transcript', authenticateToken, requireRole('admin'), async (r
     res.json({ transcript: row })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+router.get('/radio/current', async (_req, res) => {
+  try {
+    await initDb()
+    const now = new Date()
+    const schedule = await db.get(
+      `SELECT rs.*, p.title as playlist_title
+       FROM radio_schedules rs
+       JOIN playlists p ON p.id = rs.playlist_id
+       WHERE rs.is_active = TRUE AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
+       ORDER BY rs.start_time DESC LIMIT 1`,
+      [now.toISOString()]
+    )
+    if (!schedule) {
+      const latest = await db.get('SELECT * FROM sermons ORDER BY date DESC LIMIT 1')
+      const stream = getRadioStatus()
+      res.json({
+        current: latest ? { title: latest.title, speaker: latest.speaker, audioUrl: latest.audio_url, thumbnailUrl: latest.thumbnail_url, scriptureReference: latest.scripture_reference, offsetSeconds: 0 } : null,
+        playlist: null,
+        isStreaming: !!stream,
+        streamKey: stream?.streamKey || 'radio',
+      })
+      return
+    }
+    const items = await db.all(
+      `SELECT pi.id as item_id, pi.content_type, pi.content_id, pi.order_index, pi.duration_minutes,
+              COALESCE(s.title, m.title) as title,
+              COALESCE(s.speaker, m.artist) as speaker,
+              COALESCE(s.audio_url, m.audio_url) as audio_url,
+              COALESCE(s.thumbnail_url, m.cover_url) as thumbnail_url,
+              s.description, s.scripture_reference
+       FROM playlist_items pi
+       LEFT JOIN sermons s ON s.id = pi.content_id AND pi.content_type = 'sermon'
+       LEFT JOIN music m ON m.id = pi.content_id AND pi.content_type = 'music'
+       WHERE pi.playlist_id = $1
+       ORDER BY pi.order_index ASC`,
+      [schedule.playlist_id]
+    )
+    if (!items || items.length === 0) { res.json({ current: null, playlist: null }); return }
+
+    const elapsedMin = (now.getTime() - new Date(schedule.start_time).getTime()) / 60000
+    const totalDuration = items.reduce((s: number, i: any) => s + (i.duration_minutes || 30), 0)
+    const loopedMin = totalDuration > 0 ? elapsedMin % totalDuration : 0
+
+    let cum = 0
+    let currentItem: any = null
+    let offsetMin = 0
+    for (const item of items) {
+      const dur = item.duration_minutes || 30
+      if (loopedMin >= cum && loopedMin < cum + dur) { currentItem = item; offsetMin = loopedMin - cum; break }
+      cum += dur
+    }
+    if (!currentItem) currentItem = items[0]
+
+    const stream = getRadioStatus()
+    res.json({
+      current: {
+        itemId: currentItem.item_id,
+        sermonId: currentItem.content_id,
+        title: currentItem.title,
+        speaker: currentItem.speaker,
+        audioUrl: currentItem.audio_url,
+        thumbnailUrl: currentItem.thumbnail_url,
+        description: currentItem.description,
+        scriptureReference: currentItem.scripture_reference,
+        offsetSeconds: Math.floor(offsetMin * 60),
+      },
+      playlist: { id: schedule.playlist_id, title: schedule.playlist_title, startTime: schedule.start_time },
+      isStreaming: !!stream,
+      streamKey: stream?.streamKey || 'radio',
+    })
+  } catch (err: any) {
+    console.error('[SERMONS] radio current error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch current sermon' })
   }
 })
 

@@ -568,6 +568,8 @@ export default function Live() {
     if (typeof window === 'undefined') return true
     return window.innerWidth >= 768
   })
+  const [radioCurrent, setRadioCurrent] = useState<any | null>(null)
+  const [radioStreaming, setRadioStreaming] = useState(false)
 
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -582,11 +584,13 @@ export default function Live() {
   useEffect(() => { chatOpenRef.current = chatOpen }, [chatOpen])
 
   useEffect(() => {
-    fetchBroadcast(); fetchChatMessages(); fetchChatUsers()
+    fetchBroadcast(); fetchChatMessages(); fetchChatUsers(); fetchRadioCurrent()
     const broadcastPoll = setInterval(() => { fetchBroadcast(); fetchChatUsers() }, 8000)
+    const radioPoll = setInterval(() => { fetchRadioCurrent() }, 10000)
     chatPollRef.current = setInterval(() => { fetchChatMessages() }, 2000)
     return () => {
       clearInterval(broadcastPoll)
+      clearInterval(radioPoll)
       if (chatPollRef.current) clearInterval(chatPollRef.current)
     }
   }, [broadcastId])
@@ -642,6 +646,14 @@ export default function Live() {
       }
     } catch { setBroadcast(null) }
     finally { setLoading(false) }
+  }
+
+  async function fetchRadioCurrent() {
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/sermons/radio/current`)
+      setRadioCurrent(data.current)
+      setRadioStreaming(data.isStreaming)
+    } catch { setRadioCurrent(null); setRadioStreaming(false) }
   }
 
   async function fetchChatMessages() {
@@ -712,14 +724,37 @@ export default function Live() {
           <Link to="/" className="inline-flex items-center gap-2 text-xs text-[#9c958a] hover:text-white transition-colors mb-12">
             <ArrowLeft className="w-4 h-4" /> Back to Home
           </Link>
-          <div className="max-w-md mx-auto text-center py-20">
-            <Radio className="w-12 h-12 text-[#c9a227] mx-auto mb-5 opacity-60" />
-            <h1 className="text-xl font-medium text-white mb-2 tracking-wide">No broadcast right now</h1>
-            <p className="text-sm text-[#9c958a] mb-8 leading-relaxed">Check back during scheduled service times or browse our sermon archive.</p>
-            <Link to="/archive" className="inline-flex items-center gap-2 bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-semibold px-6 py-2.5 rounded-full transition-colors">
-              <BookOpen className="w-3.5 h-3.5" /> Browse Archive
-            </Link>
-          </div>
+          {radioStreaming && radioCurrent ? (
+            <div className="max-w-md mx-auto">
+              <div className="text-center space-y-4 mb-8">
+                <div className="w-16 h-16 rounded-full border border-[#c9a227]/20 flex items-center justify-center mx-auto">
+                  <Radio className="w-7 h-7 text-[#c9a227]" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono font-medium tracking-widest text-[#c9a227] mb-1.5">SERMON RADIO</div>
+                  <h2 className="text-lg font-semibold text-white">{radioCurrent.title || 'Radio'}</h2>
+                  {radioCurrent.speaker && (
+                    <p className="text-[11px] text-[#c9a227] mt-1 flex items-center justify-center gap-1">
+                      <User className="w-3 h-3" />{radioCurrent.speaker}
+                    </p>
+                  )}
+                  {radioCurrent.scriptureReference && (
+                    <p className="text-[11px] text-[#c9a227] mt-2 flex items-center justify-center gap-1"><BookOpen className="w-3 h-3" />{radioCurrent.scriptureReference}</p>
+                  )}
+                </div>
+              </div>
+              <StreamPlayer broadcastId="radio" title={radioCurrent.title || 'Sermon Radio'} thumbnailUrl={radioCurrent.thumbnailUrl} />
+            </div>
+          ) : (
+            <div className="max-w-md mx-auto text-center py-20">
+              <Radio className="w-12 h-12 text-[#c9a227] mx-auto mb-5 opacity-60" />
+              <h1 className="text-xl font-medium text-white mb-2 tracking-wide">No broadcast right now</h1>
+              <p className="text-sm text-[#9c958a] mb-8 leading-relaxed">Check back during scheduled service times or browse our sermon archive.</p>
+              <Link to="/archive" className="inline-flex items-center gap-2 bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-semibold px-6 py-2.5 rounded-full transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Browse Archive
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     )
