@@ -115,14 +115,12 @@ function doStart(blsId: string) {
     '-f', 'webm',                   // Input is WebM
     '-i', 'pipe:0',                 // Read from stdin
 
-    // Audio filtering: cut sub-bass rumble and high hiss
-    '-af', 'highpass=f=80,lowpass=f=15000',
-
     // Audio encoding
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
     '-ac', '2',
+    '-bufsize', '256k',
 
     // HLS output
     '-f', 'hls',
