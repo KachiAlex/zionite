@@ -14,6 +14,7 @@ RUN npm ci
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npx tsc --outDir dist
+COPY backend/src/migrations ./dist/migrations
 
 # Remove dev deps after build to reduce image size
 RUN npm prune --production
