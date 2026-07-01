@@ -128,7 +128,7 @@ function doStart(blsId: string) {
     '-f', 'hls',
     '-hls_time', '2',               // 2-second segments (matches MediaRecorder chunk interval)
     '-hls_init_time', '1',        // First segment after 1s for quick startup
-    '-hls_list_size', '24',         // Keep 24 segments (~24s window)
+    '-hls_list_size', '6',          // Keep 6 segments (~12s latency)
     '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
