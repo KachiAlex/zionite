@@ -141,7 +141,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       setStatusText('Broadcaster offline')
       // Start polling to auto-reconnect when broadcaster returns
       startRetryPoll()
-    }, 15000)
+    }, 30000)
 
     const audio = new Audio()
     audio.volume = volume / 100

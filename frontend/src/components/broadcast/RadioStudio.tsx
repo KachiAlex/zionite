@@ -522,7 +522,7 @@ export default function RadioStudio({
     }
 
     mediaRecorderRef.current = recorder
-    recorder.start(500) // timeslice: emit blob every 500ms for smoother FFmpeg ingest
+    recorder.start(2000) // timeslice: emit blob every 2 seconds with proper segments
   }
 
   function stopStreaming(triggerUpload = false): Promise<void> {

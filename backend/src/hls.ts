@@ -170,12 +170,12 @@ function doStart(blsId: string) {
   const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false, chunksReceived: false, lastChunkAt: Date.now(), timeoutRef: null }
   active.set(blsId, state)
 
-  // Auto-stop if broadcaster goes silent for 60s (disconnect / crash)
+  // Auto-stop if broadcaster goes silent for 120s (disconnect / crash)
   state.timeoutRef = setInterval(() => {
     const s = active.get(blsId)
     if (!s || s.ended) { clearInterval(state.timeoutRef!); return }
-    if (Date.now() - s.lastChunkAt > 60000) {
-      console.warn(`[HLS] ${blsId} idle timeout — no chunks for 60s, stopping FFmpeg`)
+    if (Date.now() - s.lastChunkAt > 120000) {
+      console.warn(`[HLS] ${blsId} idle timeout — no chunks for 120s, stopping FFmpeg`)
       clearInterval(state.timeoutRef!)
       forceStop(blsId)
     }
