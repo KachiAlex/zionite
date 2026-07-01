@@ -85,6 +85,9 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastTimeRef = useRef<number>(0)
+  const stallCountRef = useRef<number>(0)
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function updateMediaSession(playing: boolean) {
     if (!('mediaSession' in navigator)) return
@@ -107,6 +110,9 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
     if (statsTimerRef.current) { clearInterval(statsTimerRef.current); statsTimerRef.current = null }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null }
+    lastTimeRef.current = 0
+    stallCountRef.current = 0
     if (infoIntervalRef.current) { clearInterval(infoIntervalRef.current); infoIntervalRef.current = null }
     if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
     if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
@@ -121,6 +127,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     cleanup()
     // Clear any previous retry polling
     if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
+    lastTimeRef.current = 0
+    stallCountRef.current = 0
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
@@ -200,6 +208,16 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
             audio.play().catch(() => {})
           }
         }
+      })
+
+      hls.on(Hls.Events.MANIFEST_LOADED, (_event, data) => {
+        console.log('[HLS] Manifest loaded, levels:', data.levels?.length)
+      })
+      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+        console.log('[HLS] Level loaded', data.level, 'details duration:', data.details?.totalduration?.toFixed(2))
+      })
+      hls.on(Hls.Events.BUFFER_FLUSHED, () => {
+        console.log('[HLS] Buffer flushed')
       })
 
       hls.on(Hls.Events.LEVEL_LOADING, (_event, data) => {
@@ -324,6 +342,52 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     }
   }
 
+  /* ── Playback watchdog: detect silent stalls & recover ── */
+  useEffect(() => {
+    if (!started || !audioRef.current) return
+    const audio = audioRef.current
+    lastTimeRef.current = audio.currentTime || 0
+    stallCountRef.current = 0
+    watchdogRef.current = setInterval(() => {
+      if (!audio || audio.paused || userPausedRef.current) return
+      const now = audio.currentTime
+      const diff = now - lastTimeRef.current
+      if (diff < 0.1) {
+        stallCountRef.current++
+        console.warn('[Watchdog] Stall detected', stallCountRef.current, 'currentTime:', now)
+        if (stallCountRef.current === 1) {
+          // Attempt 1: restart loading
+          const hls = hlsRef.current
+          if (hls) {
+            console.warn('[Watchdog] Attempt 1: hls.startLoad()')
+            hls.startLoad()
+          }
+        } else if (stallCountRef.current === 2) {
+          // Attempt 2: snap to live edge
+          const hls = hlsRef.current
+          if (hls && hls.liveSyncPosition) {
+            console.warn('[Watchdog] Attempt 2: snap to live edge', hls.liveSyncPosition)
+            audio.currentTime = hls.liveSyncPosition
+          }
+        } else if (stallCountRef.current >= 3) {
+          // Attempt 3: full player restart
+          console.warn('[Watchdog] Attempt 3: full restart')
+          cleanup()
+          setStarted(false)
+          setStatusText('Reconnecting…')
+          setTimeout(() => handleStart(), 500)
+        }
+      } else {
+        if (stallCountRef.current > 0) {
+          console.log('[Watchdog] Recovered, stalls cleared')
+        }
+        stallCountRef.current = 0
+      }
+      lastTimeRef.current = now
+    }, 5000)
+    return () => { if (watchdogRef.current) clearInterval(watchdogRef.current) }
+  }, [started])
+
   function startRetryPoll() {
     if (retryPollRef.current) return
     retryPollRef.current = setInterval(async () => {
@@ -360,6 +424,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   useEffect(() => {
     return () => {
       cleanup()
+      if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
       if (sessionIdRef.current) {
         fetch(`${STREAM_BASE}/api/stream/${broadcastId}/leave`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
