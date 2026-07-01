@@ -281,6 +281,40 @@ async function _doInitDb() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
 
+  // Sermon radio tables
+  await dbQuery(`CREATE TABLE IF NOT EXISTS playlists (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    repeat_mode TEXT DEFAULT 'none',
+    shuffle BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS playlist_items (
+    id TEXT PRIMARY KEY,
+    playlist_id TEXT NOT NULL,
+    content_type TEXT NOT NULL CHECK (content_type IN ('sermon', 'music')),
+    content_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    duration_minutes INTEGER NOT NULL DEFAULT 30,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS radio_schedules (
+    id TEXT PRIMARY KEY,
+    playlist_id TEXT NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS radio_state (
+    id TEXT PRIMARY KEY DEFAULT 'singleton',
+    schedule_id TEXT,
+    current_item_id TEXT,
+    offset_seconds INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+
   // Migrations for existing tables
   try { await dbQuery(`ALTER TABLE stream_listeners ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'web'`) } catch {}
   try { await dbQuery(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed'`) } catch {}
@@ -1715,6 +1749,230 @@ app.delete('/auth/webauthn/credentials/:credId', auth, async (req: AuthReq, res)
     await initDb()
     await dbQuery('DELETE FROM webauthn_credentials WHERE id=$1 AND user_id=$2', [req.params.credId, req.user!.id])
     res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Sermon Radio ─────────────────────────────────────────────
+const RADIO_BASE = process.env.RADIO_API_BASE || 'https://zionite.fly.dev'
+
+async function proxyRadio(method: string, path: string, body?: any, token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${RADIO_BASE}/api${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const text = await res.text()
+  return { status: res.status, text }
+}
+
+app.get('/playlists', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT * FROM playlists ORDER BY created_at DESC')
+    res.json({ playlists: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/playlists', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { title, description, repeat_mode, shuffle } = req.body
+    if (!title) { res.status(400).json({ error: 'Title required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO playlists (id, title, description, repeat_mode, shuffle) VALUES ($1,$2,$3,$4,$5)`,
+      [id, title, description || null, repeat_mode || 'none', !!shuffle])
+    res.status(201).json({ id, title })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/playlists/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const playlist = await dbGet('SELECT * FROM playlists WHERE id=$1', [req.params.id])
+    if (!playlist) { res.status(404).json({ error: 'Playlist not found' }); return }
+    const items = await dbQuery(
+      `SELECT pi.*, COALESCE(s.title, m.title) as content_title, COALESCE(s.speaker, m.artist) as content_speaker
+       FROM playlist_items pi
+       LEFT JOIN sermons s ON s.id = pi.content_id AND pi.content_type = 'sermon'
+       LEFT JOIN music m ON m.id = pi.content_id AND pi.content_type = 'music'
+       WHERE pi.playlist_id=$1 ORDER BY pi.order_index ASC`,
+      [req.params.id]
+    )
+    res.json({ playlist, items })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/playlists/:id/items', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { content_type, content_id, order_index, duration_minutes } = req.body
+    if (!content_type || !content_id) { res.status(400).json({ error: 'content_type and content_id required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO playlist_items (id, playlist_id, content_type, content_id, order_index, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, req.params.id, content_type, content_id, order_index || 0, duration_minutes || 30])
+    res.status(201).json({ id })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/playlists/:playlistId/items/:itemId', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM playlist_items WHERE id=$1 AND playlist_id=$2', [req.params.itemId, req.params.playlistId])
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/playlists/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM playlists WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/radio-schedules', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery(
+      `SELECT rs.*, p.title as playlist_title FROM radio_schedules rs
+       JOIN playlists p ON p.id = rs.playlist_id ORDER BY rs.start_time DESC`
+    )
+    res.json({ schedules: rows })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/radio-schedules', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const { playlist_id, start_time, end_time } = req.body
+    if (!playlist_id || !start_time) { res.status(400).json({ error: 'playlist_id and start_time required' }); return }
+    const id = uuidv4()
+    await dbQuery(`INSERT INTO radio_schedules (id, playlist_id, start_time, end_time) VALUES ($1,$2,$3,$4)`,
+      [id, playlist_id, start_time, end_time || null])
+    res.status(201).json({ id, playlist_id, start_time })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/radio-schedules/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    await dbQuery('DELETE FROM radio_schedules WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/radio-schedules/active', auth, requireRole('admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const now = new Date().toISOString()
+    const row = await dbGet(
+      `SELECT rs.*, p.title as playlist_title FROM radio_schedules rs
+       JOIN playlists p ON p.id = rs.playlist_id
+       WHERE rs.is_active=TRUE AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
+       ORDER BY rs.start_time ASC LIMIT 1`,
+      [now]
+    )
+    res.json({ schedule: row || null })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/sermons/radio/current', async (_req, res) => {
+  try {
+    await initDb()
+    const now = new Date()
+    const schedule = await dbGet(
+      `SELECT rs.*, p.title as playlist_title FROM radio_schedules rs
+       JOIN playlists p ON p.id = rs.playlist_id
+       WHERE rs.is_active=TRUE AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
+       ORDER BY rs.start_time DESC LIMIT 1`,
+      [now.toISOString()]
+    )
+    if (!schedule) {
+      const latest = await dbGet('SELECT * FROM sermons ORDER BY date DESC LIMIT 1')
+      res.json({
+        current: latest ? {
+          title: latest.title, speaker: latest.speaker, audioUrl: latest.audio_url,
+          thumbnailUrl: latest.thumbnail_url, scriptureReference: latest.scripture_reference, offsetSeconds: 0
+        } : null,
+        playlist: null,
+        isStreaming: false,
+        streamKey: 'radio',
+      })
+      return
+    }
+    const items = await dbQuery(
+      `SELECT pi.id as item_id, pi.content_type, pi.content_id, pi.order_index, pi.duration_minutes,
+              COALESCE(s.title, m.title) as title,
+              COALESCE(s.speaker, m.artist) as speaker,
+              COALESCE(s.audio_url, m.audio_url) as audio_url,
+              COALESCE(s.thumbnail_url, m.cover_url) as thumbnail_url,
+              s.description, s.scripture_reference
+       FROM playlist_items pi
+       LEFT JOIN sermons s ON s.id = pi.content_id AND pi.content_type = 'sermon'
+       LEFT JOIN music m ON m.id = pi.content_id AND pi.content_type = 'music'
+       WHERE pi.playlist_id=$1 ORDER BY pi.order_index ASC`,
+      [schedule.playlist_id]
+    )
+    if (!items || items.length === 0) { res.json({ current: null, playlist: null }); return }
+
+    const elapsedMin = (now.getTime() - new Date(schedule.start_time).getTime()) / 60000
+    const totalDuration = items.reduce((s: number, i: any) => s + (i.duration_minutes || 30), 0)
+    const loopedMin = totalDuration > 0 ? elapsedMin % totalDuration : 0
+
+    let cum = 0
+    let currentItem: any = null
+    let offsetMin = 0
+    for (const item of items) {
+      const dur = item.duration_minutes || 30
+      if (loopedMin >= cum && loopedMin < cum + dur) { currentItem = item; offsetMin = loopedMin - cum; break }
+      cum += dur
+    }
+    if (!currentItem) currentItem = items[0]
+
+    res.json({
+      current: {
+        itemId: currentItem.item_id,
+        sermonId: currentItem.content_id,
+        title: currentItem.title,
+        speaker: currentItem.speaker,
+        audioUrl: currentItem.audio_url,
+        thumbnailUrl: currentItem.thumbnail_url,
+        description: currentItem.description,
+        scriptureReference: currentItem.scripture_reference,
+        offsetSeconds: Math.floor(offsetMin * 60),
+      },
+      playlist: { id: schedule.playlist_id, title: schedule.playlist_title, startTime: schedule.start_time },
+      isStreaming: false,
+      streamKey: 'radio',
+    })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/radio/start', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    const { playlistId } = req.body
+    if (!playlistId) { res.status(400).json({ error: 'playlistId required' }); return }
+    const token = req.headers.authorization?.split(' ')[1] || ''
+    const { status, text } = await proxyRadio('POST', '/radio/start', { playlistId }, token)
+    res.status(status).send(text)
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/radio/stop', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1] || ''
+    const { status, text } = await proxyRadio('POST', '/radio/stop', undefined, token)
+    res.status(status).send(text)
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/radio/skip', auth, requireRole('admin'), async (req: AuthReq, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1] || ''
+    const { status, text } = await proxyRadio('POST', '/radio/skip', undefined, token)
+    res.status(status).send(text)
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 

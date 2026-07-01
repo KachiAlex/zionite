@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, usePlaylists, useRadioSchedules, useActiveRadioSchedule } from '../../lib/api'
+import { api, usePlaylists, useRadioSchedules, useActiveRadioSchedule, useSermons, useMusic } from '../../lib/api'
 import {
   Plus, Trash2, Loader2, Clock, Calendar, Save, X,
-  Radio, Play, Square, SkipForward, ListMusic, Headphones
+  Radio, Play, Square, SkipForward, ListMusic, Headphones, Music, BookOpen
 } from 'lucide-react'
 
 export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => void }) {
@@ -22,6 +22,12 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
   const [radioLoading, setRadioLoading] = useState(false)
   const [playlistForm, setPlaylistForm] = useState({ title: '', description: '' })
   const [creatingPlaylist, setCreatingPlaylist] = useState(false)
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState('')
+  const { data: selectedPlaylist } = usePlaylist(selectedPlaylistId)
+  const { data: sermons = [] } = useSermons()
+  const { data: musicTracks = [] } = useMusic()
+  const [itemForm, setItemForm] = useState({ content_type: 'sermon', content_id: '', order_index: 0, duration_minutes: 30 })
+  const [addingItem, setAddingItem] = useState(false)
 
   function toISO(date: string, time: string) {
     if (!date) return ''
@@ -67,6 +73,27 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to create playlist')
     } finally { setSaving(false) }
+  }
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedPlaylistId || !itemForm.content_id) return
+    setSaving(true)
+    try {
+      await api.post(`/playlists/${selectedPlaylistId}/items`, itemForm)
+      setItemForm({ content_type: 'sermon', content_id: '', order_index: 0, duration_minutes: 30 })
+      qc.invalidateQueries({ queryKey: ['playlists', selectedPlaylistId] })
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to add item')
+    } finally { setSaving(false) }
+  }
+
+  async function deleteItem(itemId: string) {
+    if (!selectedPlaylistId) return
+    try {
+      await api.delete(`/playlists/${selectedPlaylistId}/items/${itemId}`)
+      qc.invalidateQueries({ queryKey: ['playlists', selectedPlaylistId] })
+    } catch {}
   }
 
   async function deleteSchedule(id: string) {
@@ -175,8 +202,80 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
           </form>
         </div>
       ) : (
-        <button onClick={() => setCreatingPlaylist(true)} className="btn-gold text-sm"><Plus className="w-4 h-4" /> New Playlist</button>
+        <div className="flex gap-2">
+          <button onClick={() => setCreatingPlaylist(true)} className="btn-gold text-sm"><Plus className="w-4 h-4" /> New Playlist</button>
+        </div>
       )}
+
+      <div className="rounded-2xl p-5" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+        <h3 className="font-semibold text-sm flex items-center gap-2 mb-4"><ListMusic className="w-4 h-4" style={{ color: 'var(--gold)' }} />Manage Playlist Items</h3>
+        <select value={selectedPlaylistId} onChange={e => setSelectedPlaylistId(e.target.value)}
+          className="w-full rounded-xl px-4 py-2.5 text-sm mb-4" style={inp}>
+          <option value="">Select a playlist</option>
+          {playlists.map((pl: any) => <option key={pl.id} value={pl.id}>{pl.title}</option>)}
+        </select>
+
+        {selectedPlaylistId && (
+          <>
+            <div className="mb-4">
+              <p className="text-xs font-medium text-white mb-2">
+                {selectedPlaylist?.playlist?.title || 'Loading...'} ({selectedPlaylist?.items?.length || 0} items)
+              </p>
+              {selectedPlaylist?.items?.length === 0 ? (
+                <p className="text-xs text-[var(--dim)]">No items yet. Add sermons or music below.</p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedPlaylist.items.map((item: any) => (
+                    <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-[rgba(243,238,228,0.03)] border border-[rgba(243,238,228,0.06)]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.content_type === 'sermon' ? <BookOpen className="w-3 h-3 text-[var(--gold)]" /> : <Music className="w-3 h-3 text-[var(--gold)]" />}
+                        <span className="text-xs text-white truncate">{item.content_title || item.content_id}</span>
+                        <span className="text-[10px] text-[var(--dim)]">{item.duration_minutes}m</span>
+                      </div>
+                      <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-300 text-[10px] px-2 py-1 rounded border border-red-400/20 transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {addingItem ? (
+              <form onSubmit={addItem} className="grid grid-cols-1 gap-3">
+                <select value={itemForm.content_type} onChange={e => setItemForm({ ...itemForm, content_type: e.target.value, content_id: '' })}
+                  className="w-full rounded-xl px-4 py-2.5 text-sm" style={inp}>
+                  <option value="sermon">Sermon</option>
+                  <option value="music">Music</option>
+                </select>
+                <select value={itemForm.content_id} onChange={e => setItemForm({ ...itemForm, content_id: e.target.value })} required
+                  className="w-full rounded-xl px-4 py-2.5 text-sm" style={inp}>
+                  <option value="">Select {itemForm.content_type}</option>
+                  {(itemForm.content_type === 'sermon' ? sermons : musicTracks).map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.title}{s.speaker || s.artist ? ` — ${s.speaker || s.artist}` : ''}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="number" value={itemForm.order_index} onChange={e => setItemForm({ ...itemForm, order_index: parseInt(e.target.value) || 0 })}
+                    placeholder="Order" className="w-full rounded-xl px-4 py-2.5 text-sm" style={inp} />
+                  <input type="number" value={itemForm.duration_minutes} onChange={e => setItemForm({ ...itemForm, duration_minutes: parseInt(e.target.value) || 30 })}
+                    placeholder="Duration (min)" className="w-full rounded-xl px-4 py-2.5 text-sm" style={inp} />
+                </div>
+                <div className="flex gap-2">
+                  <button type="submit" disabled={saving} className="btn-gold disabled:opacity-50 text-sm">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Item
+                  </button>
+                  <button type="button" onClick={() => setAddingItem(false)} className="text-sm px-4 py-2 rounded-xl border" style={{ borderColor: 'var(--line)', color: 'var(--dim)' }}>Cancel</button>
+                </div>
+              </form>
+            ) : (
+              <button onClick={() => setAddingItem(true)} className="text-sm px-4 py-2 rounded-xl border" style={{ borderColor: 'var(--gold)', color: 'var(--gold)' }}>
+                <Plus className="w-3 h-3 inline mr-1" /> Add Item
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
       {creating ? (
         <div className="rounded-2xl p-5" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
