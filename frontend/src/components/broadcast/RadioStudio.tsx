@@ -213,7 +213,7 @@ export default function RadioStudio({
 
   useEffect(() => {
     // Request mic permission first so labels are visible, then enumerate
-    navigator.mediaDevices.getUserMedia({ audio: true })
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
       .then(s => { s.getTracks().forEach(t => t.stop()); enumerateDevices() })
       .catch(() => enumerateDevices())
     navigator.mediaDevices.addEventListener('devicechange', enumerateDevices)
@@ -406,7 +406,9 @@ export default function RadioStudio({
 
       const deviceId = activeDeviceIdRef.current
       const rawMicStream = await navigator.mediaDevices.getUserMedia({
-        audio: deviceId ? { deviceId: { exact: deviceId } } : true
+        audio: deviceId
+          ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          : { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       })
 
       /* ── Build mixer graph ── */

@@ -115,6 +115,9 @@ function doStart(blsId: string) {
     '-f', 'webm',                   // Input is WebM
     '-i', 'pipe:0',                 // Read from stdin
 
+    // Audio filtering: cut sub-bass rumble and high hiss, light noise reduction
+    '-af', 'highpass=f=80,lowpass=f=15000,afftdn=nf=-25',
+
     // Audio encoding
     '-c:a', 'aac',
     '-b:a', '128k',

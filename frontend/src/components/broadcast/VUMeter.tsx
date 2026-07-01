@@ -41,7 +41,9 @@ export default function VUMeter({ active, deviceId, onLevelChange, width = 280, 
         let stream = externalStream || null
         if (!stream) {
           const constraints: MediaStreamConstraints = {
-            audio: deviceId ? { deviceId: { exact: deviceId } } : true
+            audio: deviceId
+              ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+              : { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
           }
           stream = await navigator.mediaDevices.getUserMedia(constraints)
           ownStream = true
