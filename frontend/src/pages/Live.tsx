@@ -141,7 +141,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       setStatusText('Broadcaster offline')
       // Start polling to auto-reconnect when broadcaster returns
       startRetryPoll()
-    }, 30000)
+    }, 15000)
 
     const audio = new Audio()
     audio.volume = volume / 100
@@ -376,7 +376,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
           cleanup()
           setStarted(false)
           setStatusText('Reconnecting…')
-          setTimeout(() => handleStart(), 1500)
+          setTimeout(() => handleStart(), 500)
         }
       } else {
         if (stallCountRef.current > 0) {
@@ -391,19 +391,33 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
   function startRetryPoll() {
     if (retryPollRef.current) return
-    retryPollRef.current = setInterval(async () => {
+    // Check immediately first, then every 2s
+    ;(async () => {
       try {
         const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/hls-status`, { method: 'GET' })
-        if (!res.ok) return
-        const status = await res.json()
-        if (status.hlsActive) {
-          console.log('[HLS] Broadcaster back online — auto-reconnecting')
-          clearInterval(retryPollRef.current!)
-          retryPollRef.current = null
-          handleStart()
+        if (res.ok) {
+          const status = await res.json()
+          if (status.hlsActive) {
+            console.log('[HLS] Broadcaster online — auto-reconnecting')
+            handleStart()
+            return
+          }
         }
       } catch {}
-    }, 5000)
+      retryPollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/hls-status`, { method: 'GET' })
+          if (!res.ok) return
+          const status = await res.json()
+          if (status.hlsActive) {
+            console.log('[HLS] Broadcaster back online — auto-reconnecting')
+            clearInterval(retryPollRef.current!)
+            retryPollRef.current = null
+            handleStart()
+          }
+        } catch {}
+      }, 2000)
+    })()
   }
 
   useEffect(() => {
