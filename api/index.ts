@@ -1955,7 +1955,21 @@ app.get('/sermons/radio/current', async (_req, res) => {
         scriptureReference: currentItem.scripture_reference,
         offsetSeconds: Math.floor(offsetMin * 60),
       },
-      playlist: { id: schedule.playlist_id, title: schedule.playlist_title, startTime: schedule.start_time },
+      playlist: {
+        id: schedule.playlist_id,
+        title: schedule.playlist_title,
+        startTime: schedule.start_time,
+        items: items.map((i: any) => ({
+          itemId: i.item_id,
+          contentId: i.content_id,
+          contentType: i.content_type,
+          title: i.title,
+          speaker: i.speaker,
+          audioUrl: i.audio_url,
+          thumbnailUrl: i.thumbnail_url,
+          durationMinutes: i.duration_minutes,
+        })),
+      },
       isStreaming: false,
       streamKey: 'radio',
     })
