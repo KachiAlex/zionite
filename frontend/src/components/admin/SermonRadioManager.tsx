@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, usePlaylists, usePlaylist, useRadioSchedules, useActiveRadioSchedule, useSermons, useMusic } from '../../lib/api'
 import {
   Plus, Trash2, Loader2, Clock, Calendar, Save, X,
-  Radio, Play, Square, SkipForward, ListMusic, Headphones, Music, BookOpen
+  Radio, Play, Square, SkipForward, ListMusic, Headphones, Music, BookOpen,
+  GripVertical
 } from 'lucide-react'
 
 export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => void }) {
@@ -28,6 +29,16 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
   const { data: musicTracks = [] } = useMusic()
   const [itemForm, setItemForm] = useState({ content_type: 'sermon', content_id: '', order_index: 0, duration_minutes: 30 })
   const [addingItem, setAddingItem] = useState(false)
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null)
+  const [orderedItems, setOrderedItems] = useState<any[]>([])
+
+  useEffect(() => {
+    if (selectedPlaylist?.items) {
+      setOrderedItems([...selectedPlaylist.items])
+    } else {
+      setOrderedItems([])
+    }
+  }, [selectedPlaylist])
 
   function toISO(date: string, time: string) {
     if (!date) return ''
@@ -92,6 +103,14 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
     if (!selectedPlaylistId) return
     try {
       await api.delete(`/playlists/${selectedPlaylistId}/items/${itemId}`)
+      qc.invalidateQueries({ queryKey: ['playlists', selectedPlaylistId] })
+    } catch {}
+  }
+
+  async function saveOrder(items: any[]) {
+    if (!selectedPlaylistId) return
+    try {
+      await api.patch(`/playlists/${selectedPlaylistId}/items/reorder`, { itemIds: items.map(i => i.id) })
       qc.invalidateQueries({ queryKey: ['playlists', selectedPlaylistId] })
     } catch {}
   }
@@ -221,13 +240,30 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
               <p className="text-xs font-medium text-white mb-2">
                 {selectedPlaylist?.playlist?.title || 'Loading...'} ({selectedPlaylist?.items?.length || 0} items)
               </p>
-              {!selectedPlaylist?.items?.length ? (
+              {!orderedItems.length ? (
                 <p className="text-xs text-[var(--dim)]">No items yet. Add sermons or music below.</p>
               ) : (
                 <div className="space-y-2">
-                  {selectedPlaylist.items.map((item: any) => (
-                    <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-[rgba(243,238,228,0.03)] border border-[rgba(243,238,228,0.06)]">
+                  {orderedItems.map((item: any, idx: number) => (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={() => setDraggedIdx(idx)}
+                      onDragOver={(e) => { e.preventDefault(); }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        if (draggedIdx === null || draggedIdx === idx) return
+                        const newItems = [...orderedItems]
+                        const [moved] = newItems.splice(draggedIdx, 1)
+                        newItems.splice(idx, 0, moved)
+                        setOrderedItems(newItems)
+                        setDraggedIdx(null)
+                        saveOrder(newItems)
+                      }}
+                      className={`flex items-center justify-between p-2 rounded-lg bg-[rgba(243,238,228,0.03)] border border-[rgba(243,238,228,0.06)] cursor-grab active:cursor-grabbing ${draggedIdx === idx ? 'opacity-50' : ''}`}
+                    >
                       <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical className="w-3 h-3 text-[var(--dim)] flex-shrink-0" />
                         {item.content_type === 'sermon' ? <BookOpen className="w-3 h-3 text-[var(--gold)]" /> : <Music className="w-3 h-3 text-[var(--gold)]" />}
                         <span className="text-xs text-white truncate">{item.content_title || item.content_id}</span>
                         <span className="text-[10px] text-[var(--dim)]">{item.duration_minutes}m</span>

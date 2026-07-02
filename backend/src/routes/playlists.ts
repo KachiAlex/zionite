@@ -59,6 +59,18 @@ router.post('/:id/items', authenticateToken, requireRole('admin'), async (req, r
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
+router.patch('/:playlistId/items/reorder', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { itemIds } = req.body as { itemIds: string[] }
+    if (!Array.isArray(itemIds)) { res.status(400).json({ error: 'itemIds array required' }); return }
+    for (let i = 0; i < itemIds.length; i++) {
+      await db.run('UPDATE playlist_items SET order_index = $1 WHERE id = $2 AND playlist_id = $3', [i, itemIds[i], req.params.playlistId])
+    }
+    res.json({ ok: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
 router.delete('/:playlistId/items/:itemId', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     await initDb()
