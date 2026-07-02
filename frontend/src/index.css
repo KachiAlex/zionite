@@ -168,6 +168,14 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
+@keyframes musicBar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+.animate-music-bar {
+  animation: musicBar 0.8s ease-in-out infinite;
+}
 
 /* Respect user motion preferences */
 @media (prefers-reduced-motion: reduce) {

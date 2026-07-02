@@ -1,4 +1,4 @@
-﻿import { memo, useState, useCallback } from "react"
+﻿import { memo, useState, useCallback, useMemo } from "react"
 import axios from "axios"
 import { downloadWithTags } from "../lib/downloadWithTags"
 import { Link } from "react-router-dom"
@@ -138,6 +138,31 @@ export default function Home() {
   const { user } = useAuth()
   const isLive = broadcast?.status==="live"
   const isRadioOn = radioCurrent?.current && !isLive
+  const { playQueue, togglePlay, currentTrack, isPlaying } = useAudioPlayer()
+
+  const radioTracks = useMemo(() => {
+    if (!radioCurrent?.playlist?.items) return []
+    return radioCurrent.playlist.items.map((item: any) => ({
+      id: item.contentId || item.itemId,
+      title: item.title,
+      speaker: item.speaker,
+      audioUrl: item.audioUrl,
+      thumbnail: item.thumbnailUrl,
+      trackType: item.contentType === 'sermon' ? 'sermon' as const : 'music' as const,
+    }))
+  }, [radioCurrent])
+
+  const radioCurrentIndex = useMemo(() => {
+    if (!radioCurrent?.current || !radioTracks.length) return 0
+    return Math.max(0, radioTracks.findIndex((t: any) => t.id === (radioCurrent.current.sermonId || radioCurrent.current.itemId)))
+  }, [radioCurrent, radioTracks])
+
+  const isRadioPlaying = isPlaying && currentTrack && radioTracks.some((t: any) => t.id === currentTrack.id)
+
+  function handleRadioPlay() {
+    if (!radioTracks.length) return
+    playQueue(radioTracks, radioCurrentIndex)
+  }
   const [subEmail, setSubEmail] = useState('')
   const [subState, setSubState] = useState<'idle'|'loading'|'done'|'error'>('idle') // eslint-disable-line
 
@@ -236,19 +261,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* ====== SERMON RADIO BANNER ====== */}
+      {/* ====== SERMON RADIO PLAYER ====== */}
       {isRadioOn && radioCurrent && (
         <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-3">
-          <Link to="/live"
-            className="flex items-center gap-4 rounded-2xl p-4 md:p-5 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          <div className="flex items-center gap-4 rounded-2xl p-4 md:p-5 transition-all hover:scale-[1.01]"
             style={{ background: 'linear-gradient(135deg, #2a1f3d 0%, #1b1208 60%, #14141a 100%)', border: '1px solid rgba(201,162,39,0.3)' }}>
-            {/* Pulsing radio dot */}
-            <div className="relative flex-shrink-0">
-              <span className="relative flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c9a227] opacity-75" />
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-[#c9a227]" />
-              </span>
-            </div>
             {/* Thumbnail */}
             {radioCurrent.current.thumbnailUrl ? (
               <img src={radioCurrent.current.thumbnailUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 ring-2 ring-[#c9a227]/30" />
@@ -268,11 +285,20 @@ export default function Home() {
                 <p className="text-[11px] text-[#9c958a] truncate mt-0.5">{radioCurrent.current.scriptureReference}</p>
               )}
             </div>
-            {/* CTA */}
-            <div className="flex-shrink-0 flex items-center gap-2 bg-[#c9a227] hover:bg-[#c9a227]/90 text-[#1b1208] text-xs font-bold px-4 py-2 rounded-xl transition-colors">
-              <Headphones className="w-3.5 h-3.5" /> Listen
-            </div>
-          </Link>
+            {/* Music waves */}
+            {isRadioPlaying && (
+              <div className="hidden sm:flex items-end gap-[3px] h-6">
+                {[0,1,2,3,4].map(i => (
+                  <div key={i} className="w-[3px] rounded-full bg-[#c9a227] animate-music-bar" style={{ animationDelay: `${i * 0.15}s`, height: '100%' }} />
+                ))}
+              </div>
+            )}
+            {/* Play / Pause */}
+            <button onClick={isRadioPlaying ? togglePlay : handleRadioPlay}
+              className="flex-shrink-0 w-10 h-10 rounded-full bg-[#c9a227] hover:bg-[#c9a227]/90 text-[#1b1208] flex items-center justify-center transition-colors">
+              {isRadioPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+            </button>
+          </div>
         </div>
       )}
 
