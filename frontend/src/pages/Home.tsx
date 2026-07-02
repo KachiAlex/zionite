@@ -298,12 +298,28 @@ export default function Home() {
                 <p className="text-[11px] text-[#9c958a] truncate mt-0.5">{radioCurrent.current.scriptureReference}</p>
               )}
             </div>
-            {/* Music waves */}
+            {/* Music waveform */}
             {isRadioPlaying && (
-              <div className="hidden sm:flex items-end gap-[3px] h-6">
-                {[0,1,2,3,4].map(i => (
-                  <div key={i} className="w-[3px] rounded-full bg-[#c9a227] animate-music-bar" style={{ animationDelay: `${i * 0.15}s`, height: '100%' }} />
-                ))}
+              <div className="hidden sm:flex items-end gap-[2px] h-7">
+                {Array.from({ length: 24 }).map((_, i) => {
+                  const base = Math.sin(i * 0.8) * 0.4 + Math.sin(i * 1.3 + 2) * 0.3 + 0.5
+                  const heightPct = Math.max(20, Math.min(100, Math.round(base * 100)))
+                  const duration = 0.35 + ((i * 37) % 100) / 100 * 0.7
+                  const delay = ((i * 17) % 100) / 100 * 0.6
+                  return (
+                    <div
+                      key={i}
+                      className="w-[2px] rounded-full bg-[#c9a227] animate-music-bar"
+                      style={{
+                        height: `${heightPct}%`,
+                        animationDuration: `${duration.toFixed(2)}s`,
+                        animationDelay: `${delay.toFixed(2)}s`,
+                        opacity: 0.6 + (heightPct / 250),
+                        boxShadow: '0 0 3px rgba(201,162,39,0.4)',
+                      }}
+                    />
+                  )
+                })}
               </div>
             )}
             {/* Play / Pause */}
