@@ -64,6 +64,12 @@ app.use((req, res, next) => {
   next()
 })
 
+// Tenant lookup (matches Vercel API)
+app.get('/tenant', (req: any, res) => {
+  if (!req.tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
+  res.json({ tenant: req.tenant })
+})
+
 // Health checks
 app.get('/ping', (_req, res) => res.json({ ok: true }))
 app.get('/debug', (_req, res) => {
