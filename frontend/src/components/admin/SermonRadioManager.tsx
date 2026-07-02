@@ -221,7 +221,7 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
               <p className="text-xs font-medium text-white mb-2">
                 {selectedPlaylist?.playlist?.title || 'Loading...'} ({selectedPlaylist?.items?.length || 0} items)
               </p>
-              {selectedPlaylist?.items?.length === 0 ? (
+              {!selectedPlaylist?.items?.length ? (
                 <p className="text-xs text-[var(--dim)]">No items yet. Add sermons or music below.</p>
               ) : (
                 <div className="space-y-2">
