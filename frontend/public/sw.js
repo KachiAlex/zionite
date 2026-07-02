@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zionite-v5'
+const CACHE_NAME = 'zionite-v6'
 const STATIC_ASSETS = ['/', '/index.html']
 
 self.addEventListener('install', (event) => {
@@ -63,9 +63,10 @@ self.addEventListener('fetch', (event) => {
   if (request.method === 'GET') {
     event.respondWith(
       caches.match(request).then((cached) => {
+        const offlineResponse = new Response('', { status: 404, statusText: 'Not found' })
         const fetchPromise = fetch(request)
           .then((networkResponse) => {
-            if (!networkResponse) return cached
+            if (!networkResponse) return cached || offlineResponse
             const contentType = networkResponse.headers.get('content-type') || ''
             if (networkResponse.status === 200 && networkResponse.type === 'basic' && !contentType.includes('text/html')) {
               const clone = networkResponse.clone()
@@ -73,7 +74,7 @@ self.addEventListener('fetch', (event) => {
             }
             return networkResponse
           })
-          .catch(() => cached)
+          .catch(() => cached || offlineResponse)
         return cached || fetchPromise
       })
     )

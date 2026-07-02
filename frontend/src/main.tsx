@@ -59,7 +59,7 @@ const queryClient = new QueryClient({
 // Register PWA service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=5')
+    navigator.serviceWorker.register('/sw.js?v=6')
       .then((registration) => {
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing

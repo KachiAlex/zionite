@@ -41,10 +41,16 @@ export function useDashboardAnalytics() {
 }
 
 export function useActiveBroadcast() {
-  return useQuery<Broadcast | null>({ queryKey: ['broadcasts', 'active'], queryFn: async () => {
-    const { data } = await api.get('/broadcasts/active')
-    return data.broadcast as Broadcast | null
-  }, retry: 1, refetchInterval: 30000 })
+  return useQuery<Broadcast | null>({
+    queryKey: ['broadcasts', 'active'],
+    queryFn: async () => {
+      const { data } = await api.get('/broadcasts/active')
+      return data.broadcast as Broadcast | null
+    },
+    retry: 1,
+    refetchInterval: 5000,        // poll every 5s so live banner appears quickly
+    staleTime: 3000,              // treat data as stale after 3s (aggressive refresh)
+  })
 }
 
 export function useSermons(limit?: number) {
