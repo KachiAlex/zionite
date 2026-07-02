@@ -65,6 +65,7 @@ export default function AdminDashboard() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [bcActionLoading, setBcActionLoading] = useState(false)
   const [liveElapsed, setLiveElapsed] = useState(0)
   const [geoData, setGeoData] = useState<{ byCountry: {country:string;count:number}[]; locations: {country:string;region:string;city:string;count:number}[] }>({ byCountry: [], locations: [] })
@@ -174,19 +175,24 @@ export default function AdminDashboard() {
 
   if (!user || user.role !== 'admin') return null
 
-  function SB({label,tab,icon:I,badge}:any){const a=activeTab===tab;return(<button onClick={()=>setActiveTab(tab)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors ${a?'bg-[#c9a227] text-[#1b1208] font-semibold':'text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]'}`}><I className="w-3.5 h-3.5"/><span className="flex-1 text-left">{label}</span>{badge?<span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${a?'bg-[#1b1208]/20':'bg-[#ef4444] text-white'}`}>{badge}</span>:null}</button>)}
-  function SL({t}:{t:string}){return<p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
+  function SB({label,tab,icon:I,badge}:any){const a=activeTab===tab;return(<button onClick={()=>setActiveTab(tab)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors ${a?'bg-[#c9a227] text-[#1b1208] font-semibold':'text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]'}`}><I className="w-3.5 h-3.5 flex-shrink-0"/>{!sidebarCollapsed && <><span className="flex-1 text-left">{label}</span>{badge?<span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${a?'bg-[#1b1208]/20':'bg-[#ef4444] text-white'}`}>{badge}</span>:null}</>}</button>)}
+  function SL({t}:{t:string}){return sidebarCollapsed ? null : <p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
 
   const sidebarContent = (
     <div className="p-4">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-[#c9a227] flex items-center justify-center flex-shrink-0"><Radio className="w-4 h-4 text-[#1b1208]"/></div>
-          <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>
+          {!sidebarCollapsed && <div><div className="text-sm font-bold text-white tracking-wide">ZIONITEFM</div><div className="text-[8px] text-[#9c958a] tracking-wider uppercase">The Voice of Redemption</div></div>}
         </div>
-        <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
+        <div className="flex items-center">
+          <button onClick={()=>setSidebarCollapsed(!sidebarCollapsed)} className="hidden lg:block text-[#9c958a] p-1 hover:text-white" title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {sidebarCollapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
+          </button>
+          <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
+        </div>
       </div>
-      <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>
+      {!sidebarCollapsed && <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>}
       <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
       <SL t="Ministry Management"/>
       <SB label="Sermons" tab="sermons" icon={BookOpen}/>
@@ -224,8 +230,8 @@ export default function AdminDashboard() {
         </aside>
       )}
 
-      {/* Desktop sidebar (normal flex item) */}
-      <aside className="hidden lg:flex flex-col w-56 flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] overflow-y-auto">
+      {/* Desktop sidebar (sticky, collapsible) */}
+      <aside className={`hidden lg:flex flex-col flex-shrink-0 border-r border-[rgba(243,238,228,0.06)] bg-[#111118] sticky top-0 h-screen overflow-y-auto transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}>
         {sidebarContent}
       </aside>
 
