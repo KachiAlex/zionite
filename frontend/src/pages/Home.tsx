@@ -5,7 +5,7 @@ import { Link } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { usePageTitle } from "../hooks/usePageTitle"
 import { useAudioPlayer } from "../contexts/AudioPlayerContext"
-import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents , API_BASE } from "../lib/api"
+import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents, useRadioCurrent, API_BASE } from "../lib/api"
 import type { Sermon, MusicTrack } from "../lib/api"
 import StructuredData from "../components/StructuredData"
 import {
@@ -134,8 +134,10 @@ export default function Home() {
   const { data: musicTracks = [] } = useMusic()
   const { data: guestSpeakers = [] } = useGuestSpeakers()
   const { data: events = [] } = useEvents()
+  const { data: radioCurrent } = useRadioCurrent()
   const { user } = useAuth()
   const isLive = broadcast?.status==="live"
+  const isRadioOn = radioCurrent?.current && !isLive
   const [subEmail, setSubEmail] = useState('')
   const [subState, setSubState] = useState<'idle'|'loading'|'done'|'error'>('idle') // eslint-disable-line
 
@@ -229,6 +231,46 @@ export default function Home() {
             {/* CTA */}
             <div className="flex-shrink-0 flex items-center gap-2 bg-[#ef4444] hover:bg-[#ef4444]/90 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
               <Headphones className="w-3.5 h-3.5" /> Join
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* ====== SERMON RADIO BANNER ====== */}
+      {isRadioOn && radioCurrent && (
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-3">
+          <Link to="/live"
+            className="flex items-center gap-4 rounded-2xl p-4 md:p-5 transition-all hover:scale-[1.01] active:scale-[0.99]"
+            style={{ background: 'linear-gradient(135deg, #2a1f3d 0%, #1b1208 60%, #14141a 100%)', border: '1px solid rgba(201,162,39,0.3)' }}>
+            {/* Pulsing radio dot */}
+            <div className="relative flex-shrink-0">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c9a227] opacity-75" />
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-[#c9a227]" />
+              </span>
+            </div>
+            {/* Thumbnail */}
+            {radioCurrent.current.thumbnailUrl ? (
+              <img src={radioCurrent.current.thumbnailUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 ring-2 ring-[#c9a227]/30" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#c9a227]/10">
+                <Radio className="w-6 h-6 text-[#c9a227]" />
+              </div>
+            )}
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[10px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded bg-[#c9a227] text-[#1b1208]">Sermon Radio</span>
+                {radioCurrent.current.speaker && <span className="text-[10px] text-[#9c958a]">{radioCurrent.current.speaker}</span>}
+              </div>
+              <p className="text-sm font-semibold text-white truncate">{radioCurrent.current.title}</p>
+              {radioCurrent.current.scriptureReference && (
+                <p className="text-[11px] text-[#9c958a] truncate mt-0.5">{radioCurrent.current.scriptureReference}</p>
+              )}
+            </div>
+            {/* CTA */}
+            <div className="flex-shrink-0 flex items-center gap-2 bg-[#c9a227] hover:bg-[#c9a227]/90 text-[#1b1208] text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+              <Headphones className="w-3.5 h-3.5" /> Listen
             </div>
           </Link>
         </div>
