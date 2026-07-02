@@ -1,4 +1,4 @@
-﻿import { memo, useState, useCallback, useMemo } from "react"
+﻿import { memo, useState, useCallback, useMemo, useEffect, useRef } from "react"
 import axios from "axios"
 import { downloadWithTags } from "../lib/downloadWithTags"
 import { Link } from "react-router-dom"
@@ -138,7 +138,7 @@ export default function Home() {
   const { user } = useAuth()
   const isLive = broadcast?.status==="live"
   const isRadioOn = radioCurrent?.current && !isLive
-  const { playQueue, togglePlay, currentTrack, isPlaying } = useAudioPlayer()
+  const { playQueue, togglePlay, currentTrack, isPlaying, seek } = useAudioPlayer()
 
   const radioTracks = useMemo(() => {
     if (!radioCurrent?.playlist?.items) return []
@@ -163,6 +163,19 @@ export default function Home() {
     if (!radioTracks.length) return
     playQueue(radioTracks, radioCurrentIndex)
   }
+
+  const autoPlayedRef = useRef(false)
+  useEffect(() => {
+    if (isRadioOn && radioCurrent?.current && !isRadioPlaying && !autoPlayedRef.current) {
+      autoPlayedRef.current = true
+      handleRadioPlay()
+      const offset = radioCurrent.current.offsetSeconds || 0
+      if (offset > 0) {
+        setTimeout(() => seek(offset), 800)
+      }
+    }
+  }, [isRadioOn, isRadioPlaying, radioCurrent])
+
   const [subEmail, setSubEmail] = useState('')
   const [subState, setSubState] = useState<'idle'|'loading'|'done'|'error'>('idle') // eslint-disable-line
 
