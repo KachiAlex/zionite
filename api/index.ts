@@ -1125,7 +1125,7 @@ app.get('/relay/:broadcastId/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive')
 
     // Start near live
-    const latestRow = await dbGet<{ chunk_index: number }>(
+    const latestRow = await dbGet(
       'SELECT chunk_index FROM stream_chunks WHERE broadcast_id = $1 ORDER BY chunk_index DESC LIMIT 1',
       [broadcastId]
     )
