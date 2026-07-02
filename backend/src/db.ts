@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { v4 as uuidv4 } from 'uuid'
+import bcrypt from 'bcryptjs'
 
 const rawDbUrl = process.env.DATABASE_URL?.trim()
 const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl
@@ -80,6 +81,7 @@ const SCHEMA_QUERIES = [
   `CREATE TABLE IF NOT EXISTS sermons (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     speaker TEXT, series TEXT, audio_url TEXT, video_url TEXT, thumbnail_url TEXT, date TEXT NOT NULL, duration INTEGER,
+    is_featured BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS chat_messages (
@@ -154,6 +156,51 @@ const SCHEMA_QUERIES = [
   )`
 ]
 
+// ── Multi-tenant schema ────────────────────────────────────────
+async function _initTenantSchema() {
+  await db.query(`CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    logo_url TEXT,
+    primary_color TEXT DEFAULT '#c9a227',
+    custom_domain TEXT,
+    plan TEXT DEFAULT 'free',
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+
+  const tablesNeedingTenant = [
+    'users','broadcasts','sermons','chat_messages','schedule','music',
+    'stream_chunks','stream_listeners','featured_sermons','transcripts',
+    'guest_speakers','donations','prayer_requests','prayer_interactions',
+    'events','event_rsvps','testimonies','campaigns','newsletter_subscribers',
+    'push_subscriptions','webauthn_credentials','fcm_tokens',
+    'notification_preferences','notification_log','spiritual_health',
+    'playlists','playlist_items','radio_schedules','radio_state','daily_verses'
+  ]
+  for (const tbl of tablesNeedingTenant) {
+    try { await db.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS tenant_id TEXT`) } catch {}
+  }
+
+  const defaultTenant = await db.get(`SELECT * FROM tenants WHERE slug=$1`, ['zionite'])
+  let defaultTenantId: string
+  if (!defaultTenant) {
+    defaultTenantId = uuidv4()
+    await db.query(`INSERT INTO tenants (id, slug, name, primary_color, plan, status) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [defaultTenantId, 'zionite', 'Zionite', '#c9a227', 'pro', 'active'])
+  } else {
+    defaultTenantId = defaultTenant.id
+  }
+
+  for (const tbl of tablesNeedingTenant) {
+    try { await db.query(`UPDATE ${tbl} SET tenant_id=$1 WHERE tenant_id IS NULL`, [defaultTenantId]) } catch {}
+  }
+
+  return defaultTenantId
+}
+
 let _dbInitPromise: Promise<void> | null = null
 let _dbInitDone = false
 
@@ -185,26 +232,37 @@ async function _initDbInternal() {
   const { runMigrations } = await import('./migrations/runner.js')
   await runMigrations()
 
+  // Initialize multi-tenant schema and backfill
+  const defaultTenantId = await _initTenantSchema()
+  console.log('[DB] tenant schema OK')
+
   const existingSchedule = await db.get('SELECT * FROM schedule LIMIT 1')
   if (!existingSchedule) {
     await db.run(`
-      INSERT INTO schedule (id, title, day_of_week, time, type) VALUES
-      ($1, 'Sunday Gathering', 0, '10:00', 'service'),
-      ($2, 'Midweek Study', 3, '19:00', 'study'),
-      ($3, 'Prayer Meeting', 5, '18:00', 'prayer')
-    `, [uuidv4(), uuidv4(), uuidv4()])
+      INSERT INTO schedule (id, title, day_of_week, time, type, tenant_id) VALUES
+      ($1, 'Sunday Gathering', 0, '10:00', 'service', $4),
+      ($2, 'Midweek Study', 3, '19:00', 'study', $4),
+      ($3, 'Prayer Meeting', 5, '18:00', 'prayer', $4)
+    `, [uuidv4(), uuidv4(), uuidv4(), defaultTenantId])
     console.log('[DB] schedule seeded')
   }
 
-  const admin = await db.get('SELECT * FROM users WHERE role = $1', ['admin'])
+  const admin = await db.get('SELECT * FROM users WHERE role = $1', ['super_admin'])
   if (!admin) {
-    const bcrypt = await import('bcryptjs')
-    const hash = await bcrypt.hash('admin123', 10)
-    await db.run(
-      `INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)`,
-      ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'admin']
-    )
-    console.log('[DB] admin seeded')
+    try {
+      const hash = await bcrypt.hash('admin123', 10)
+      await db.run(
+        `INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
+        ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId]
+      )
+      console.log('[DB] admin seeded')
+    } catch (e: any) {
+      if (e.code === '23505') {
+        console.log('[DB] admin already exists, skipping seed')
+      } else {
+        console.error('[DB] admin seed error:', e.message)
+      }
+    }
   }
   console.log('[DB] init complete')
   _dbInitDone = true

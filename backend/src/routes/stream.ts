@@ -271,6 +271,42 @@ router.post('/:id/leave', async (req: Request, res: Response) => {
   }
 })
 
+// Stop broadcast (proxies to broadcast end — used by AdminDashboard)
+router.post('/:id/stop', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[STREAM] stop error:', err.message)
+    res.status(500).json({ error: 'Failed to stop broadcast' })
+  }
+})
+
+// Pause broadcast (proxies to broadcast pause — used by AdminDashboard)
+router.post('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'paused' WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[STREAM] pause error:', err.message)
+    res.status(500).json({ error: 'Failed to pause broadcast' })
+  }
+})
+
 // Clear stream chunks (called when broadcast ends)
 router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
   try {

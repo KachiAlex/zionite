@@ -25,7 +25,9 @@ import pushRoutes from './routes/push.js'
 import radioRoutes from './routes/radio.js'
 import radioScheduleRoutes from './routes/radio-schedules.js'
 import playlistRoutes from './routes/playlists.js'
+import musicRoutes from './routes/music.js'
 import { cacheMiddleware } from './middleware/cache.js'
+import { resolveTenant } from './middleware/auth.js'
 
 // Sentry init
 if (process.env.SENTRY_DSN) {
@@ -52,6 +54,9 @@ app.use((req, res, next) => {
   }
   next()
 })
+
+// Resolve tenant from subdomain on every request
+app.use(resolveTenant)
 
 // Request logging
 app.use((req, res, next) => {
@@ -92,6 +97,7 @@ app.use('/push', pushRoutes)
 app.use('/radio', radioRoutes)
 app.use('/radio-schedules', radioScheduleRoutes)
 app.use('/playlists', playlistRoutes)
+app.use('/music', musicRoutes)
 
 // HLS live stream serving
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'

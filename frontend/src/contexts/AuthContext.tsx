@@ -6,7 +6,8 @@ interface User {
   id: string
   email: string
   name: string
-  role: 'listener' | 'broadcaster' | 'admin'
+  role: 'listener' | 'broadcaster' | 'admin' | 'super_admin'
+  tenantId?: string
 }
 
 interface AuthContextType {

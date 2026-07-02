@@ -66,8 +66,10 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     status TEXT NOT NULL DEFAULT 'scheduled', started_at TIMESTAMP, ended_at TIMESTAMP,
     broadcaster_id TEXT NOT NULL, audio_path TEXT, stream_key TEXT, stream_type TEXT DEFAULT 'church_online',
-    church_online_url TEXT, thumbnail_url TEXT, speaker TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    church_online_url TEXT, thumbnail_url TEXT, speaker TEXT, init_segment TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS init_segment TEXT`,
     `CREATE TABLE IF NOT EXISTS sermons (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     speaker TEXT, series TEXT, audio_url TEXT, video_url TEXT, thumbnail_url TEXT, date TEXT NOT NULL, duration INTEGER,
@@ -107,9 +109,14 @@ const SCHEMA_QUERIES = [
     audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
     file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `CREATE TABLE IF NOT EXISTS stream_chunks (
+    id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
+    chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
     `CREATE TABLE IF NOT EXISTS stream_listeners (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, session_id TEXT NOT NULL,
-    platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ip TEXT, country TEXT, region TEXT, city TEXT
   )`,
     `CREATE TABLE IF NOT EXISTS donations (
     id TEXT PRIMARY KEY, name TEXT, email TEXT, amount NUMERIC NOT NULL,
@@ -125,8 +132,66 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, goal_amount NUMERIC NOT NULL,
     current_amount NUMERIC DEFAULT 0, end_date TEXT, is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+    user_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS fcm_tokens (
+    id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, user_id TEXT, platform TEXT DEFAULT 'android',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS daily_verses (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, reference TEXT, type TEXT DEFAULT 'verse',
+    created_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ];
+// ── Multi-tenant schema ────────────────────────────────────────
+async function _initTenantSchema() {
+    await db.query(`CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    logo_url TEXT,
+    primary_color TEXT DEFAULT '#c9a227',
+    custom_domain TEXT,
+    plan TEXT DEFAULT 'free',
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+    const tablesNeedingTenant = [
+        'users', 'broadcasts', 'sermons', 'chat_messages', 'schedule', 'music',
+        'stream_chunks', 'stream_listeners', 'featured_sermons', 'transcripts',
+        'guest_speakers', 'donations', 'prayer_requests', 'prayer_interactions',
+        'events', 'event_rsvps', 'testimonies', 'campaigns', 'newsletter_subscribers',
+        'push_subscriptions', 'webauthn_credentials', 'fcm_tokens',
+        'notification_preferences', 'notification_log', 'spiritual_health',
+        'playlists', 'playlist_items', 'radio_schedules', 'radio_state', 'daily_verses'
+    ];
+    for (const tbl of tablesNeedingTenant) {
+        try {
+            await db.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS tenant_id TEXT`);
+        }
+        catch { }
+    }
+    const defaultTenant = await db.get(`SELECT * FROM tenants WHERE slug=$1`, ['zionite']);
+    let defaultTenantId;
+    if (!defaultTenant) {
+        defaultTenantId = uuidv4();
+        await db.query(`INSERT INTO tenants (id, slug, name, primary_color, plan, status) VALUES ($1,$2,$3,$4,$5,$6)`, [defaultTenantId, 'zionite', 'Zionite', '#c9a227', 'pro', 'active']);
+    }
+    else {
+        defaultTenantId = defaultTenant.id;
+    }
+    for (const tbl of tablesNeedingTenant) {
+        try {
+            await db.query(`UPDATE ${tbl} SET tenant_id=$1 WHERE tenant_id IS NULL`, [defaultTenantId]);
+        }
+        catch { }
+    }
+    return defaultTenantId;
+}
 let _dbInitPromise = null;
 let _dbInitDone = false;
 export async function initDb() {
@@ -155,21 +220,24 @@ async function _initDbInternal() {
     // Run structured migrations
     const { runMigrations } = await import('./migrations/runner.js');
     await runMigrations();
+    // Initialize multi-tenant schema and backfill
+    const defaultTenantId = await _initTenantSchema();
+    console.log('[DB] tenant schema OK');
     const existingSchedule = await db.get('SELECT * FROM schedule LIMIT 1');
     if (!existingSchedule) {
         await db.run(`
-      INSERT INTO schedule (id, title, day_of_week, time, type) VALUES
-      ($1, 'Sunday Gathering', 0, '10:00', 'service'),
-      ($2, 'Midweek Study', 3, '19:00', 'study'),
-      ($3, 'Prayer Meeting', 5, '18:00', 'prayer')
-    `, [uuidv4(), uuidv4(), uuidv4()]);
+      INSERT INTO schedule (id, title, day_of_week, time, type, tenant_id) VALUES
+      ($1, 'Sunday Gathering', 0, '10:00', 'service', $4),
+      ($2, 'Midweek Study', 3, '19:00', 'study', $4),
+      ($3, 'Prayer Meeting', 5, '18:00', 'prayer', $4)
+    `, [uuidv4(), uuidv4(), uuidv4(), defaultTenantId]);
         console.log('[DB] schedule seeded');
     }
-    const admin = await db.get('SELECT * FROM users WHERE role = $1', ['admin']);
+    const admin = await db.get('SELECT * FROM users WHERE role = $1', ['super_admin']);
     if (!admin) {
         const bcrypt = await import('bcryptjs');
         const hash = await bcrypt.hash('admin123', 10);
-        await db.run(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'admin']);
+        await db.run(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId]);
         console.log('[DB] admin seeded');
     }
     console.log('[DB] init complete');

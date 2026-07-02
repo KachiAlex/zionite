@@ -68,11 +68,11 @@ router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (
 
     const id = uuidv4()
     await db.run(
-      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, started_at, broadcaster_id, thumbnail_url, speaker)
-       VALUES ($1, $2, $3, $4, 'live', CURRENT_TIMESTAMP, $5, $6, $7)`,
+      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker)
+       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7)`,
       [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null]
     )
-    res.json({ broadcast: { id, title, description, scripture_reference, status: 'live', broadcaster_id: req.user!.id, thumbnail_url, speaker } })
+    res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user!.id, thumbnail_url, speaker })
   } catch (err: any) {
     console.error('[BROADCASTS] create error:', err.message)
     res.status(500).json({ error: 'Failed to create broadcast' })
@@ -92,6 +92,74 @@ router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'adm
 })
 
 router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[BROADCASTS] end error:', err.message)
+    res.status(500).json({ error: 'Failed to end broadcast' })
+  }
+})
+
+router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[BROADCASTS] start error:', err.message)
+    res.status(500).json({ error: 'Failed to start broadcast' })
+  }
+})
+
+router.patch('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'paused' WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[BROADCASTS] pause error:', err.message)
+    res.status(500).json({ error: 'Failed to pause broadcast' })
+  }
+})
+
+router.patch('/:id/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await db.run(
+      "UPDATE broadcasts SET status = 'live' WHERE id = $1",
+      [id]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[BROADCASTS] resume error:', err.message)
+    res.status(500).json({ error: 'Failed to resume broadcast' })
+  }
+})
+
+router.patch('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
   try {
     await initDb()
     const { id } = req.params

@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
+import { TenantProvider } from './contexts/TenantContext'
 
 // Keep all audio playing when app is backgrounded on Android / browser
 function resumeAllAudioContexts() {
@@ -79,7 +80,9 @@ if ('serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <TenantProvider>
+        <App />
+      </TenantProvider>
     </QueryClientProvider>
   </React.StrictMode>
 )

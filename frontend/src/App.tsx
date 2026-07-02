@@ -16,6 +16,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Broadcast = lazy(() => import('./pages/Broadcast'))
 const Archive = lazy(() => import('./pages/Archive'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
 const MemberDashboard = lazy(() => import('./pages/MemberDashboard'))
 const Status = lazy(() => import('./pages/Status'))
 const Live = lazy(() => import('./pages/Live'))
@@ -60,7 +61,7 @@ function AnimatedRoutes() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute allowedRoles={['listener', 'admin', 'broadcaster']}>
+            <ProtectedRoute allowedRoles={['listener', 'admin', 'broadcaster', 'super_admin']}>
               <MemberDashboard />
             </ProtectedRoute>
           }
@@ -68,15 +69,23 @@ function AnimatedRoutes() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'broadcaster']}>
+            <ProtectedRoute allowedRoles={['admin', 'broadcaster', 'super_admin']}>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/super-admin"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <SuperAdminDashboard />
             </ProtectedRoute>
           }
         />
         <Route
           path="/broadcast"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'broadcaster']}>
+            <ProtectedRoute allowedRoles={['admin', 'broadcaster', 'super_admin']}>
               <Broadcast />
             </ProtectedRoute>
           }

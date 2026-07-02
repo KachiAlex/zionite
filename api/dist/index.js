@@ -3,6 +3,8 @@ import cors from 'cors';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import * as Sentry from '@sentry/node';
+import path from 'path';
+import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import broadcastRoutes from './routes/broadcasts.js';
 import sermonRoutes from './routes/sermons.js';
@@ -17,13 +19,20 @@ import testimonyRoutes from './routes/testimonies.js';
 import campaignRoutes from './routes/campaigns.js';
 import analyticsRoutes from './routes/analytics.js';
 import searchRoutes from './routes/search.js';
+import relayRoutes from './routes/relay.js';
+import streamRoutes from './routes/stream.js';
+import pushRoutes from './routes/push.js';
+import radioRoutes from './routes/radio.js';
+import radioScheduleRoutes from './routes/radio-schedules.js';
+import playlistRoutes from './routes/playlists.js';
 import { cacheMiddleware } from './middleware/cache.js';
+import { resolveTenant } from './middleware/auth.js';
 // Sentry init
 if (process.env.SENTRY_DSN) {
     Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
 }
 const app = express();
-app.use(cors({ origin: '*', credentials: true }));
+app.use(cors({ origin: '*', credentials: false }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -39,6 +48,8 @@ app.use((req, res, next) => {
     }
     next();
 });
+// Resolve tenant from subdomain on every request
+app.use(resolveTenant);
 // Request logging
 app.use((req, res, next) => {
     console.log(`[REQ] ${req.method} ${req.url}`);
@@ -70,6 +81,39 @@ app.use('/testimonies', testimonyRoutes);
 app.use('/campaigns', campaignRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/search', cacheMiddleware(30000), searchRoutes);
+app.use('/relay', relayRoutes);
+app.use('/stream', streamRoutes);
+app.use('/push', pushRoutes);
+app.use('/radio', radioRoutes);
+app.use('/radio-schedules', radioScheduleRoutes);
+app.use('/playlists', playlistRoutes);
+// HLS live stream serving
+const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls';
+app.use('/live', (req, res, next) => {
+    // req.path starts with '/' (e.g. '/abc123/stream.m3u8'); strip it so path.join works
+    const relativePath = req.path.replace(/^\//, '');
+    const filePath = path.join(HLS_ROOT, relativePath);
+    console.log(`[HLS] serve ${req.path} → ${filePath} (exists=${fs.existsSync(filePath)})`);
+    if (!filePath.startsWith(HLS_ROOT)) {
+        res.status(403).end();
+        return;
+    }
+    if (!fs.existsSync(filePath)) {
+        res.status(404).end();
+        return;
+    }
+    // Set correct MIME types and CORS
+    if (req.path.endsWith('.m3u8')) {
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    else if (req.path.endsWith('.ts')) {
+        res.setHeader('Content-Type', 'video/MP2T');
+        res.setHeader('Cache-Control', 'public, max-age=2');
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.sendFile(filePath);
+});
 // Sentry error handler (must be before 404)
 if (process.env.SENTRY_DSN) {
     app.use(Sentry.expressErrorHandler());

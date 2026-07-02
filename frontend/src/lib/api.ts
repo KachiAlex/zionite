@@ -21,7 +21,8 @@ export interface Sermon { id: string; title: string; scripture_reference?: strin
 export interface GuestSpeaker { id: string; name: string; bio: string; photo_url: string; topic: string; date: string; is_active: boolean }
 export interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string; category?: string }
 export interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string }
-export interface User { id: string; email: string; name?: string; role: string; created_at?: string }
+export interface User { id: string; email: string; name?: string; role: string; tenantId?: string; created_at?: string }
+export interface Tenant { id: string; slug: string; name: string; description?: string; logo_url?: string; primary_color: string; custom_domain?: string; plan: string; status: string }
 export interface Prayer { id: string; name: string | null; request: string; is_anonymous: boolean; prayers_count: number; created_at: string }
 
 /* ─── Queries ─── */
@@ -204,5 +205,16 @@ export function useCreateDonation() {
   return useMutation({
     mutationFn: (payload: any) => api.post('/donations', payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['donations'] }),
+  })
+}
+
+export function useTenant() {
+  return useQuery<Tenant | null>({
+    queryKey: ['tenant'],
+    queryFn: async () => {
+      const { data } = await api.get('/tenant')
+      return data.tenant as Tenant | null
+    },
+    staleTime: 1000 * 60 * 5,
   })
 }

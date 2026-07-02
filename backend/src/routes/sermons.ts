@@ -60,11 +60,12 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
 router.get('/featured', async (req, res) => {
   try {
     await initDb()
-    const rows = await db.all(
-      `SELECT s.* FROM sermons s
-       JOIN featured_sermons fs ON s.id = fs.sermon_id
-       ORDER BY fs.display_order ASC, fs.created_at DESC`
+    let rows = await db.all(
+      `SELECT * FROM sermons WHERE is_featured = TRUE ORDER BY date DESC`
     )
+    if (!rows || rows.length === 0) {
+      rows = await db.all(`SELECT * FROM sermons ORDER BY date DESC LIMIT 4`)
+    }
     res.json({ sermons: rows })
   } catch (err: any) {
     res.status(500).json({ error: err.message })

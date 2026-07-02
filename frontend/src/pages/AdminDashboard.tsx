@@ -106,7 +106,7 @@ export default function AdminDashboard() {
   const loading = !analytics
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') { navigate('/'); return }
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) { navigate('/'); return }
   }, [user, navigate])
 
   function refresh() {
@@ -173,7 +173,7 @@ export default function AdminDashboard() {
     }
   }
 
-  if (!user || user.role !== 'admin') return null
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) return null
 
   function SB({label,tab,icon:I,badge}:any){const a=activeTab===tab;return(<button onClick={()=>setActiveTab(tab)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors ${a?'bg-[#c9a227] text-[#1b1208] font-semibold':'text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]'}`}><I className="w-3.5 h-3.5 flex-shrink-0"/>{!sidebarCollapsed && <><span className="flex-1 text-left">{label}</span>{badge?<span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${a?'bg-[#1b1208]/20':'bg-[#ef4444] text-white'}`}>{badge}</span>:null}</>}</button>)}
   function SL({t}:{t:string}){return sidebarCollapsed ? null : <p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
@@ -213,6 +213,12 @@ export default function AdminDashboard() {
       <SB label="Daily Word" tab="dailyverse" icon={BookOpen}/>
       <SL t="Settings"/>
       <SB label="System Settings" tab="settings" icon={Settings}/>
+      {user?.role === 'super_admin' && (
+        <button onClick={() => navigate('/super-admin')} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors text-[#c9a227] hover:bg-[rgba(201,162,39,0.1)] font-semibold">
+          <Shield className="w-3.5 h-3.5 flex-shrink-0"/>
+          {!sidebarCollapsed && <span className="flex-1 text-left">Super Admin</span>}
+        </button>
+      )}
     </div>
   )
 
