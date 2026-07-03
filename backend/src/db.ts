@@ -86,8 +86,9 @@ const SCHEMA_QUERIES = [
   )`,
   `CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY, broadcast_id TEXT, user_id TEXT, user_name TEXT,
-    recipient_id TEXT, guest_name TEXT, message TEXT NOT NULL, is_private BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    recipient_id TEXT, guest_name TEXT, message TEXT NOT NULL, is_private BOOLEAN DEFAULT FALSE, reactions TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reactions TEXT`,
   `CREATE TABLE IF NOT EXISTS schedule (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, day_of_week INTEGER NOT NULL,
     time TEXT NOT NULL, type TEXT DEFAULT 'service', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
