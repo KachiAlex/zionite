@@ -6,6 +6,7 @@ import { authenticateToken, requireRole, AuthenticatedRequest } from '../middlew
 import fs from 'fs'
 import path from 'path'
 import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive, getHlsManifestUrl, getHlsDir } from '../hls.js'
+import { pauseRadioForBroadcast } from '../sermon-radio.js'
 
 const router = Router()
 const liveEmitter = new EventEmitter()
@@ -57,7 +58,11 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
     )
     res.json({ success: true })
     // Feed HLS encoder
+    const wasActive = isHlsActive(req.params.id)
     startHlsBroadcast(req.params.id)
+    if (!wasActive) {
+      pauseRadioForBroadcast().catch(err => console.error('[STREAM] pauseRadio error:', err))
+    }
     feedHlsChunk(req.params.id, chunkIndex, chunkData)
     // Notify live listeners that a new chunk is available
     liveEmitter.emit(`chunk:${req.params.id}`, chunkIndex)

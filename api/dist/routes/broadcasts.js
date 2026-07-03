@@ -5,6 +5,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import { db, initDb } from '../db.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { optimizeImage } from '../middleware/optimizeImage.js';
+import { pauseRadioForBroadcast, resumeRadioAfterBroadcast } from '../sermon-radio.js';
+import { stopHlsBroadcast } from '../hls.js';
 const uploadImage = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
@@ -132,6 +134,8 @@ router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), 
             return;
         }
         await db.run("UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
+        stopHlsBroadcast(id);
+        await resumeRadioAfterBroadcast();
         res.json({ success: true });
     }
     catch (err) {
@@ -149,6 +153,7 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
             return;
         }
         await db.run("UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
+        await pauseRadioForBroadcast();
         res.json({ success: true });
     }
     catch (err) {
@@ -200,6 +205,8 @@ router.patch('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'),
             return;
         }
         await db.run("UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
+        stopHlsBroadcast(id);
+        await resumeRadioAfterBroadcast();
         res.json({ success: true });
     }
     catch (err) {

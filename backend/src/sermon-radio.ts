@@ -18,6 +18,8 @@ interface ActiveSermonStream {
 
 let active: ActiveSermonStream | null = null
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
+let broadcastPaused = false
+let preBroadcastState: { playlistId: string; itemIndex: number; offsetSeconds: number } | null = null
 
 async function getPlaylistItems(playlistId: string) {
   await initDb()
@@ -181,6 +183,10 @@ async function findActiveSchedule() {
 }
 
 export async function startRadio(playlistId: string, shuffle = false, repeatMode = 'none') {
+  if (broadcastPaused) {
+    console.log('[RADIO] Not starting — paused for live broadcast')
+    return
+  }
   if (active) {
     console.log('[RADIO] Already streaming, stopping first')
     await stopRadio()
@@ -225,6 +231,57 @@ export async function stopRadio(): Promise<void> {
   console.log('[RADIO] Stopped streaming')
 }
 
+export function isRadioPausedForBroadcast(): boolean {
+  return broadcastPaused
+}
+
+export async function pauseRadioForBroadcast() {
+  if (broadcastPaused) return
+  if (active) {
+    const elapsed = Math.floor((Date.now() - active.startedAt) / 1000)
+    preBroadcastState = {
+      playlistId: active.playlistId,
+      itemIndex: active.itemIndex,
+      offsetSeconds: active.offsetSeconds + elapsed,
+    }
+    console.log('[RADIO] Pausing for broadcast, saved state:', preBroadcastState)
+    await stopRadio()
+  } else {
+    console.log('[RADIO] No active radio to pause for broadcast')
+  }
+  broadcastPaused = true
+}
+
+export async function resumeRadioAfterBroadcast() {
+  if (!broadcastPaused) return
+  broadcastPaused = false
+  if (preBroadcastState) {
+    const { playlistId, itemIndex, offsetSeconds } = preBroadcastState
+    const items = await getPlaylistItems(playlistId)
+    if (items.length > 0 && itemIndex < items.length) {
+      active = {
+        streamKey: STREAM_KEY,
+        process: null as any,
+        currentContentId: '',
+        currentAudioUrl: '',
+        offsetSeconds: 0,
+        playlistId,
+        playlistItems: items,
+        itemIndex,
+        startedAt: Date.now() - (offsetSeconds * 1000),
+      }
+      const item = items[itemIndex]
+      await startSermonItem(item, offsetSeconds)
+      console.log(`[RADIO] Resumed after broadcast at item ${itemIndex}, offset ${offsetSeconds}s`)
+    } else {
+      console.log('[RADIO] Saved playlist item no longer valid, not resuming')
+    }
+    preBroadcastState = null
+  } else {
+    console.log('[RADIO] No saved state, letting scheduler restart on next tick')
+  }
+}
+
 export async function skipSermon(): Promise<void> {
   if (!active) throw new Error('Radio is not streaming')
   await playNextSermon()
@@ -247,8 +304,23 @@ export function getRadioStatus() {
 }
 
 async function tick() {
-  const schedule = await findActiveSchedule()
+  // If a live broadcast is ongoing, pause radio and skip schedule start
+  const liveBroadcast = await db.get("SELECT 1 FROM broadcasts WHERE status = 'live' LIMIT 1")
+  if (liveBroadcast) {
+    if (active && !broadcastPaused) {
+      console.log('[RADIO-SCHEDULER] Live broadcast detected, pausing radio')
+      await pauseRadioForBroadcast()
+    }
+    return
+  }
 
+  // No live broadcast — resume if we were paused for one
+  if (broadcastPaused) {
+    console.log('[RADIO-SCHEDULER] Broadcast ended, resuming radio')
+    await resumeRadioAfterBroadcast()
+  }
+
+  const schedule = await findActiveSchedule()
   if (schedule) {
     if (!active || active.playlistId !== schedule.playlist_id) {
       console.log(`[RADIO-SCHEDULER] Active schedule found: ${schedule.id} (playlist ${schedule.playlist_id}), starting radio`)
