@@ -85,7 +85,10 @@ function makeStreamingInit(buf: Buffer): Buffer | null {
 
 const active = new Map<string, BroadcastHls>()
 const lastCrash = new Map<string, number>()
+const crashCount = new Map<string, number>()
 const CRASH_BACKOFF_MS = 5000 // wait 5s before restarting after a crash
+const MAX_CONSECUTIVE_CRASHES = 3
+const inBackoff = new Map<string, boolean>()
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -155,22 +158,31 @@ function doStart(blsId: string) {
       console.log(`[HLS] ${blsId} dir read error on exit:`, e.message)
     }
     const s = active.get(blsId)
+    active.delete(blsId)
     if (s && !s.ended) {
       const now = Date.now()
       const last = lastCrash.get(blsId) || 0
-      if (now - last < CRASH_BACKOFF_MS) {
-        console.warn(`[HLS] ${blsId} crashed too fast (${now - last}ms < ${CRASH_BACKOFF_MS}ms), backing off…`)
-        active.delete(blsId)
+      const count = (crashCount.get(blsId) || 0) + 1
+      crashCount.set(blsId, count)
+      if (count >= MAX_CONSECUTIVE_CRASHES) {
+        console.error(`[HLS] ${blsId} crashed ${count} times consecutively — giving up. Check broadcaster WebM format.`)
         lastCrash.set(blsId, now)
-        setTimeout(() => { if (!active.has(blsId)) doStart(blsId) }, CRASH_BACKOFF_MS)
+        inBackoff.set(blsId, false)
         return
       }
-      console.warn(`[HLS] ${blsId} crashed, restarting…`)
+      if (now - last < CRASH_BACKOFF_MS) {
+        console.warn(`[HLS] ${blsId} crashed too fast (${now - last}ms < ${CRASH_BACKOFF_MS}ms), backing off… (crash #${count})`)
+        lastCrash.set(blsId, now)
+        inBackoff.set(blsId, true)
+        setTimeout(() => {
+          inBackoff.set(blsId, false)
+          if (!active.has(blsId)) doStart(blsId)
+        }, CRASH_BACKOFF_MS)
+        return
+      }
+      console.warn(`[HLS] ${blsId} crashed, restarting… (crash #${count})`)
       lastCrash.set(blsId, now)
-      active.delete(blsId)
       doStart(blsId)
-    } else {
-      active.delete(blsId)
     }
   })
 
@@ -214,6 +226,10 @@ function forceStop(blsId: string) {
 
 export function startHlsBroadcast(broadcastId: string) {
   console.log(`[HLS] startHlsBroadcast called for ${broadcastId}`)
+  if (inBackoff.get(broadcastId)) {
+    console.warn(`[HLS] ${broadcastId} is in backoff, skipping start`)
+    return
+  }
   const existing = active.get(broadcastId)
   if (existing) {
     if (existing.chunksReceived) {
@@ -226,13 +242,15 @@ export function startHlsBroadcast(broadcastId: string) {
       return
     }
   }
+  // Reset crash count on explicit start (broadcaster likely reconnected with fixed data)
+  crashCount.set(broadcastId, 0)
   doStart(broadcastId)
 }
 
 export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
   const hls = active.get(broadcastId)
-  if (!hls || hls.ended) {
-    console.log(`[HLS] feedHlsChunk skipped for ${broadcastId}: active=${!!hls} ended=${hls?.ended}`)
+  if (!hls || hls.ended || hls.ffmpeg.killed) {
+    console.log(`[HLS] feedHlsChunk skipped for ${broadcastId}: active=${!!hls} ended=${hls?.ended} killed=${hls?.ffmpeg.killed}`)
     return
   }
   try {
@@ -257,9 +275,13 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
     } else {
       data = extractCluster(buf)
     }
-    if (hls.ffmpeg.stdin?.writable) {
-      hls.ffmpeg.stdin.write(data)
-      console.log(`[HLS] ${broadcastId} fed chunk: ${data.length} bytes (initSent=${hls.initSent})`)
+    if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
+      try {
+        hls.ffmpeg.stdin.write(data)
+        console.log(`[HLS] ${broadcastId} fed chunk: ${data.length} bytes (initSent=${hls.initSent})`)
+      } catch (writeErr: any) {
+        console.warn(`[HLS] ${broadcastId} stdin write failed:`, writeErr.message)
+      }
       // Periodically log directory contents so we can see if files are being created
       if (Math.random() < 0.05) { // ~5% of chunks
         try {
