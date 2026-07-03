@@ -192,5 +192,79 @@ router.post('/reset-password', async (req, res) => {
         res.status(500).json({ error: 'Failed to reset password' });
     }
 });
+router.post('/change-password', authenticateToken, async (req, res) => {
+    try {
+        if (!dbReady) {
+            res.status(503).json({ error: 'Database not configured' });
+            return;
+        }
+        await initDb();
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword || newPassword.length < 6) {
+            res.status(400).json({ error: 'Current and new password required (min 6 chars)' });
+            return;
+        }
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [req.user.id]);
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        const valid = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!valid) {
+            res.status(401).json({ error: 'Current password is incorrect' });
+            return;
+        }
+        const hash = await bcrypt.hash(newPassword, 10);
+        await db.run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, user.id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[AUTH] change-password error:', err.message);
+        res.status(500).json({ error: 'Failed to change password' });
+    }
+});
+router.get('/webauthn/credentials', authenticateToken, async (req, res) => {
+    try {
+        await initDb();
+        const creds = await db.all('SELECT id, credential_id, device_name, created_at FROM webauthn_credentials WHERE user_id = $1', [req.user.id]);
+        res.json({ credentials: creds || [] });
+    }
+    catch (err) {
+        console.error('[AUTH] webauthn/credentials error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch credentials' });
+    }
+});
+router.post('/webauthn/register', authenticateToken, async (req, res) => {
+    try {
+        await initDb();
+        const { credential_id, public_key, device_name } = req.body;
+        if (!credential_id || !public_key) {
+            res.status(400).json({ error: 'credential_id and public_key required' });
+            return;
+        }
+        const existing = await db.get('SELECT id FROM webauthn_credentials WHERE credential_id = $1', [credential_id]);
+        if (existing) {
+            res.json({ ok: true, message: 'Credential already registered' });
+            return;
+        }
+        await db.run('INSERT INTO webauthn_credentials (id, user_id, credential_id, public_key, device_name) VALUES ($1,$2,$3,$4,$5)', [uuidv4(), req.user.id, credential_id, public_key, device_name || 'My Device']);
+        res.json({ ok: true });
+    }
+    catch (err) {
+        console.error('[AUTH] webauthn/register error:', err.message);
+        res.status(500).json({ error: 'Failed to register credential' });
+    }
+});
+router.delete('/webauthn/credentials/:credId', authenticateToken, async (req, res) => {
+    try {
+        await initDb();
+        await db.run('DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2', [req.params.credId, req.user.id]);
+        res.json({ ok: true });
+    }
+    catch (err) {
+        console.error('[AUTH] webauthn/delete error:', err.message);
+        res.status(500).json({ error: 'Failed to delete credential' });
+    }
+});
 export default router;
 //# sourceMappingURL=auth.js.map

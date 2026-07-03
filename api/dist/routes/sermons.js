@@ -57,9 +57,10 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
 router.get('/featured', async (req, res) => {
     try {
         await initDb();
-        const rows = await db.all(`SELECT s.* FROM sermons s
-       JOIN featured_sermons fs ON s.id = fs.sermon_id
-       ORDER BY fs.display_order ASC, fs.created_at DESC`);
+        let rows = await db.all(`SELECT * FROM sermons WHERE is_featured = TRUE ORDER BY date DESC`);
+        if (!rows || rows.length === 0) {
+            rows = await db.all(`SELECT * FROM sermons ORDER BY date DESC LIMIT 4`);
+        }
         res.json({ sermons: rows });
     }
     catch (err) {
@@ -86,6 +87,21 @@ router.delete('/featured/:sermon_id', authenticateToken, requireRole('admin'), a
         await initDb();
         await db.run('DELETE FROM featured_sermons WHERE sermon_id = $1', [req.params.sermon_id]);
         res.json({ ok: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+router.post('/:id/play', async (req, res) => {
+    try {
+        await initDb();
+        await db.run('UPDATE sermons SET play_count = COALESCE(play_count, 0) + 1 WHERE id = $1', [req.params.id]);
+        const sermon = await db.get('SELECT * FROM sermons WHERE id = $1', [req.params.id]);
+        if (!sermon) {
+            res.status(404).json({ error: 'Sermon not found' });
+            return;
+        }
+        res.json({ sermon });
     }
     catch (err) {
         res.status(500).json({ error: err.message });

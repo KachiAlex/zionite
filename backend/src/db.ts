@@ -81,9 +81,10 @@ const SCHEMA_QUERIES = [
   `CREATE TABLE IF NOT EXISTS sermons (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     speaker TEXT, series TEXT, audio_url TEXT, video_url TEXT, thumbnail_url TEXT, date TEXT NOT NULL, duration INTEGER,
-    is_featured BOOLEAN DEFAULT FALSE,
+    is_featured BOOLEAN DEFAULT FALSE, play_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `ALTER TABLE sermons ADD COLUMN IF NOT EXISTS play_count INTEGER DEFAULT 0`,
   `CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY, broadcast_id TEXT, user_id TEXT, user_name TEXT,
     recipient_id TEXT, guest_name TEXT, message TEXT NOT NULL, is_private BOOLEAN DEFAULT FALSE, reactions TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

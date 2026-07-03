@@ -25,8 +25,10 @@ import pushRoutes from './routes/push.js';
 import radioRoutes from './routes/radio.js';
 import radioScheduleRoutes from './routes/radio-schedules.js';
 import playlistRoutes from './routes/playlists.js';
+import musicRoutes from './routes/music.js';
 import { cacheMiddleware } from './middleware/cache.js';
-import { resolveTenant } from './middleware/auth.js';
+import { resolveTenant, JWT_SECRET } from './middleware/auth.js';
+import jwt from 'jsonwebtoken';
 // Sentry init
 if (process.env.SENTRY_DSN) {
     Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
@@ -36,8 +38,25 @@ app.use(cors({ origin: '*', credentials: false }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-// Rate limiting
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+// Rate limiting — key by user ID from JWT so multiple users behind NAT aren't lumped together
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 2000,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (token) {
+            try {
+                const d = jwt.verify(token, JWT_SECRET);
+                if (d?.id)
+                    return d.id;
+            }
+            catch { }
+        }
+        return req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    }
+});
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true });
 app.use(apiLimiter);
 app.use('/auth', authLimiter);
@@ -54,6 +73,14 @@ app.use(resolveTenant);
 app.use((req, res, next) => {
     console.log(`[REQ] ${req.method} ${req.url}`);
     next();
+});
+// Tenant lookup (matches Vercel API)
+app.get('/tenant', (req, res) => {
+    if (!req.tenant) {
+        res.status(404).json({ error: 'Tenant not found' });
+        return;
+    }
+    res.json({ tenant: req.tenant });
 });
 // Health checks
 app.get('/ping', (_req, res) => res.json({ ok: true }));
@@ -87,6 +114,7 @@ app.use('/push', pushRoutes);
 app.use('/radio', radioRoutes);
 app.use('/radio-schedules', radioScheduleRoutes);
 app.use('/playlists', playlistRoutes);
+app.use('/music', musicRoutes);
 // HLS live stream serving
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls';
 app.use('/live', (req, res, next) => {
@@ -94,6 +122,7 @@ app.use('/live', (req, res, next) => {
     const relativePath = req.path.replace(/^\//, '');
     const filePath = path.join(HLS_ROOT, relativePath);
     console.log(`[HLS] serve ${req.path} → ${filePath} (exists=${fs.existsSync(filePath)})`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
     if (!filePath.startsWith(HLS_ROOT)) {
         res.status(403).end();
         return;
@@ -111,7 +140,6 @@ app.use('/live', (req, res, next) => {
         res.setHeader('Content-Type', 'video/MP2T');
         res.setHeader('Cache-Control', 'public, max-age=2');
     }
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.sendFile(filePath);
 });
 // Sentry error handler (must be before 404)

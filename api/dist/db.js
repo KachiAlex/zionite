@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 const rawDbUrl = process.env.DATABASE_URL?.trim();
 const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl;
 console.log('[DB] NODE_ENV:', process.env.NODE_ENV);
@@ -73,12 +74,15 @@ const SCHEMA_QUERIES = [
     `CREATE TABLE IF NOT EXISTS sermons (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, scripture_reference TEXT,
     speaker TEXT, series TEXT, audio_url TEXT, video_url TEXT, thumbnail_url TEXT, date TEXT NOT NULL, duration INTEGER,
+    is_featured BOOLEAN DEFAULT FALSE, play_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `ALTER TABLE sermons ADD COLUMN IF NOT EXISTS play_count INTEGER DEFAULT 0`,
     `CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY, broadcast_id TEXT, user_id TEXT, user_name TEXT,
-    recipient_id TEXT, guest_name TEXT, message TEXT NOT NULL, is_private BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    recipient_id TEXT, guest_name TEXT, message TEXT NOT NULL, is_private BOOLEAN DEFAULT FALSE, reactions TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reactions TEXT`,
     `CREATE TABLE IF NOT EXISTS schedule (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, day_of_week INTEGER NOT NULL,
     time TEXT NOT NULL, type TEXT DEFAULT 'service', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -107,12 +111,15 @@ const SCHEMA_QUERIES = [
     `CREATE TABLE IF NOT EXISTS music (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT, album TEXT, genre TEXT,
     audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
-    file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    file_format TEXT, file_size INTEGER, play_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `ALTER TABLE music ADD COLUMN IF NOT EXISTS play_count INTEGER DEFAULT 0`,
     `CREATE TABLE IF NOT EXISTS stream_chunks (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
     chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+    `DELETE FROM stream_chunks WHERE id NOT IN (SELECT MIN(id) FROM stream_chunks GROUP BY broadcast_id, chunk_index)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_chunks_broadcast_chunk ON stream_chunks (broadcast_id, chunk_index)`,
     `CREATE TABLE IF NOT EXISTS stream_listeners (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, session_id TEXT NOT NULL,
     platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -139,6 +146,11 @@ const SCHEMA_QUERIES = [
   )`,
     `CREATE TABLE IF NOT EXISTS fcm_tokens (
     id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, user_id TEXT, platform TEXT DEFAULT 'android',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, credential_id TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL, counter INTEGER DEFAULT 0, device_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
     `CREATE TABLE IF NOT EXISTS daily_verses (
@@ -235,10 +247,19 @@ async function _initDbInternal() {
     }
     const admin = await db.get('SELECT * FROM users WHERE role = $1', ['super_admin']);
     if (!admin) {
-        const bcrypt = await import('bcryptjs');
-        const hash = await bcrypt.hash('admin123', 10);
-        await db.run(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId]);
-        console.log('[DB] admin seeded');
+        try {
+            const hash = await bcrypt.hash('admin123', 10);
+            await db.run(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId]);
+            console.log('[DB] admin seeded');
+        }
+        catch (e) {
+            if (e.code === '23505') {
+                console.log('[DB] admin already exists, skipping seed');
+            }
+            else {
+                console.error('[DB] admin seed error:', e.message);
+            }
+        }
     }
     console.log('[DB] init complete');
     _dbInitDone = true;

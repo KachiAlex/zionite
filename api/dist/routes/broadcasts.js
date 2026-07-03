@@ -36,7 +36,37 @@ router.get('/', async (req, res) => {
 router.get('/active', async (req, res) => {
     try {
         await initDb();
-        const broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' ORDER BY started_at DESC LIMIT 1");
+        let broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' ORDER BY started_at DESC LIMIT 1");
+        // Fallback: if chunks are flowing but no broadcast record exists (mobile broadcaster
+        // may send chunks via WebSocket without creating a DB record), synthesize one.
+        if (!broadcast) {
+            const recentChunk = await db.get(`SELECT broadcast_id, MAX(created_at) as last_chunk_at FROM stream_chunks
+         WHERE created_at > NOW() - INTERVAL '5 minutes'
+         GROUP BY broadcast_id ORDER BY last_chunk_at DESC LIMIT 1`);
+            if (recentChunk) {
+                broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [recentChunk.broadcast_id]);
+                if (!broadcast) {
+                    broadcast = {
+                        id: recentChunk.broadcast_id,
+                        title: 'Live Broadcast',
+                        description: 'Streaming now',
+                        status: 'live',
+                        started_at: recentChunk.last_chunk_at,
+                        broadcaster_id: '',
+                        speaker: null,
+                        thumbnail_url: null,
+                        scripture_reference: null,
+                        church_online_url: null,
+                        rtmp_url: null,
+                        stream_key: null,
+                        recording_url: null,
+                        recorded_at: null,
+                        ended_at: null,
+                        created_at: recentChunk.last_chunk_at,
+                    };
+                }
+            }
+        }
         res.json({ broadcast: broadcast || null });
     }
     catch (err) {
@@ -62,15 +92,15 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
     try {
         await initDb();
-        const { title, description, scripture_reference, thumbnail_url, speaker } = req.body;
+        const { title, description, scripture_reference, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key } = req.body;
         if (!title) {
             res.status(400).json({ error: 'Title is required' });
             return;
         }
         const id = uuidv4();
-        await db.run(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, started_at, broadcaster_id, thumbnail_url, speaker)
-       VALUES ($1, $2, $3, $4, 'live', CURRENT_TIMESTAMP, $5, $6, $7)`, [id, title, description || null, scripture_reference || null, req.user.id, thumbnail_url || null, speaker || null]);
-        res.json({ broadcast: { id, title, description, scripture_reference, status: 'live', broadcaster_id: req.user.id, thumbnail_url, speaker } });
+        await db.run(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key, created_at)
+       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`, [id, title, description || null, scripture_reference || null, req.user.id, thumbnail_url || null, speaker || null, church_online_url || null, rtmp_url || null, stream_key || null]);
+        res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user.id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key });
     }
     catch (err) {
         console.error('[BROADCASTS] create error:', err.message);
@@ -93,6 +123,74 @@ router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'adm
     }
 });
 router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id]);
+        if (!broadcast) {
+            res.status(404).json({ error: 'Broadcast not found' });
+            return;
+        }
+        await db.run("UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[BROADCASTS] end error:', err.message);
+        res.status(500).json({ error: 'Failed to end broadcast' });
+    }
+});
+router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id]);
+        if (!broadcast) {
+            res.status(404).json({ error: 'Broadcast not found' });
+            return;
+        }
+        await db.run("UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[BROADCASTS] start error:', err.message);
+        res.status(500).json({ error: 'Failed to start broadcast' });
+    }
+});
+router.patch('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id]);
+        if (!broadcast) {
+            res.status(404).json({ error: 'Broadcast not found' });
+            return;
+        }
+        await db.run("UPDATE broadcasts SET status = 'paused' WHERE id = $1", [id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[BROADCASTS] pause error:', err.message);
+        res.status(500).json({ error: 'Failed to pause broadcast' });
+    }
+});
+router.patch('/:id/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id]);
+        if (!broadcast) {
+            res.status(404).json({ error: 'Broadcast not found' });
+            return;
+        }
+        await db.run("UPDATE broadcasts SET status = 'live' WHERE id = $1", [id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[BROADCASTS] resume error:', err.message);
+        res.status(500).json({ error: 'Failed to resume broadcast' });
+    }
+});
+router.patch('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
     try {
         await initDb();
         const { id } = req.params;

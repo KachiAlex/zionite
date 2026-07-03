@@ -86,8 +86,8 @@ function makeStreamingInit(buf: Buffer): Buffer | null {
 const active = new Map<string, BroadcastHls>()
 const lastCrash = new Map<string, number>()
 const crashCount = new Map<string, number>()
-const CRASH_BACKOFF_MS = 5000 // wait 5s before restarting after a crash
-const MAX_CONSECUTIVE_CRASHES = 3
+const CRASH_BACKOFF_MS = 10000 // wait 10s before restarting after a crash
+const MAX_CONSECUTIVE_CRASHES = 5
 const inBackoff = new Map<string, boolean>()
 
 function ensureDir(dir: string) {
@@ -235,6 +235,7 @@ export function startHlsBroadcast(broadcastId: string) {
     if (existing.chunksReceived) {
       // Broadcaster refreshed/reconnected — restart for fresh MediaRecorder timeline
       console.warn(`[HLS] Restarting ${broadcastId} for broadcaster reconnect`)
+      crashCount.set(broadcastId, 0)
       forceStop(broadcastId)
     } else {
       // First start, still waiting for first chunk — don't duplicate
@@ -242,12 +243,12 @@ export function startHlsBroadcast(broadcastId: string) {
       return
     }
   }
-  // Reset crash count on explicit start (broadcaster likely reconnected with fixed data)
-  crashCount.set(broadcastId, 0)
+  // Don't reset crashCount on fresh start here — let backoff logic handle it.
+  // It is only reset on intentional broadcaster reconnect above.
   doStart(broadcastId)
 }
 
-export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
+export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chunk: string) {
   const hls = active.get(broadcastId)
   if (!hls || hls.ended || hls.ffmpeg.killed) {
     console.log(`[HLS] feedHlsChunk skipped for ${broadcastId}: active=${!!hls} ended=${hls?.ended} killed=${hls?.ffmpeg.killed}`)
@@ -259,20 +260,24 @@ export function feedHlsChunk(broadcastId: string, base64Chunk: string) {
     const buf = Buffer.from(base64Chunk, 'base64')
     // FFmpeg expects a continuous WebM stream. Self-contained chunks
     // from MediaRecorder each have their own EBML+Segment+Tracks init.
-    // Feed the full first chunk with Segment size set to unknown so FFmpeg
-    // keeps reading clusters indefinitely. Subsequent chunks are stripped.
+    // Feed chunk 0 with Segment size set to unknown so FFmpeg keeps reading.
+    // Drop non-zero chunks until init (chunk 0) has been received.
     let data: Buffer
-    if (!hls.initSent) {
+    if (chunkIndex === 0) {
       const init = makeStreamingInit(buf)
-      if (init) {
-        const cluster = extractCluster(buf)
-        data = Buffer.concat([init, cluster])
-      } else {
-        data = buf // fallback
+      if (!init) {
+        console.error(`[HLS] ${broadcastId} chunk 0 has no valid init segment, dropping`)
+        return
       }
+      const cluster = extractCluster(buf)
+      data = Buffer.concat([init, cluster])
       hls.initSent = true
-      console.log(`[HLS] ${broadcastId} first chunk fed (init+cluster, ${data.length} bytes)`)
+      console.log(`[HLS] ${broadcastId} init chunk fed (${data.length} bytes)`)
     } else {
+      if (!hls.initSent) {
+        console.warn(`[HLS] ${broadcastId} dropping chunk ${chunkIndex}: init not yet received`)
+        return
+      }
       data = extractCluster(buf)
     }
     if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {

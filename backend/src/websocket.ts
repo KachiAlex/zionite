@@ -99,7 +99,7 @@ export function initWebSocket(httpServer: HttpServer) {
         io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })
         // Feed HLS encoder (start only if not already active — avoids restart loop)
         if (!isHlsActive(broadcastId)) startHlsBroadcast(broadcastId)
-        feedHlsChunk(broadcastId, chunkData)
+        feedHlsChunk(broadcastId, chunkIndex, chunkData)
       } catch (err: any) {
         console.error('[WS] broadcast_chunk error:', err.message)
       }

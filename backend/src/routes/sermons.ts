@@ -99,6 +99,18 @@ router.delete('/featured/:sermon_id', authenticateToken, requireRole('admin'), a
   }
 })
 
+router.post('/:id/play', async (req, res) => {
+  try {
+    await initDb()
+    await db.run('UPDATE sermons SET play_count = COALESCE(play_count, 0) + 1 WHERE id = $1', [req.params.id])
+    const sermon = await db.get('SELECT * FROM sermons WHERE id = $1', [req.params.id])
+    if (!sermon) { res.status(404).json({ error: 'Sermon not found' }); return }
+    res.json({ sermon })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Transcripts
 router.get('/:id/transcript', async (req, res) => {
   try {

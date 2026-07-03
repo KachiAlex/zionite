@@ -58,7 +58,7 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
     res.json({ success: true })
     // Feed HLS encoder
     startHlsBroadcast(req.params.id)
-    feedHlsChunk(req.params.id, chunkData)
+    feedHlsChunk(req.params.id, chunkIndex, chunkData)
     // Notify live listeners that a new chunk is available
     liveEmitter.emit(`chunk:${req.params.id}`, chunkIndex)
   } catch (err: any) {

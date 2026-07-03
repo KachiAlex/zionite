@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process'
+import fs from 'fs'
 import { db, initDb } from './db.js'
 
 const STREAM_KEY = 'radio'
@@ -58,6 +59,7 @@ async function startFfmpeg(audioUrl: string, streamKey: string, offsetSeconds: n
   const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'
   const dir = `${HLS_ROOT}/${streamKey}`
   const manifest = `${dir}/stream.m3u8`
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
   const args = [
     '-hide_banner',
