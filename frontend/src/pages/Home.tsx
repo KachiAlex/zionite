@@ -175,6 +175,8 @@ export default function Home() {
   }
 
   const autoPlayedRef = useRef(false)
+  const wasPlayingRadioRef = useRef(false)
+
   useEffect(() => {
     if (isRadioOn && radioCurrent?.current && !isRadioPlaying && !autoPlayedRef.current) {
       autoPlayedRef.current = true
@@ -185,6 +187,22 @@ export default function Home() {
       }
     }
   }, [isRadioOn, isRadioPlaying, radioCurrent])
+
+  // Auto-stop radio when broadcast goes live; resume when broadcast ends
+  useEffect(() => {
+    if (isLive) {
+      if (isRadioPlaying) {
+        wasPlayingRadioRef.current = true
+        togglePlay() // pause radio
+      }
+    } else {
+      if (wasPlayingRadioRef.current && isRadioOn && radioCurrent?.current) {
+        wasPlayingRadioRef.current = false
+        handleRadioPlay()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive])
 
   const [subEmail, setSubEmail] = useState('')
   const [subState, setSubState] = useState<'idle'|'loading'|'done'|'error'>('idle') // eslint-disable-line

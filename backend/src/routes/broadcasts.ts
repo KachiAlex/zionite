@@ -63,16 +63,16 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res) => {
   try {
     await initDb()
-    const { title, description, scripture_reference, thumbnail_url, speaker } = req.body
+    const { title, description, scripture_reference, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key } = req.body
     if (!title) { res.status(400).json({ error: 'Title is required' }); return }
 
     const id = uuidv4()
     await db.run(
-      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker)
-       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7)`,
-      [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null]
+      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key, created_at)
+       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+      [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null, church_online_url || null, rtmp_url || null, stream_key || null]
     )
-    res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user!.id, thumbnail_url, speaker })
+    res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user!.id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key })
   } catch (err: any) {
     console.error('[BROADCASTS] create error:', err.message)
     res.status(500).json({ error: 'Failed to create broadcast' })

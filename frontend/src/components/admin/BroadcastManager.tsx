@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import { useQueryClient } from '@tanstack/react-query'
 import { API_BASE } from '../../lib/api'
 import {
   Radio, Play, Square, Plus, Loader2, ArrowLeft,
@@ -95,6 +96,7 @@ function MicMeter({ stream }: { stream: MediaStream | null }) {
 }
 
 export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts: Broadcast[]; onRefresh: () => void }) {
+  const queryClient = useQueryClient()
   const token = localStorage.getItem('token')
   const [view, setView] = useState<StudioView>('list')
   const [selectedBroadcast, setSelectedBroadcast] = useState<Broadcast | null>(null)
@@ -418,6 +420,8 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
       setStatus('live')
       setStartTime(new Date())
       setView('studio')
+      queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+      queryClient.invalidateQueries({ queryKey: ['broadcasts', 'active'] })
       onRefresh()
     } catch (err: any) {
       setSetupError(err.response?.data?.error || 'Failed to start broadcast')
@@ -442,6 +446,8 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         setStartTime(new Date())
         setView('studio')
       }
+      queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+      queryClient.invalidateQueries({ queryKey: ['broadcasts', 'active'] })
       onRefresh()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to start broadcast')
@@ -454,6 +460,8 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     try {
       await axios.patch(`${API_BASE}/api/broadcasts/${broadcastId}/pause`, {}, { headers: { Authorization: `Bearer ${token}` } })
       setStatus('paused')
+      queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+      queryClient.invalidateQueries({ queryKey: ['broadcasts', 'active'] })
       onRefresh()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to pause')
@@ -466,6 +474,8 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     try {
       await axios.patch(`${API_BASE}/api/broadcasts/${broadcastId}/resume`, {}, { headers: { Authorization: `Bearer ${token}` } })
       setStatus('live')
+      queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+      queryClient.invalidateQueries({ queryKey: ['broadcasts', 'active'] })
       onRefresh()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to resume')
@@ -487,6 +497,8 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     setStartTime(null)
     setView('list')
     setActionLoading(false)
+    queryClient.invalidateQueries({ queryKey: ['broadcasts'] })
+    queryClient.invalidateQueries({ queryKey: ['broadcasts', 'active'] })
     onRefresh()
   }
 

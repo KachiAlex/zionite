@@ -116,8 +116,9 @@ const SCHEMA_QUERIES = [
   `CREATE TABLE IF NOT EXISTS music (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT, album TEXT, genre TEXT,
     audio_url TEXT NOT NULL, cover_url TEXT, duration INTEGER, lyrics TEXT,
-    file_format TEXT, file_size INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    file_format TEXT, file_size INTEGER, play_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `ALTER TABLE music ADD COLUMN IF NOT EXISTS play_count INTEGER DEFAULT 0`,
   `CREATE TABLE IF NOT EXISTS stream_chunks (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
     chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

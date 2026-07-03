@@ -192,7 +192,21 @@ export default function AdminDashboard() {
           <button onClick={()=>setMobileSidebarOpen(false)} className="lg:hidden text-[#9c958a] p-1"><X className="w-5 h-5" /></button>
         </div>
       </div>
-      {!sidebarCollapsed && <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>}
+      {!sidebarCollapsed && (
+        <>
+          {broadcasts.some(b => b.status === 'live') && (
+            <div className="mb-3 p-2 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/30 flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ef4444] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#ef4444]" />
+              </span>
+              <span className="text-[10px] font-bold text-[#ef4444] tracking-widest uppercase">On Air</span>
+              <span className="text-[9px] text-[#9c958a]">{formatDuration(liveElapsed)}</span>
+            </div>
+          )}
+          <div className="mb-5 p-2.5 rounded-lg bg-[rgba(201,162,39,0.06)] border border-[rgba(201,162,39,0.12)]"><p className="text-[8px] text-[#9c958a] uppercase tracking-wider mb-0.5">The Redemption Project</p><p className="text-[10px] text-[#c9a227]">Digital Radio Ministry</p></div>
+        </>
+      )}
       <SB label="Dashboard" tab="dashboard" icon={LayoutDashboard}/>
       <SL t="Ministry Management"/>
       <SB label="Sermons" tab="sermons" icon={BookOpen}/>
