@@ -585,9 +585,9 @@ export default function Live() {
 
   useEffect(() => {
     fetchBroadcast(); fetchChatMessages(); fetchChatUsers(); fetchRadioCurrent()
-    const broadcastPoll = setInterval(() => { fetchBroadcast(); fetchChatUsers() }, 8000)
-    const radioPoll = setInterval(() => { fetchRadioCurrent() }, 10000)
-    chatPollRef.current = setInterval(() => { fetchChatMessages() }, 2000)
+    const broadcastPoll = setInterval(() => { fetchBroadcast(); fetchChatUsers() }, 10000)
+    const radioPoll = setInterval(() => { fetchRadioCurrent() }, 30000)
+    chatPollRef.current = setInterval(() => { fetchChatMessages() }, 5000)
     return () => {
       clearInterval(broadcastPoll)
       clearInterval(radioPoll)

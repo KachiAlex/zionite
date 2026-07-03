@@ -143,10 +143,10 @@ export default function Home() {
   const { data: musicTracks = [] } = useMusic()
   const { data: guestSpeakers = [] } = useGuestSpeakers()
   const { data: events = [] } = useEvents()
-  const { data: radioCurrent } = useRadioCurrent()
   const { user } = useAuth()
   const { tenant } = useTenantContext()
-  const isLive = broadcast?.status==="live"
+  const isLive = broadcast?.status === 'live'
+  const { data: radioCurrent } = useRadioCurrent(!isLive)
   const isRadioOn = radioCurrent?.current && !isLive
   const { playQueue, togglePlay, currentTrack, isPlaying, seek, progress, duration, volume, setVolume, next, prev } = useAudioPlayer()
 

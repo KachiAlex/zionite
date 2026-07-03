@@ -84,6 +84,8 @@ function makeStreamingInit(buf: Buffer): Buffer | null {
 }
 
 const active = new Map<string, BroadcastHls>()
+const lastCrash = new Map<string, number>()
+const CRASH_BACKOFF_MS = 5000 // wait 5s before restarting after a crash
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -154,7 +156,17 @@ function doStart(blsId: string) {
     }
     const s = active.get(blsId)
     if (s && !s.ended) {
+      const now = Date.now()
+      const last = lastCrash.get(blsId) || 0
+      if (now - last < CRASH_BACKOFF_MS) {
+        console.warn(`[HLS] ${blsId} crashed too fast (${now - last}ms < ${CRASH_BACKOFF_MS}ms), backing off…`)
+        active.delete(blsId)
+        lastCrash.set(blsId, now)
+        setTimeout(() => { if (!active.has(blsId)) doStart(blsId) }, CRASH_BACKOFF_MS)
+        return
+      }
       console.warn(`[HLS] ${blsId} crashed, restarting…`)
+      lastCrash.set(blsId, now)
       active.delete(blsId)
       doStart(blsId)
     } else {

@@ -112,6 +112,7 @@ app.use('/live', (req: Request, res: Response, next: NextFunction) => {
   const relativePath = req.path.replace(/^\//, '')
   const filePath = path.join(HLS_ROOT, relativePath)
   console.log(`[HLS] serve ${req.path} → ${filePath} (exists=${fs.existsSync(filePath)})`)
+  res.setHeader('Access-Control-Allow-Origin', '*')
   if (!filePath.startsWith(HLS_ROOT)) { res.status(403).end(); return }
   if (!fs.existsSync(filePath)) { res.status(404).end(); return }
 
@@ -123,7 +124,6 @@ app.use('/live', (req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Content-Type', 'video/MP2T')
     res.setHeader('Cache-Control', 'public, max-age=2')
   }
-  res.setHeader('Access-Control-Allow-Origin', '*')
   res.sendFile(filePath)
 })
 

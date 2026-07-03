@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 export const API_BASE = 'https://zionite.fly.dev'
 export const STREAM_BASE = 'https://zionite.fly.dev'
 export const SOCKET_BASE = 'https://zionite.fly.dev'
-export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 15000 })
+export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 8000 })
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
@@ -47,8 +47,9 @@ export function useActiveBroadcast() {
       return data.broadcast as Broadcast | null
     },
     retry: 1,
-    refetchInterval: 5000,        // poll every 5s so live banner appears quickly
-    staleTime: 3000,              // treat data as stale after 3s (aggressive refresh)
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    refetchInterval: 8000,
+    staleTime: 5000,
   })
 }
 
@@ -143,11 +144,11 @@ export function useActiveRadioSchedule() {
   }})
 }
 
-export function useRadioCurrent() {
+export function useRadioCurrent(enabled = true) {
   return useQuery({ queryKey: ['sermons', 'radio', 'current'], queryFn: async () => {
     const { data } = await api.get('/sermons/radio/current')
     return data as any
-  }, refetchInterval: 10000 })
+  }, enabled, refetchInterval: 30000, staleTime: 15000 })
 }
 
 export function useUsers() {
@@ -162,7 +163,7 @@ export function useChatMessages(broadcastId?: string) {
     const path = broadcastId ? `/chat/broadcast/${broadcastId}` : '/chat/general'
     const { data } = await api.get(path)
     return data.messages
-  }, refetchInterval: 5000, enabled: true })
+  }, refetchInterval: 8000, enabled: !!broadcastId, retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000) })
 }
 
 export function useSearch(q: string) {
