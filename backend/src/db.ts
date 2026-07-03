@@ -150,6 +150,11 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, user_id TEXT, platform TEXT DEFAULT 'android',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, credential_id TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL, counter INTEGER DEFAULT 0, device_name TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE TABLE IF NOT EXISTS daily_verses (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, reference TEXT, type TEXT DEFAULT 'verse',
     created_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
