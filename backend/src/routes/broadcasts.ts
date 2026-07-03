@@ -40,7 +40,39 @@ router.get('/', async (req, res) => {
 router.get('/active', async (req, res) => {
   try {
     await initDb()
-    const broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' ORDER BY started_at DESC LIMIT 1")
+    let broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' ORDER BY started_at DESC LIMIT 1")
+    // Fallback: if chunks are flowing but no broadcast record exists (mobile broadcaster
+    // may send chunks via WebSocket without creating a DB record), synthesize one.
+    if (!broadcast) {
+      const recentChunk = await db.get(
+        `SELECT broadcast_id, MAX(created_at) as last_chunk_at FROM stream_chunks
+         WHERE created_at > NOW() - INTERVAL '5 minutes'
+         GROUP BY broadcast_id ORDER BY last_chunk_at DESC LIMIT 1`
+      )
+      if (recentChunk) {
+        broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [recentChunk.broadcast_id])
+        if (!broadcast) {
+          broadcast = {
+            id: recentChunk.broadcast_id,
+            title: 'Live Broadcast',
+            description: 'Streaming now',
+            status: 'live',
+            started_at: recentChunk.last_chunk_at,
+            broadcaster_id: '',
+            speaker: null,
+            thumbnail_url: null,
+            scripture_reference: null,
+            church_online_url: null,
+            rtmp_url: null,
+            stream_key: null,
+            recording_url: null,
+            recorded_at: null,
+            ended_at: null,
+            created_at: recentChunk.last_chunk_at,
+          }
+        }
+      }
+    }
     res.json({ broadcast: broadcast || null })
   } catch (err: any) {
     console.error('[BROADCASTS] active error:', err.message)
