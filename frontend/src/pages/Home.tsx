@@ -13,8 +13,16 @@ import {
   Play, Pause, Search, Heart,
   Users, BookOpen, Headphones, ChevronRight,
   Download, Facebook, Instagram, Youtube, Twitter,
-  Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music, Share2
+  Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music, Share2,
+  SkipBack, SkipForward, Volume2
 } from "lucide-react"
+
+function formatTime(seconds: number) {
+  if (!isFinite(seconds) || seconds < 0) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
 function SectionHeader({ title, action, to }:{ title:string; action:string; to:string }) {
   return (
@@ -140,7 +148,7 @@ export default function Home() {
   const { tenant } = useTenantContext()
   const isLive = broadcast?.status==="live"
   const isRadioOn = radioCurrent?.current && !isLive
-  const { playQueue, togglePlay, currentTrack, isPlaying, seek } = useAudioPlayer()
+  const { playQueue, togglePlay, currentTrack, isPlaying, seek, progress, duration, volume, setVolume, next, prev } = useAudioPlayer()
 
   const radioTracks = useMemo(() => {
     if (!radioCurrent?.playlist?.items) return []
@@ -279,56 +287,85 @@ export default function Home() {
       {/* ====== SERMON RADIO PLAYER ====== */}
       {isRadioOn && radioCurrent && (
         <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-3">
-          <div className="flex items-center gap-4 rounded-2xl p-4 md:p-5 transition-all hover:scale-[1.01]"
-            style={{ background: 'linear-gradient(135deg, #2a1f3d 0%, #1b1208 60%, #14141a 100%)', border: '1px solid rgba(201,162,39,0.3)' }}>
-            {/* Thumbnail */}
-            {radioCurrent.current.thumbnailUrl ? (
-              <img src={radioCurrent.current.thumbnailUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 ring-2 ring-[#c9a227]/30" />
-            ) : (
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#c9a227]/10">
-                <Radio className="w-6 h-6 text-[#c9a227]" />
-              </div>
-            )}
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded bg-[#c9a227] text-[#1b1208]">Sermon Radio</span>
-                {radioCurrent.current.speaker && <span className="text-[10px] text-[#9c958a]">{radioCurrent.current.speaker}</span>}
-              </div>
-              <p className="text-sm font-semibold text-white truncate">{radioCurrent.current.title}</p>
-              {radioCurrent.current.scriptureReference && (
-                <p className="text-[11px] text-[#9c958a] truncate mt-0.5">{radioCurrent.current.scriptureReference}</p>
-              )}
+          <div className="rounded-2xl overflow-hidden transition-all hover:scale-[1.01]"
+            style={{ background: 'linear-gradient(135deg, #1b1208 0%, #14141a 50%, #1b1208 100%)', border: '1px solid rgba(201,162,39,0.2)' }}>
+            {/* Top label */}
+            <div className="px-5 pt-4 pb-1">
+              <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#9c958a]">Live Frequency</span>
             </div>
-            {/* Music waveform */}
-            {isRadioPlaying && (
-              <div className="hidden sm:flex items-end gap-[2px] h-7">
-                {Array.from({ length: 24 }).map((_, i) => {
-                  const base = Math.sin(i * 0.8) * 0.4 + Math.sin(i * 1.3 + 2) * 0.3 + 0.5
-                  const heightPct = Math.max(20, Math.min(100, Math.round(base * 100)))
-                  const duration = 0.35 + ((i * 37) % 100) / 100 * 0.7
-                  const delay = ((i * 17) % 100) / 100 * 0.6
+            {/* Waveform visualization */}
+            <div className="px-5 py-2">
+              <div className="flex items-end justify-between gap-[3px] h-14 md:h-16">
+                {Array.from({ length: 64 }).map((_, i) => {
+                  const base = Math.sin(i * 0.5) * 0.3 + Math.sin(i * 0.9 + 1.5) * 0.25 + Math.cos(i * 0.3) * 0.2 + 0.4
+                  const heightPct = Math.max(12, Math.min(100, Math.round(base * 100)))
+                  const duration = 0.4 + ((i * 31) % 100) / 100 * 0.8
+                  const delay = ((i * 23) % 100) / 100 * 0.5
                   return (
                     <div
                       key={i}
-                      className="w-[2px] rounded-full bg-[#c9a227] animate-music-bar"
+                      className="flex-1 rounded-sm transition-all"
                       style={{
                         height: `${heightPct}%`,
-                        animationDuration: `${duration.toFixed(2)}s`,
-                        animationDelay: `${delay.toFixed(2)}s`,
-                        opacity: 0.6 + (heightPct / 250),
-                        boxShadow: '0 0 3px rgba(201,162,39,0.4)',
+                        background: isRadioPlaying
+                          ? `linear-gradient(to top, rgba(201,162,39,0.15) 0%, #c9a227 50%, rgba(201,162,39,0.15) 100%)`
+                          : `linear-gradient(to top, rgba(201,162,39,0.08) 0%, rgba(201,162,39,0.3) 50%, rgba(201,162,39,0.08) 100%)`,
+                        animation: isRadioPlaying ? `musicBar ${duration.toFixed(2)}s ease-in-out ${delay.toFixed(2)}s infinite alternate` : 'none',
+                        boxShadow: isRadioPlaying ? '0 0 4px rgba(201,162,39,0.3)' : 'none',
+                        opacity: isRadioPlaying ? 0.8 + (heightPct / 500) : 0.4,
                       }}
                     />
                   )
                 })}
               </div>
-            )}
-            {/* Play / Pause */}
-            <button onClick={isRadioPlaying ? togglePlay : handleRadioPlay}
-              className="flex-shrink-0 w-10 h-10 rounded-full bg-[#c9a227] hover:bg-[#c9a227]/90 text-[#1b1208] flex items-center justify-center transition-colors">
-              {isRadioPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-            </button>
+            </div>
+            {/* Bottom controls row */}
+            <div className="px-5 pb-4 pt-2 flex items-center gap-4">
+              {/* Now Playing badge + Info */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="flex-shrink-0 text-[10px] font-bold tracking-widest uppercase px-2 py-1 rounded bg-[#c9a227] text-[#1b1208]">Now Playing</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{radioCurrent.current.title}</p>
+                  <p className="text-[11px] text-[#9c958a] truncate">{radioCurrent.current.speaker || 'Pastor Kachi Akoma'}</p>
+                </div>
+              </div>
+              {/* Progress bar + time */}
+              <div className="hidden md:flex flex-col gap-1 flex-1 max-w-xs">
+                <div className="w-full h-1 bg-[rgba(243,238,228,0.1)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#c9a227] rounded-full transition-all duration-300"
+                    style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-[#9c958a] font-mono">
+                  <span>{formatTime(progress)}</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
+              </div>
+              {/* Controls */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={prev} className="w-8 h-8 flex items-center justify-center text-[#9c958a] hover:text-[#c9a227] transition-colors">
+                  <SkipBack className="w-5 h-5 fill-current" />
+                </button>
+                <button onClick={isRadioPlaying ? togglePlay : handleRadioPlay}
+                  className="w-10 h-10 rounded-full bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] flex items-center justify-center transition-all hover:scale-105">
+                  {isRadioPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                </button>
+                <button onClick={next} className="w-8 h-8 flex items-center justify-center text-[#9c958a] hover:text-[#c9a227] transition-colors">
+                  <SkipForward className="w-5 h-5 fill-current" />
+                </button>
+                {/* Volume */}
+                <div className="hidden sm:flex items-center gap-1.5 ml-1">
+                  <Volume2 className="w-3.5 h-3.5 text-[#9c958a]" />
+                  <input
+                    type="range" min="0" max="1" step="0.01"
+                    value={volume}
+                    onChange={e => setVolume(parseFloat(e.target.value))}
+                    className="w-16 h-1 accent-[#c9a227] cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -579,6 +616,11 @@ export default function Home() {
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scaleY(1); }
           50% { opacity: 0.6; transform: scaleY(0.7); }
+        }
+        @keyframes musicBar {
+          0% { transform: scaleY(0.25); opacity: 0.4; }
+          50% { transform: scaleY(1); opacity: 1; }
+          100% { transform: scaleY(0.35); opacity: 0.5; }
         }
       `}</style>
     </div>
