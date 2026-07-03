@@ -123,6 +123,7 @@ const SCHEMA_QUERIES = [
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
     chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_chunks_broadcast_chunk ON stream_chunks (broadcast_id, chunk_index)`,
   `CREATE TABLE IF NOT EXISTS stream_listeners (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, session_id TEXT NOT NULL,
     platform TEXT DEFAULT 'web', last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

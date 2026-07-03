@@ -47,7 +47,7 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
     const chunkId = uuidv4()
     await db.query(
       `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
       [chunkId, req.params.id, chunkIndex, chunkData]
     )
     // Keep last 300 chunks (~10 minutes at 2s interval)
