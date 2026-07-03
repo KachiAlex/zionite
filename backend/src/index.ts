@@ -27,7 +27,8 @@ import radioScheduleRoutes from './routes/radio-schedules.js'
 import playlistRoutes from './routes/playlists.js'
 import musicRoutes from './routes/music.js'
 import { cacheMiddleware } from './middleware/cache.js'
-import { resolveTenant } from './middleware/auth.js'
+import { resolveTenant, JWT_SECRET } from './middleware/auth.js'
+import jwt from 'jsonwebtoken'
 
 // Sentry init
 if (process.env.SENTRY_DSN) {
@@ -41,8 +42,20 @@ app.use(compression() as any)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Rate limiting
-const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false })
+// Rate limiting — key by user ID from JWT so multiple users behind NAT aren't lumped together
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    if (token) {
+      try { const d = jwt.verify(token, JWT_SECRET) as any; if (d?.id) return d.id } catch {}
+    }
+    return req.ip || req.headers['x-forwarded-for'] || 'unknown'
+  }
+})
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true })
 app.use(apiLimiter as any)
 app.use('/auth', authLimiter as any)
