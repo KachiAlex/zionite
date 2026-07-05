@@ -94,16 +94,17 @@ export function initWebSocket(httpServer: HttpServer) {
         // Start HLS if not already active (e.g. after server restart mid-broadcast)
         if (!isHlsActive(broadcastId)) {
           console.log(`[WS] ${broadcastId} chunk ${chunkIndex}: HLS not active, starting`)
-          startHlsBroadcast(broadcastId)
+          await startHlsBroadcast(broadcastId, true)
         }
-        feedHlsChunk(broadcastId, chunkIndex, chunkData)
+        await feedHlsChunk(broadcastId, chunkIndex, chunkData)
 
         // Relay to listeners in real-time
         io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })
 
         // Persist for replay / late joiners — fire-and-forget, never block streaming
         dbWriteSafe(
-          `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+          `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
           [crypto.randomUUID(), broadcastId, chunkIndex, chunkData]
         )
       } catch (err: any) {
@@ -113,7 +114,7 @@ export function initWebSocket(httpServer: HttpServer) {
 
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       await pauseRadioForBroadcast()
-      startHlsBroadcast(broadcastId)
+      await startHlsBroadcast(broadcastId)
     })
 
     socket.on('end_broadcast_hls', async (broadcastId: string) => {

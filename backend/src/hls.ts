@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { db, dbWriteSafe } from './db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'
@@ -15,6 +16,7 @@ interface BroadcastHls {
   chunksReceived: boolean
   lastChunkAt: number
   timeoutRef: NodeJS.Timeout | null
+  pendingInit?: Buffer // persisted init loaded from DB for recovery after restart
 }
 
 const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
@@ -43,18 +45,29 @@ function vintWidth(firstByte: number): number {
   return 8
 }
 
+const EBML_ID = Buffer.from([0x1A, 0x45, 0xDF, 0xA3])
+
+function hasEbmlHeader(buf: Buffer): boolean {
+  return buf.length >= 4 && buf[0] === EBML_ID[0] && buf[1] === EBML_ID[1] && buf[2] === EBML_ID[2] && buf[3] === EBML_ID[3]
+}
+
 function extractInit(buf: Buffer): Buffer | null {
   if (buf.length < 4) {
     console.warn(`[HLS] extractInit: buffer too small (${buf.length} bytes)`)
     return null
   }
-  for (let j = 0; j <= buf.length - 4; j++) {
+  // Only chunks that start with a valid EBML header can contain an init segment.
+  // MediaRecorder continuation chunks lack the EBML header.
+  if (!hasEbmlHeader(buf)) {
+    console.warn(`[HLS] extractInit: no EBML header in ${buf.length} bytes, first4=${buf.subarray(0, 4).toString('hex')}`)
+    return null
+  }
+  for (let j = 4; j <= buf.length - 4; j++) {
     if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
         buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
       return buf.subarray(0, j)
     }
   }
-  // No cluster found — log first 16 bytes for diagnostics
   console.warn(`[HLS] extractInit: no cluster ID found in ${buf.length} bytes, header: ${buf.subarray(0, 16).toString('hex')}`)
   return null
 }
@@ -73,6 +86,35 @@ function extractCluster(buf: Buffer): Buffer {
 function makeStreamingInit(buf: Buffer): Buffer | null {
   const init = extractInit(buf)
   if (!init) return null
+  // Debug: log first 32 bytes of init before modification
+  console.log(`[HLS] makeStreamingInit: init length=${init.length}, first32=${init.subarray(0, 32).toString('hex')}`)
+  for (let i = 0; i <= init.length - 4; i++) {
+    if (init[i] === SEGMENT_ID[0] && init[i+1] === SEGMENT_ID[1] &&
+        init[i+2] === SEGMENT_ID[2] && init[i+3] === SEGMENT_ID[3]) {
+      const sizeStart = i + 4
+      if (sizeStart >= init.length) {
+        console.warn(`[HLS] makeStreamingInit: Segment found at ${i} but no size bytes after`)
+        break
+      }
+      const width = vintWidth(init[sizeStart])
+      const unk = UNKNOWN_SIZE[width]
+      if (!unk) {
+        console.warn(`[HLS] makeStreamingInit: unknown-size not available for width ${width} (byte=0x${init[sizeStart].toString(16)})`)
+        break
+      }
+      const before = init.subarray(0, sizeStart)
+      const after = init.subarray(sizeStart + width)
+      const result = Buffer.concat([before, unk, after])
+      console.log(`[HLS] makeStreamingInit: Segment at ${i}, size byte 0x${init[sizeStart].toString(16)} (width=${width}), result length=${result.length}`)
+      return result
+    }
+  }
+  console.warn(`[HLS] makeStreamingInit: no Segment ID found in init of ${init.length} bytes`)
+  return init // fallback — feed raw init and let FFmpeg handle it
+}
+
+// Same transform as makeStreamingInit, but operates on an already-extracted init buffer
+function makeStreamingInitFromBuffer(init: Buffer): Buffer | null {
   for (let i = 0; i <= init.length - 4; i++) {
     if (init[i] === SEGMENT_ID[0] && init[i+1] === SEGMENT_ID[1] &&
         init[i+2] === SEGMENT_ID[2] && init[i+3] === SEGMENT_ID[3]) {
@@ -230,11 +272,17 @@ function forceStop(blsId: string) {
   } catch {}
 }
 
-export function startHlsBroadcast(broadcastId: string) {
-  console.log(`[HLS] startHlsBroadcast called for ${broadcastId}`)
+export async function startHlsBroadcast(broadcastId: string, force = false) {
+  console.log(`[HLS] startHlsBroadcast called for ${broadcastId} force=${force}`)
   if (inBackoff.get(broadcastId)) {
-    console.warn(`[HLS] ${broadcastId} is in backoff, skipping start`)
-    return
+    if (force) {
+      console.warn(`[HLS] ${broadcastId} clearing backoff and restarting (chunk received)`)
+      inBackoff.set(broadcastId, false)
+      crashCount.set(broadcastId, 0)
+    } else {
+      console.warn(`[HLS] ${broadcastId} is in backoff, skipping start`)
+      return
+    }
   }
   const existing = active.get(broadcastId)
   if (existing) {
@@ -252,10 +300,30 @@ export function startHlsBroadcast(broadcastId: string) {
   // Don't reset crashCount on fresh start here — let backoff logic handle it.
   // It is only reset on intentional broadcaster reconnect above.
   doStart(broadcastId)
+
+  // Try to preload a persisted init segment so recovery works after server restart
+  try {
+    const row = await db.get<{ init_segment: string }>(`SELECT init_segment FROM broadcasts WHERE id=$1`, [broadcastId])
+    if (row?.init_segment) {
+      const hls = active.get(broadcastId)
+      if (hls) {
+        hls.pendingInit = Buffer.from(row.init_segment, 'base64')
+        console.log(`[HLS] ${broadcastId} preloaded persisted init (${hls.pendingInit.length} bytes)`)
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[HLS] ${broadcastId} failed to preload init from DB:`, err.message)
+  }
 }
 
-export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chunk: string) {
-  const hls = active.get(broadcastId)
+export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chunk: string) {
+  let hls = active.get(broadcastId)
+  if (!hls) {
+    // Safety net: broadcaster is sending chunks but HLS isn't running — restart
+    console.warn(`[HLS] feedHlsChunk: no active HLS for ${broadcastId}, auto-starting`)
+    await startHlsBroadcast(broadcastId, true)
+    hls = active.get(broadcastId)
+  }
   if (!hls || hls.ended || hls.ffmpeg.killed) {
     console.log(`[HLS] feedHlsChunk skipped for ${broadcastId}: active=${!!hls} ended=${hls?.ended} killed=${hls?.ffmpeg.killed}`)
     return
@@ -264,22 +332,33 @@ export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chun
     hls.chunksReceived = true
     hls.lastChunkAt = Date.now()
     const buf = Buffer.from(base64Chunk, 'base64')
-    // FFmpeg expects a continuous WebM stream. Self-contained chunks
-    // from MediaRecorder each have their own EBML+Segment+Tracks init.
-    // We need to send the init segment first so FFmpeg knows the track format.
-    // MediaRecorder chunks are self-contained, so ANY chunk can provide the init.
+    console.log(`[HLS] ${broadcastId} chunk ${chunkIndex}: decoded ${buf.length} bytes, first16=${buf.subarray(0, 16).toString('hex')}`)
+    // FFmpeg expects a continuous WebM stream. MediaRecorder only puts the EBML
+    // header in the FIRST chunk; subsequent chunks are raw continuation data.
+    // We persist the init so server restarts can recover.
     let data: Buffer
     let isInitChunk = false
     if (!hls.initSent) {
       const init = makeStreamingInit(buf)
-      if (!init) {
-        console.error(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid init segment, dropping`)
+      if (init) {
+        const cluster = extractCluster(buf)
+        data = Buffer.concat([init, cluster])
+        isInitChunk = true
+        console.log(`[HLS] ${broadcastId} init extracted from chunk ${chunkIndex} (${data.length} bytes)`)
+        // Persist init for recovery after server restart
+        const rawInit = extractInit(buf)
+        if (rawInit) dbWriteSafe(`UPDATE broadcasts SET init_segment=$1 WHERE id=$2`, [rawInit.toString('base64'), broadcastId])
+      } else if (hls.pendingInit) {
+        // Server restarted mid-broadcast: use persisted init + cluster from current chunk
+        const cluster = extractCluster(buf)
+        const streamingInit = makeStreamingInitFromBuffer(hls.pendingInit)
+        data = Buffer.concat([streamingInit || hls.pendingInit, cluster])
+        isInitChunk = true
+        console.log(`[HLS] ${broadcastId} using persisted init (${hls.pendingInit.length} bytes) + cluster for chunk ${chunkIndex}`)
+      } else {
+        console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid init segment and no persisted init — skipping (broadcaster may need to refresh)`)
         return
       }
-      const cluster = extractCluster(buf)
-      data = Buffer.concat([init, cluster])
-      isInitChunk = true
-      console.log(`[HLS] ${broadcastId} init extracted from chunk ${chunkIndex} (${data.length} bytes)`)
     } else {
       data = extractCluster(buf)
     }
