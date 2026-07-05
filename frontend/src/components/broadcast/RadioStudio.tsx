@@ -141,6 +141,7 @@ export default function RadioStudio({
   const mixerDestRef = useRef<MediaStreamAudioDestinationNode | null>(null)
   const micGainNodeRef = useRef<GainNode | null>(null)
   const musicGainNodeRef = useRef<GainNode | null>(null)
+  const musicLocalConnectedRef = useRef(false)
   const musicSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const musicBufferRef = useRef<AudioBuffer | null>(null)
   const [copied, setCopied] = useState(false)
@@ -148,7 +149,7 @@ export default function RadioStudio({
   const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
   const [uploadError, setUploadError] = useState('')
   const [micStream, setMicStream] = useState<MediaStream | null>(null)
-  const [monitorEnabled, setMonitorEnabled] = useState(false)
+  const [monitorEnabled, setMonitorEnabled] = useState(true)
   const [monitorVolume, setMonitorVolume] = useState(60)
   const mixMonitorAudioRef = useRef<HTMLAudioElement | null>(null)
   const [recordingStatus, setRecordingStatus] = useState('')
@@ -259,6 +260,7 @@ export default function RadioStudio({
 
   // Start/stop mix monitor when broadcaster toggles it during live broadcast
   useEffect(() => {
+    syncLocalMusicRouting()
     if (!isLive || !streamRef.current) return
     if (monitorEnabled) {
       const audio = mixMonitorAudioRef.current || new Audio()
@@ -343,9 +345,26 @@ export default function RadioStudio({
     const musG = ctx.createGain()
     musG.gain.value = musicVolume / 100
     musG.connect(dest)
-    musG.connect(ctx.destination) // broadcaster hears music locally for mood
     musicGainNodeRef.current = musG
+    syncLocalMusicRouting()
     return { ctx, dest, micGain: micG, musicGain: musG }
+  }
+
+  // Route music to the device's speakers only when the mix monitor is NOT active.
+  // When the monitor is active, the broadcaster already hears the music through the
+  // mixed monitor stream, so we avoid double audio.
+  function syncLocalMusicRouting() {
+    const musG = musicGainNodeRef.current
+    const ctx = mixerCtxRef.current
+    if (!musG || !ctx) return
+    const monitorActive = monitorEnabled && isLive
+    if (!monitorActive && !musicLocalConnectedRef.current) {
+      musG.connect(ctx.destination)
+      musicLocalConnectedRef.current = true
+    } else if (monitorActive && musicLocalConnectedRef.current) {
+      try { musG.disconnect(ctx.destination) } catch {}
+      musicLocalConnectedRef.current = false
+    }
   }
 
   function teardownMixer() {
@@ -354,6 +373,7 @@ export default function RadioStudio({
     mixerDestRef.current = null
     micGainNodeRef.current = null
     musicGainNodeRef.current = null
+    musicLocalConnectedRef.current = false
     if (mixMonitorAudioRef.current) {
       mixMonitorAudioRef.current.pause()
       mixMonitorAudioRef.current.srcObject = null
@@ -384,6 +404,7 @@ export default function RadioStudio({
     src.start(0)
     musicSourceRef.current = src
     setMusicPlaying(true)
+    syncLocalMusicRouting()
   }
 
   // Initialize music buffer from props and create mixer so broadcaster can preview before going live
@@ -420,6 +441,8 @@ export default function RadioStudio({
       // Connect raw mic into mixer's mic gain node
       const micSource = ctx.createMediaStreamSource(rawMicStream)
       micSource.connect(micGNode)
+
+      syncLocalMusicRouting()
 
       // Mixed stream (mic + any music) goes to all recorders
       const stream = dest.stream
