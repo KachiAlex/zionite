@@ -12,6 +12,8 @@ export interface DbClient {
     }>;
 }
 export declare const db: DbClient;
+/** Fire-and-forget DB write that never throws — use for non-critical writes like chunk persistence */
+export declare function dbWriteSafe(sqlStr: string, params?: any[]): Promise<void>;
 export declare function getDb(): Promise<DbClient>;
 export declare function initDb(): Promise<void>;
 //# sourceMappingURL=db.d.ts.map

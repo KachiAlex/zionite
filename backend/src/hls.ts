@@ -44,12 +44,18 @@ function vintWidth(firstByte: number): number {
 }
 
 function extractInit(buf: Buffer): Buffer | null {
+  if (buf.length < 4) {
+    console.warn(`[HLS] extractInit: buffer too small (${buf.length} bytes)`)
+    return null
+  }
   for (let j = 0; j <= buf.length - 4; j++) {
     if (buf[j] === CLUSTER_ID[0] && buf[j+1] === CLUSTER_ID[1] &&
         buf[j+2] === CLUSTER_ID[2] && buf[j+3] === CLUSTER_ID[3]) {
       return buf.subarray(0, j)
     }
   }
+  // No cluster found — log first 16 bytes for diagnostics
+  console.warn(`[HLS] extractInit: no cluster ID found in ${buf.length} bytes, header: ${buf.subarray(0, 16).toString('hex')}`)
   return null
 }
 

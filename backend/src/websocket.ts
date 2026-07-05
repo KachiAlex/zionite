@@ -2,7 +2,7 @@ import { Server as HttpServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import { JWT_SECRET } from './middleware/auth.js'
-import { db, initDb } from './db.js'
+import { db, initDb, dbWriteSafe } from './db.js'
 import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive } from './hls.js'
 import { pauseRadioForBroadcast, resumeRadioAfterBroadcast } from './sermon-radio.js'
 
@@ -88,19 +88,24 @@ export function initWebSocket(httpServer: HttpServer) {
     })
 
     socket.on('broadcast_chunk', async (payload: { broadcastId: string; chunkIndex: number; chunkData: string }) => {
+      const { broadcastId, chunkIndex, chunkData } = payload
       try {
-        await initDb()
-        const { broadcastId, chunkIndex, chunkData } = payload
-        // Persist for replay / late joiners
-        await db.run(
+        // Feed HLS encoder FIRST — this is the critical path.
+        // Start HLS if not already active (e.g. after server restart mid-broadcast)
+        if (!isHlsActive(broadcastId)) {
+          console.log(`[WS] ${broadcastId} chunk ${chunkIndex}: HLS not active, starting`)
+          startHlsBroadcast(broadcastId)
+        }
+        feedHlsChunk(broadcastId, chunkIndex, chunkData)
+
+        // Relay to listeners in real-time
+        io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })
+
+        // Persist for replay / late joiners — fire-and-forget, never block streaming
+        dbWriteSafe(
           `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
           [crypto.randomUUID(), broadcastId, chunkIndex, chunkData]
         )
-        // Relay to all listeners in real-time
-        io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })
-        // Feed HLS encoder (start only if not already active — avoids restart loop)
-        if (!isHlsActive(broadcastId)) startHlsBroadcast(broadcastId)
-        feedHlsChunk(broadcastId, chunkIndex, chunkData)
       } catch (err: any) {
         console.error('[WS] broadcast_chunk error:', err.message)
       }

@@ -29,32 +29,51 @@ function getSql() {
         throw new Error('Failed to create database client: ' + _sqlInitError);
     }
 }
+async function queryWithRetry(sqlStr, params, retries = 3) {
+    if (!dbReady)
+        throw new Error('DATABASE_URL not configured');
+    const sql = getSql();
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return (await sql.query(sqlStr, params));
+        }
+        catch (err) {
+            const isLast = attempt === retries;
+            console.warn(`[DB] query failed (attempt ${attempt}/${retries}):`, err?.message || err);
+            if (isLast)
+                throw err;
+            await new Promise(r => setTimeout(r, 300 * attempt));
+        }
+    }
+    throw new Error('DB query failed after retries');
+}
 export const db = {
     async query(sqlStr, params) {
-        if (!dbReady)
-            throw new Error('DATABASE_URL not configured');
-        const rows = await getSql().query(sqlStr, params);
+        const rows = await queryWithRetry(sqlStr, params);
         return { rows: rows, rowCount: rows.length };
     },
     async get(sqlStr, params) {
-        if (!dbReady)
-            throw new Error('DATABASE_URL not configured');
-        const rows = await getSql().query(sqlStr, params);
+        const rows = await queryWithRetry(sqlStr, params);
         return rows[0];
     },
     async all(sqlStr, params) {
-        if (!dbReady)
-            throw new Error('DATABASE_URL not configured');
-        const rows = await getSql().query(sqlStr, params);
+        const rows = await queryWithRetry(sqlStr, params);
         return rows;
     },
     async run(sqlStr, params) {
-        if (!dbReady)
-            throw new Error('DATABASE_URL not configured');
-        const rows = await getSql().query(sqlStr, params);
+        const rows = await queryWithRetry(sqlStr, params);
         return { lastID: 0, changes: rows.length };
     }
 };
+/** Fire-and-forget DB write that never throws — use for non-critical writes like chunk persistence */
+export async function dbWriteSafe(sqlStr, params) {
+    try {
+        await queryWithRetry(sqlStr, params, 2);
+    }
+    catch (err) {
+        console.warn('[DB] safe write failed (non-critical):', err?.message || err);
+    }
+}
 export async function getDb() {
     return db;
 }

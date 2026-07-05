@@ -38,26 +38,47 @@ export interface DbClient {
   run(sqlStr: string, params?: any[]): Promise<{ lastID: number; changes: number }>
 }
 
+async function queryWithRetry(sqlStr: string, params?: any[], retries = 3): Promise<any[]> {
+  if (!dbReady) throw new Error('DATABASE_URL not configured')
+  const sql = getSql()
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return (await sql.query(sqlStr, params)) as any[]
+    } catch (err: any) {
+      const isLast = attempt === retries
+      console.warn(`[DB] query failed (attempt ${attempt}/${retries}):`, err?.message || err)
+      if (isLast) throw err
+      await new Promise(r => setTimeout(r, 300 * attempt))
+    }
+  }
+  throw new Error('DB query failed after retries')
+}
+
 export const db: DbClient = {
   async query(sqlStr: string, params?: any[]) {
-    if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const rows = await getSql().query(sqlStr, params)
+    const rows = await queryWithRetry(sqlStr, params)
     return { rows: rows as any[], rowCount: (rows as any[]).length }
   },
   async get<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
-    if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const rows = await getSql().query(sqlStr, params)
+    const rows = await queryWithRetry(sqlStr, params)
     return (rows as unknown as T[])[0] as T | undefined
   },
   async all<T extends Record<string, any> = any>(sqlStr: string, params?: any[]) {
-    if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const rows = await getSql().query(sqlStr, params)
+    const rows = await queryWithRetry(sqlStr, params)
     return rows as T[]
   },
   async run(sqlStr: string, params?: any[]) {
-    if (!dbReady) throw new Error('DATABASE_URL not configured')
-    const rows = await getSql().query(sqlStr, params)
+    const rows = await queryWithRetry(sqlStr, params)
     return { lastID: 0, changes: (rows as any[]).length }
+  }
+}
+
+/** Fire-and-forget DB write that never throws — use for non-critical writes like chunk persistence */
+export async function dbWriteSafe(sqlStr: string, params?: any[]) {
+  try {
+    await queryWithRetry(sqlStr, params, 2)
+  } catch (err: any) {
+    console.warn('[DB] safe write failed (non-critical):', err?.message || err)
   }
 }
 
