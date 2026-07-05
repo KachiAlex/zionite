@@ -260,24 +260,20 @@ export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chun
     const buf = Buffer.from(base64Chunk, 'base64')
     // FFmpeg expects a continuous WebM stream. Self-contained chunks
     // from MediaRecorder each have their own EBML+Segment+Tracks init.
-    // Feed chunk 0 with Segment size set to unknown so FFmpeg keeps reading.
-    // Drop non-zero chunks until init (chunk 0) has been received.
+    // We need to send the init segment first so FFmpeg knows the track format.
+    // MediaRecorder chunks are self-contained, so ANY chunk can provide the init.
     let data: Buffer
-    if (chunkIndex === 0) {
+    if (!hls.initSent) {
       const init = makeStreamingInit(buf)
       if (!init) {
-        console.error(`[HLS] ${broadcastId} chunk 0 has no valid init segment, dropping`)
+        console.error(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid init segment, dropping`)
         return
       }
       const cluster = extractCluster(buf)
       data = Buffer.concat([init, cluster])
       hls.initSent = true
-      console.log(`[HLS] ${broadcastId} init chunk fed (${data.length} bytes)`)
+      console.log(`[HLS] ${broadcastId} init extracted from chunk ${chunkIndex} (${data.length} bytes)`)
     } else {
-      if (!hls.initSent) {
-        console.warn(`[HLS] ${broadcastId} dropping chunk ${chunkIndex}: init not yet received`)
-        return
-      }
       data = extractCluster(buf)
     }
     if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
