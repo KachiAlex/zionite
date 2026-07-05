@@ -123,12 +123,31 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     } catch {}
   }
 
-  function handleStart() {
+  async function handleStart() {
     cleanup()
     // Clear any previous retry polling
     if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
     lastTimeRef.current = 0
     stallCountRef.current = 0
+
+    // Confirm the broadcaster is actually streaming before starting hls.js,
+    // so listeners don't see a 404 on the manifest while waiting.
+    try {
+      const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/hls-status`, { method: 'GET' })
+      if (res.ok) {
+        const status = await res.json()
+        if (!status.hlsActive) {
+          console.warn('[HLS] Broadcaster not streaming yet')
+          setStarted(false)
+          setStatusText('Broadcaster offline')
+          startRetryPoll()
+          return
+        }
+      }
+    } catch (err: any) {
+      console.warn('[HLS] hls-status preflight failed:', err.message)
+    }
+
     setStarted(true)
     setStatusText('Connecting…')
     userPausedRef.current = false
