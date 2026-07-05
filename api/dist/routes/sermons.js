@@ -138,6 +138,13 @@ router.get('/radio/current', async (_req, res) => {
     try {
         await initDb();
         const now = new Date();
+        const radioState = await db.get('SELECT schedule_id, current_item_id, manual_stop FROM radio_state WHERE id = \'singleton\'');
+        const stream = getRadioStatus();
+        // If radio was manually stopped, return null current to hide player
+        if (radioState?.manual_stop) {
+            res.json({ current: null, playlist: null, isStreaming: false, streamKey: 'radio' });
+            return;
+        }
         const schedule = await db.get(`SELECT rs.*, p.title as playlist_title
        FROM radio_schedules rs
        JOIN playlists p ON p.id = rs.playlist_id
@@ -145,7 +152,6 @@ router.get('/radio/current', async (_req, res) => {
        ORDER BY rs.start_time DESC LIMIT 1`, [now.toISOString()]);
         if (!schedule) {
             const latest = await db.get('SELECT * FROM sermons ORDER BY date DESC LIMIT 1');
-            const stream = getRadioStatus();
             res.json({
                 current: latest ? { title: latest.title, speaker: latest.speaker, audioUrl: latest.audio_url, thumbnailUrl: latest.thumbnail_url, scriptureReference: latest.scripture_reference, offsetSeconds: 0 } : null,
                 playlist: null,
@@ -186,7 +192,6 @@ router.get('/radio/current', async (_req, res) => {
         }
         if (!currentItem)
             currentItem = items[0];
-        const stream = getRadioStatus();
         res.json({
             current: {
                 itemId: currentItem.item_id,

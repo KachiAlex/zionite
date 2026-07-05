@@ -46,15 +46,25 @@ async function getPlaylistItems(playlistId: string) {
   }))
 }
 
-async function updateRadioState(scheduleId: string | null, itemId: string | null, offset: number) {
+async function updateRadioState(scheduleId: string | null, itemId: string | null, offset: number, manualStop: boolean | null = null) {
   await initDb()
-  await db.run(
-    `INSERT INTO radio_state (id, schedule_id, current_item_id, offset_seconds, updated_at)
-     VALUES ('singleton', $1, $2, $3, NOW())
-     ON CONFLICT (id) DO UPDATE SET
-       schedule_id = $1, current_item_id = $2, offset_seconds = $3, updated_at = NOW()`,
-    [scheduleId, itemId, offset]
-  )
+  if (manualStop !== null) {
+    await db.run(
+      `INSERT INTO radio_state (id, schedule_id, current_item_id, offset_seconds, manual_stop, updated_at)
+       VALUES ('singleton', $1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         schedule_id = $1, current_item_id = $2, offset_seconds = $3, manual_stop = $4, updated_at = NOW()`,
+      [scheduleId, itemId, offset, manualStop]
+    )
+  } else {
+    await db.run(
+      `INSERT INTO radio_state (id, schedule_id, current_item_id, offset_seconds, updated_at)
+       VALUES ('singleton', $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         schedule_id = $1, current_item_id = $2, offset_seconds = $3, updated_at = NOW()`,
+      [scheduleId, itemId, offset]
+    )
+  }
 }
 
 async function startFfmpeg(audioUrl: string, streamKey: string, offsetSeconds: number = 0): Promise<ChildProcess> {
@@ -314,14 +324,25 @@ async function tick() {
     return
   }
 
-  // No live broadcast — resume if we were paused for one
+  // No live broadcast — resume if we were paused for one (unless manually stopped)
   if (broadcastPaused) {
+    const state = await db.get('SELECT manual_stop FROM radio_state WHERE id = \'singleton\'')
+    if (state?.manual_stop) {
+      console.log('[RADIO-SCHEDULER] Broadcast ended but radio was manually stopped, not resuming')
+      broadcastPaused = false
+      return
+    }
     console.log('[RADIO-SCHEDULER] Broadcast ended, resuming radio')
     await resumeRadioAfterBroadcast()
   }
 
   const schedule = await findActiveSchedule()
   if (schedule) {
+    const state = await db.get('SELECT manual_stop FROM radio_state WHERE id = \'singleton\'')
+    if (state?.manual_stop) {
+      console.log('[RADIO-SCHEDULER] Active schedule found but radio manually stopped, skipping start')
+      return
+    }
     if (!active || active.playlistId !== schedule.playlist_id) {
       console.log(`[RADIO-SCHEDULER] Active schedule found: ${schedule.id} (playlist ${schedule.playlist_id}), starting radio`)
       await startRadio(schedule.playlist_id, schedule.shuffle, schedule.repeat_mode)

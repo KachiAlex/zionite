@@ -214,6 +214,28 @@ export function useCreateDonation() {
   })
 }
 
+export function useStopRadio() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/radio/stop'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sermons', 'radio', 'current'] })
+      qc.invalidateQueries({ queryKey: ['radio'] })
+    },
+  })
+}
+
+export function useResumeRadio() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (playlistId: string) => api.post('/radio/resume', { playlistId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sermons', 'radio', 'current'] })
+      qc.invalidateQueries({ queryKey: ['radio'] })
+    },
+  })
+}
+
 export function useTenant() {
   return useQuery<Tenant | null>({
     queryKey: ['tenant'],

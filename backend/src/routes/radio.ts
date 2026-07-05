@@ -23,12 +23,39 @@ router.post('/start', authenticateToken, requireRole('admin'), async (req: Authe
   }
 })
 
-router.post('/stop', authenticateToken, requireRole('admin'), async (_req, res) => {
+router.post('/stop', authenticateToken, requireRole('broadcaster', 'admin'), async (_req, res) => {
   try {
     await stopRadio()
+    await db.run(
+      `INSERT INTO radio_state (id, manual_stop, updated_at)
+       VALUES ('singleton', TRUE, NOW())
+       ON CONFLICT (id) DO UPDATE SET manual_stop = TRUE, updated_at = NOW()`
+    )
     res.json({ success: true, message: 'Radio stopped' })
   } catch (err: any) {
     console.error('[RADIO] stop error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { playlistId } = req.body
+    if (!playlistId) { res.status(400).json({ error: 'playlistId required' }); return }
+
+    await initDb()
+    const playlist = await db.get('SELECT * FROM playlists WHERE id = $1', [playlistId])
+    if (!playlist) { res.status(404).json({ error: 'Playlist not found' }); return }
+
+    await db.run(
+      `INSERT INTO radio_state (id, manual_stop, updated_at)
+       VALUES ('singleton', FALSE, NOW())
+       ON CONFLICT (id) DO UPDATE SET manual_stop = FALSE, updated_at = NOW()`
+    )
+    await startRadio(playlistId, playlist.shuffle, playlist.repeat_mode)
+    res.json({ success: true, message: 'Radio resumed', playlistId })
+  } catch (err: any) {
+    console.error('[RADIO] resume error:', err.message)
     res.status(500).json({ error: err.message })
   }
 })

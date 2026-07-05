@@ -33,5 +33,8 @@ CREATE TABLE IF NOT EXISTS radio_state (
   schedule_id TEXT,
   current_item_id TEXT,
   offset_seconds INTEGER DEFAULT 0,
+  manual_stop BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE radio_state ADD COLUMN IF NOT EXISTS manual_stop BOOLEAN DEFAULT FALSE;

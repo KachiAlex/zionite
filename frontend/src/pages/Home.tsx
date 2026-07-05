@@ -5,7 +5,7 @@ import { Link } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { usePageTitle } from "../hooks/usePageTitle"
 import { useAudioPlayer } from "../contexts/AudioPlayerContext"
-import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents, useRadioCurrent, API_BASE } from "../lib/api"
+import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents, useRadioCurrent, useStopRadio, API_BASE } from "../lib/api"
 import type { Sermon, MusicTrack } from "../lib/api"
 import { useTenantContext } from "../contexts/TenantContext"
 import StructuredData from "../components/StructuredData"
@@ -14,7 +14,7 @@ import {
   Users, BookOpen, Headphones, ChevronRight,
   Download, Facebook, Instagram, Youtube, Twitter,
   Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music, Share2,
-  SkipBack, SkipForward, Volume2
+  SkipBack, SkipForward, Volume2, Square
 } from "lucide-react"
 
 function formatTime(seconds: number) {
@@ -168,10 +168,16 @@ export default function Home() {
   }, [radioCurrent, radioTracks])
 
   const isRadioPlaying = isPlaying && currentTrack && radioTracks.some((t: any) => t.id === currentTrack.id)
+  const stopRadioMutation = useStopRadio()
 
   function handleRadioPlay() {
     if (!radioTracks.length) return
     playQueue(radioTracks, radioCurrentIndex)
+  }
+
+  function handleRadioStop() {
+    if (isRadioPlaying) togglePlay()
+    stopRadioMutation.mutate()
   }
 
   const autoPlayedRef = useRef(false)
@@ -382,6 +388,15 @@ export default function Home() {
                     className="w-16 h-1 accent-[#c9a227] cursor-pointer"
                   />
                 </div>
+                {/* Stop Radio */}
+                <button
+                  onClick={handleRadioStop}
+                  disabled={stopRadioMutation.isPending}
+                  className="w-8 h-8 flex items-center justify-center text-[#9c958a] hover:text-red-400 transition-colors ml-1"
+                  title="Stop radio stream"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                </button>
               </div>
             </div>
           </div>
