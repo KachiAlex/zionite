@@ -182,15 +182,17 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        liveSyncDurationCount: 1,       // Start 1 segment behind live edge
-        liveMaxLatencyDurationCount: 5, // Snap if >5 segments behind
-        backBufferLength: 10,
-        maxBufferLength: 6,
-        maxMaxBufferLength: 10,
+        liveSyncDurationCount: 3,       // Start 3 segments behind live edge (~6s)
+        liveMaxLatencyDurationCount: 8, // Snap if >8 segments behind
+        backBufferLength: 5,
+        maxBufferLength: 10,
+        maxMaxBufferLength: 15,
         manifestLoadingRetryDelay: 500,
         manifestLoadingMaxRetry: 20,
         levelLoadingRetryDelay: 500,
         levelLoadingMaxRetry: 20,
+        // Recover automatically from non-fatal media stalls
+        recoverMediaError: true,
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)
@@ -248,17 +250,20 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         console.log('[HLS] Level loaded, fragments:', data.details?.fragments?.length)
       })
 
-      // Snap to live edge if we fall too far behind (tab backgrounded, etc)
+      // Snap to live edge if the player has drifted far behind (e.g. background tab)
       hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
         const d = data.details
         if (d && d.fragments && d.fragments.length > 0) {
           const lastFrag = d.fragments[d.fragments.length - 1]
           const liveEdge = lastFrag ? lastFrag.start + lastFrag.duration : 0
-          if (audio && liveEdge > 0) {
+          if (audio && liveEdge > 0 && audio.currentTime > 0) {
             const behind = liveEdge - audio.currentTime
-            if (behind > 12 && !audio.paused) {
-              // Snap to near-live edge
-              const target = Math.max(0, liveEdge - 4)
+            const buffer = audio.buffered.length > 0
+              ? audio.buffered.end(audio.buffered.length - 1) - audio.currentTime
+              : 0
+            // Only snap when we're far behind AND the buffer is healthy
+            if (behind > 20 && buffer > 2 && !audio.paused) {
+              const target = Math.max(0, liveEdge - 6)
               console.warn(`[HLS] Snapping to live edge: ${behind.toFixed(1)}s behind → ${target.toFixed(1)}s`)
               audio.currentTime = target
             }
@@ -280,6 +285,21 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS] Error:', data.type, data.details, data.fatal ? 'FATAL' : 'recoverable', data.response?.code, data.response?.text)
+
+        // Non-fatal stall: try to keep audio moving
+        if (!data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+          if (audio.paused) {
+            audio.play().catch(() => {})
+          } else if (audio.buffered.length > 0) {
+            const bufferEnd = audio.buffered.end(audio.buffered.length - 1)
+            if (bufferEnd - audio.currentTime > 0.5) {
+              // Small nudge forward if we have buffer ahead
+              audio.currentTime = bufferEnd - 0.1
+            }
+          }
+          return
+        }
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
