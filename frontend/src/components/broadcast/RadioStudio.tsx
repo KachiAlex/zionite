@@ -504,18 +504,19 @@ export default function RadioStudio({
           chunkTimesRef.current.push(Date.now())
           if (chunkTimesRef.current.length > 10) chunkTimesRef.current.shift()
           const idx = chunkIndexRef.current++
-          // Real-time relay via WebSocket
+          // Real-time relay via WebSocket (preferred)
           if (socketRef.current?.connected) {
             socketRef.current.emit('broadcast_chunk', { broadcastId, chunkIndex: idx, chunkData: base64 })
+          } else {
+            // HTTP fallback for persistence / replay only when WebSocket is offline
+            try {
+              await axios.post(`${API_BASE}/api/stream/${broadcastId}/chunk`, {
+                chunkIndex: idx,
+                chunkData: base64
+              }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+              setUploadError('')
+            } catch { setUploadError('Upload failed - check connection') }
           }
-          // HTTP fallback for persistence / replay
-          try {
-            await axios.post(`${API_BASE}/api/stream/${broadcastId}/chunk`, {
-              chunkIndex: idx,
-              chunkData: base64
-            }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-            setUploadError('')
-          } catch { setUploadError('Upload failed - check connection') }
         }
         reader.readAsDataURL(e.data)
       }

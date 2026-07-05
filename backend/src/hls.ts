@@ -17,6 +17,7 @@ interface BroadcastHls {
   lastChunkAt: number
   timeoutRef: NodeJS.Timeout | null
   pendingInit?: Buffer // persisted init loaded from DB for recovery after restart
+  lastProcessedIndex?: number // dedupe duplicate chunk deliveries (WS + HTTP)
 }
 
 const CLUSTER_ID = Buffer.from([0x1F, 0x43, 0xB6, 0x75])
@@ -129,6 +130,25 @@ function makeStreamingInitFromBuffer(init: Buffer): Buffer | null {
     }
   }
   return init // fallback
+}
+
+// Modify the Segment size inside a full chunk, preserving the rest of the chunk.
+// This is used when the first chunk (with EBML header) is fed to FFmpeg as-is.
+function makeStreamingChunk(buf: Buffer): Buffer | null {
+  for (let i = 0; i <= buf.length - 4; i++) {
+    if (buf[i] === SEGMENT_ID[0] && buf[i+1] === SEGMENT_ID[1] &&
+        buf[i+2] === SEGMENT_ID[2] && buf[i+3] === SEGMENT_ID[3]) {
+      const sizeStart = i + 4
+      if (sizeStart >= buf.length) break
+      const width = vintWidth(buf[sizeStart])
+      const unk = UNKNOWN_SIZE[width]
+      if (!unk) break
+      const result = Buffer.from(buf)
+      unk.copy(result, sizeStart)
+      return result
+    }
+  }
+  return null
 }
 
 const active = new Map<string, BroadcastHls>()
@@ -272,6 +292,12 @@ function forceStop(blsId: string) {
   } catch {}
 }
 
+export async function restartHlsBroadcast(broadcastId: string) {
+  console.warn(`[HLS] restartHlsBroadcast for ${broadcastId}`)
+  forceStop(broadcastId)
+  await startHlsBroadcast(broadcastId, true)
+}
+
 export async function startHlsBroadcast(broadcastId: string, force = false) {
   console.log(`[HLS] startHlsBroadcast called for ${broadcastId} force=${force}`)
   if (inBackoff.get(broadcastId)) {
@@ -286,19 +312,12 @@ export async function startHlsBroadcast(broadcastId: string, force = false) {
   }
   const existing = active.get(broadcastId)
   if (existing) {
-    if (existing.chunksReceived) {
-      // Broadcaster refreshed/reconnected — restart for fresh MediaRecorder timeline
-      console.warn(`[HLS] Restarting ${broadcastId} for broadcaster reconnect`)
-      crashCount.set(broadcastId, 0)
-      forceStop(broadcastId)
-    } else {
-      // First start, still waiting for first chunk — don't duplicate
-      console.warn(`[HLS] Already active for ${broadcastId}, waiting for first chunk`)
-      return
-    }
+    // Already running — don't restart just because a chunk arrived.
+    // Restarting here on every chunk wiped the manifest and prevented HLS output.
+    console.warn(`[HLS] Already active for ${broadcastId}, ignoring start request`)
+    return
   }
   // Don't reset crashCount on fresh start here — let backoff logic handle it.
-  // It is only reset on intentional broadcaster reconnect above.
   doStart(broadcastId)
 
   // Try to preload a persisted init segment so recovery works after server restart
@@ -331,42 +350,60 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
   try {
     hls.chunksReceived = true
     hls.lastChunkAt = Date.now()
+    // Deduplicate chunks delivered via both WebSocket and HTTP fallback
+    if (hls.lastProcessedIndex !== undefined && chunkIndex <= hls.lastProcessedIndex) {
+      console.log(`[HLS] ${broadcastId} chunk ${chunkIndex} already processed (last=${hls.lastProcessedIndex}), skipping`)
+      return
+    }
+    hls.lastProcessedIndex = chunkIndex
     const buf = Buffer.from(base64Chunk, 'base64')
     console.log(`[HLS] ${broadcastId} chunk ${chunkIndex}: decoded ${buf.length} bytes, first16=${buf.subarray(0, 16).toString('hex')}`)
-    // FFmpeg expects a continuous WebM stream. MediaRecorder only puts the EBML
-    // header in the FIRST chunk; subsequent chunks are raw continuation data.
-    // We persist the init so server restarts can recover.
+    // If a fresh EBML header appears mid-stream, the broadcaster restarted
+    // MediaRecorder (new timeline). Restart FFmpeg to honor it.
+    if (hls.initSent && hasEbmlHeader(buf)) {
+      console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has fresh EBML header while active — broadcaster reconnect, restarting`)
+      await restartHlsBroadcast(broadcastId)
+      hls = active.get(broadcastId)
+      if (!hls || hls.ended || hls.ffmpeg.killed) return
+    }
+    // FFmpeg expects a continuous WebM byte stream. MediaRecorder timeslice
+    // chunks are contiguous, not necessarily cluster-aligned, so we feed the
+    // first chunk (with EBML) as a whole after patching Segment size, then
+    // every subsequent chunk as-is.
     let data: Buffer
     let isInitChunk = false
     if (!hls.initSent) {
-      const init = makeStreamingInit(buf)
-      if (init) {
-        const cluster = extractCluster(buf)
-        data = Buffer.concat([init, cluster])
-        isInitChunk = true
-        console.log(`[HLS] ${broadcastId} init extracted from chunk ${chunkIndex} (${data.length} bytes)`)
-        // Persist init for recovery after server restart
-        const rawInit = extractInit(buf)
-        if (rawInit) dbWriteSafe(`UPDATE broadcasts SET init_segment=$1 WHERE id=$2`, [rawInit.toString('base64'), broadcastId])
+      if (hasEbmlHeader(buf)) {
+        const streamingChunk = makeStreamingChunk(buf)
+        if (streamingChunk) {
+          data = streamingChunk
+          isInitChunk = true
+          console.log(`[HLS] ${broadcastId} first chunk ${chunkIndex}: streaming chunk (${data.length} bytes), first16=${data.subarray(0, 16).toString('hex')}`)
+          // Persist init for recovery after server restart
+          const rawInit = extractInit(buf)
+          if (rawInit) dbWriteSafe(`UPDATE broadcasts SET init_segment=$1 WHERE id=$2`, [rawInit.toString('base64'), broadcastId])
+        } else {
+          console.warn(`[HLS] ${broadcastId} first chunk ${chunkIndex} has EBML but no Segment ID — feeding raw`)
+          data = buf
+        }
       } else if (hls.pendingInit) {
-        // Server restarted mid-broadcast: use persisted init + cluster from current chunk
-        const cluster = extractCluster(buf)
+        // Server restarted mid-broadcast: use persisted init + raw continuation
         const streamingInit = makeStreamingInitFromBuffer(hls.pendingInit)
-        data = Buffer.concat([streamingInit || hls.pendingInit, cluster])
+        data = Buffer.concat([streamingInit || hls.pendingInit, buf])
         isInitChunk = true
-        console.log(`[HLS] ${broadcastId} using persisted init (${hls.pendingInit.length} bytes) + cluster for chunk ${chunkIndex}`)
+        console.log(`[HLS] ${broadcastId} recovery chunk ${chunkIndex}: persisted init (${hls.pendingInit.length} bytes) + raw ${buf.length} bytes`)
       } else {
-        console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid init segment and no persisted init — skipping (broadcaster may need to refresh)`)
+        console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid EBML header and no persisted init — skipping (broadcaster may need to refresh)`)
         return
       }
     } else {
-      data = extractCluster(buf)
+      data = buf
     }
     if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
       try {
         hls.ffmpeg.stdin.write(data)
         if (isInitChunk) hls.initSent = true
-        console.log(`[HLS] ${broadcastId} fed chunk: ${data.length} bytes (initSent=${hls.initSent})`)
+        console.log(`[HLS] ${broadcastId} fed chunk ${chunkIndex}: ${data.length} bytes (initSent=${hls.initSent})`)
       } catch (writeErr: any) {
         console.warn(`[HLS] ${broadcastId} stdin write failed:`, writeErr.message)
       }

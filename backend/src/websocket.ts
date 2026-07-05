@@ -3,7 +3,7 @@ import { Server as SocketIOServer } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import { JWT_SECRET } from './middleware/auth.js'
 import { db, initDb, dbWriteSafe } from './db.js'
-import { startHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive } from './hls.js'
+import { startHlsBroadcast, restartHlsBroadcast, feedHlsChunk, stopHlsBroadcast, isHlsActive } from './hls.js'
 import { pauseRadioForBroadcast, resumeRadioAfterBroadcast } from './sermon-radio.js'
 
 let io: SocketIOServer | null = null
@@ -114,7 +114,7 @@ export function initWebSocket(httpServer: HttpServer) {
 
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       await pauseRadioForBroadcast()
-      await startHlsBroadcast(broadcastId)
+      await restartHlsBroadcast(broadcastId)
     })
 
     socket.on('end_broadcast_hls', async (broadcastId: string) => {
