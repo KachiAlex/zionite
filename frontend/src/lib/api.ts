@@ -225,6 +225,24 @@ export function useStopRadio() {
   })
 }
 
+export function useRadioStatus(enabled = true) {
+  return useQuery({ queryKey: ['radio', 'status'], queryFn: async () => {
+    const { data } = await api.get('/radio/status')
+    return data as any
+  }, enabled, refetchInterval: 10000, staleTime: 5000 })
+}
+
+export function usePauseRadio() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/radio/pause'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sermons', 'radio', 'current'] })
+      qc.invalidateQueries({ queryKey: ['radio'] })
+    },
+  })
+}
+
 export function useResumeRadio() {
   const qc = useQueryClient()
   return useMutation({

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
-import { getRadioStatus, skipSermon, stopRadio, startRadio, initRadioScheduler } from '../sermon-radio.js'
+import { getRadioStatus, skipSermon, stopRadio, startRadio, initRadioScheduler, pauseRadio } from '../sermon-radio.js'
 
 const router = Router()
 
@@ -38,6 +38,16 @@ router.post('/stop', authenticateToken, requireRole('broadcaster', 'admin'), asy
   }
 })
 
+router.post('/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (_req, res) => {
+  try {
+    await pauseRadio()
+    res.json({ success: true, message: 'Radio paused' })
+  } catch (err: any) {
+    console.error('[RADIO] pause error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 router.post('/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res) => {
   try {
     const { playlistId } = req.body
@@ -48,9 +58,9 @@ router.post('/resume', authenticateToken, requireRole('broadcaster', 'admin'), a
     if (!playlist) { res.status(404).json({ error: 'Playlist not found' }); return }
 
     await db.run(
-      `INSERT INTO radio_state (id, manual_stop, updated_at)
-       VALUES ('singleton', FALSE, NOW())
-       ON CONFLICT (id) DO UPDATE SET manual_stop = FALSE, updated_at = NOW()`
+      `INSERT INTO radio_state (id, manual_stop, paused, updated_at)
+       VALUES ('singleton', FALSE, FALSE, NOW())
+       ON CONFLICT (id) DO UPDATE SET manual_stop = FALSE, paused = FALSE, updated_at = NOW()`
     )
     await startRadio(playlistId, playlist.shuffle, playlist.repeat_mode)
     res.json({ success: true, message: 'Radio resumed', playlistId })

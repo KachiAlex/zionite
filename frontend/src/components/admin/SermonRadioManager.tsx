@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, usePlaylists, usePlaylist, useRadioSchedules, useActiveRadioSchedule, useSermons, useMusic } from '../../lib/api'
+import { api, usePlaylists, usePlaylist, useRadioSchedules, useActiveRadioSchedule, useSermons, useMusic, useRadioStatus, usePauseRadio, useResumeRadio } from '../../lib/api'
 import {
   Plus, Trash2, Loader2, Clock, Calendar, Save, X,
-  Radio, Play, Square, SkipForward, ListMusic, Headphones, Music, BookOpen,
+  Radio, Play, Pause, Square, SkipForward, ListMusic, Headphones, Music, BookOpen,
   GripVertical
 } from 'lucide-react'
 
@@ -27,6 +27,10 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
   const { data: selectedPlaylist } = usePlaylist(selectedPlaylistId)
   const { data: sermons = [] } = useSermons()
   const { data: musicTracks = [] } = useMusic()
+  const { data: radioStatus } = useRadioStatus()
+  const pauseRadioMutation = usePauseRadio()
+  const resumeRadioMutation = useResumeRadio()
+  const isRadioPlaying = !!radioStatus?.status
   const [itemForm, setItemForm] = useState({ content_type: 'sermon', content_id: '', order_index: 0, duration_minutes: 30 })
   const [addingItem, setAddingItem] = useState(false)
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null)
@@ -155,6 +159,27 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
     } finally { setRadioLoading(false) }
   }
 
+  async function pauseRadioStream() {
+    setRadioLoading(true)
+    try {
+      await api.post('/radio/pause')
+      refresh()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to pause radio')
+    } finally { setRadioLoading(false) }
+  }
+
+  async function resumeRadioStream() {
+    if (!activeSchedule) return
+    setRadioLoading(true)
+    try {
+      await api.post('/radio/resume', { playlistId: activeSchedule.playlist_id })
+      refresh()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to resume radio')
+    } finally { setRadioLoading(false) }
+  }
+
   const now = new Date()
   const sorted = useMemo(() =>
     [...schedules].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
@@ -166,11 +191,11 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
   return (
     <div className="space-y-6">
       {activeSchedule ? (
-        <div className="rounded-2xl p-4" style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
+        <div className="rounded-2xl p-4" style={{ background: isRadioPlaying ? 'rgba(74,222,128,0.06)' : 'rgba(234,179,8,0.06)', border: `1px solid ${isRadioPlaying ? 'rgba(74,222,128,0.2)' : 'rgba(234,179,8,0.2)'}` }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse" />
-              <span className="text-sm font-semibold text-white">Radio On Air</span>
+              <span className={`w-2 h-2 rounded-full animate-pulse ${isRadioPlaying ? 'bg-[#4ade80]' : 'bg-[#eab308]'}`} />
+              <span className="text-sm font-semibold text-white">{isRadioPlaying ? 'Radio On Air' : 'Radio Paused'}</span>
               <span className="text-xs" style={{ color: 'var(--dim)' }}>
                 {activeSchedule.playlist_title || 'Unknown playlist'}
               </span>
@@ -184,6 +209,19 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
                 style={{ background: 'rgba(201,162,39,0.1)', color: 'var(--gold)', border: '1px solid rgba(201,162,39,0.2)' }}>
                 {radioLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <SkipForward className="w-3 h-3" />} Skip
               </button>
+              {isRadioPlaying ? (
+                <button onClick={pauseRadioStream} disabled={radioLoading}
+                  className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  style={{ background: 'rgba(234,179,8,0.1)', color: '#eab308', border: '1px solid rgba(234,179,8,0.2)' }}>
+                  {radioLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pause className="w-3 h-3" />} Pause
+                </button>
+              ) : (
+                <button onClick={resumeRadioStream} disabled={radioLoading}
+                  className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  style={{ background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
+                  {radioLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />} Play
+                </button>
+              )}
               <button onClick={stopRadioStream} disabled={radioLoading}
                 className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                 style={{ background: 'rgba(220,38,38,0.1)', color: '#fca5a5', border: '1px solid rgba(220,38,38,0.2)' }}>

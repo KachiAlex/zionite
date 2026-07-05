@@ -241,6 +241,23 @@ export async function stopRadio(): Promise<void> {
   console.log('[RADIO] Stopped streaming')
 }
 
+export async function pauseRadio() {
+  if (!active) {
+    console.log('[RADIO] No active radio to pause')
+    return
+  }
+  const elapsed = Math.floor((Date.now() - active.startedAt) / 1000)
+  const offset = active.offsetSeconds + elapsed
+  await updateRadioState(active.playlistId, active.currentContentId, offset)
+  await db.run(
+    `INSERT INTO radio_state (id, paused, manual_stop, updated_at)
+     VALUES ('singleton', TRUE, FALSE, NOW())
+     ON CONFLICT (id) DO UPDATE SET paused = TRUE, manual_stop = FALSE, updated_at = NOW()`
+  )
+  await stopRadio()
+  console.log('[RADIO] Paused and saved state')
+}
+
 export function isRadioPausedForBroadcast(): boolean {
   return broadcastPaused
 }
@@ -338,9 +355,13 @@ async function tick() {
 
   const schedule = await findActiveSchedule()
   if (schedule) {
-    const state = await db.get('SELECT manual_stop FROM radio_state WHERE id = \'singleton\'')
+    const state = await db.get('SELECT manual_stop, paused FROM radio_state WHERE id = \'singleton\'')
     if (state?.manual_stop) {
       console.log('[RADIO-SCHEDULER] Active schedule found but radio manually stopped, skipping start')
+      return
+    }
+    if (state?.paused) {
+      console.log('[RADIO-SCHEDULER] Active schedule found but radio is paused, skipping start')
       return
     }
     if (!active || active.playlistId !== schedule.playlist_id) {
