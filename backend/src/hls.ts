@@ -263,6 +263,7 @@ export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chun
     // We need to send the init segment first so FFmpeg knows the track format.
     // MediaRecorder chunks are self-contained, so ANY chunk can provide the init.
     let data: Buffer
+    let isInitChunk = false
     if (!hls.initSent) {
       const init = makeStreamingInit(buf)
       if (!init) {
@@ -271,7 +272,7 @@ export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chun
       }
       const cluster = extractCluster(buf)
       data = Buffer.concat([init, cluster])
-      hls.initSent = true
+      isInitChunk = true
       console.log(`[HLS] ${broadcastId} init extracted from chunk ${chunkIndex} (${data.length} bytes)`)
     } else {
       data = extractCluster(buf)
@@ -279,6 +280,7 @@ export function feedHlsChunk(broadcastId: string, chunkIndex: number, base64Chun
     if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
       try {
         hls.ffmpeg.stdin.write(data)
+        if (isInitChunk) hls.initSent = true
         console.log(`[HLS] ${broadcastId} fed chunk: ${data.length} bytes (initSent=${hls.initSent})`)
       } catch (writeErr: any) {
         console.warn(`[HLS] ${broadcastId} stdin write failed:`, writeErr.message)

@@ -513,21 +513,29 @@ router.get('/:id/hls-status', async (req: Request, res: Response) => {
 
     let files: string[] = []
     let manifestContent: string | null = null
+    let manifestExists = false
     if (hlsDir && fs.existsSync(hlsDir)) {
       files = fs.readdirSync(hlsDir)
       const manifestPath = path.join(hlsDir, 'stream.m3u8')
-      if (fs.existsSync(manifestPath)) {
+      manifestExists = fs.existsSync(manifestPath)
+      if (manifestExists) {
         manifestContent = fs.readFileSync(manifestPath, 'utf-8')
       }
     }
 
+    // Only report active if FFmpeg is running AND the manifest file exists.
+    // This avoids the race where listeners get a 404 on the manifest during
+    // the brief window between FFmpeg startup and first segment write.
+    const hlsReady = active && manifestExists
+
     res.json({
       broadcastId: id,
-      hlsActive: active,
+      hlsActive: hlsReady,
       hlsDir,
       manifestUrl,
       files,
       manifestContent,
+      manifestExists,
       timestamp: new Date().toISOString()
     })
   } catch (err: any) {

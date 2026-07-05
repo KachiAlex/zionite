@@ -264,8 +264,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.warn('[HLS] Fatal network error — retrying…')
-              hls.startLoad()
+              console.warn('[HLS] Fatal network error — retrying in 1.5s…')
+              setTimeout(() => hls.startLoad(), 1500)
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
               console.warn('[HLS] Fatal media error — recovering…')
