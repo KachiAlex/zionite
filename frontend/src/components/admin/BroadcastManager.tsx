@@ -159,6 +159,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [setupError, setSetupError] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [recordEnabled, setRecordEnabled] = useState(false)
+  const [saveBroadcast, setSaveBroadcast] = useState(true)
   const [recordDirName, setRecordDirName] = useState('')
 
   /* ── 2-page setup modal state ── */
@@ -838,12 +839,17 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                     </div>
                     <div className="border-t border-[rgba(243,238,228,0.06)] pt-3 mt-1 md:col-span-2">
                       <h4 className="text-[11px] font-semibold text-white flex items-center gap-1.5 mb-2">
-                        <HardDrive className="w-3.5 h-3.5 text-[#c9a227]" /> Local Recording
+                        <HardDrive className="w-3.5 h-3.5 text-[#c9a227]" /> Recording
                       </h4>
+                      <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" checked={saveBroadcast} onChange={e => setSaveBroadcast(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded border-[rgba(243,238,228,0.2)] bg-[#14141a] text-[#c9a227] focus:ring-[#c9a227]" />
+                        <span className="text-[11px] text-[#9c958a]">Save broadcast recording to cloud for replay</span>
+                      </label>
                       <label className="flex items-center gap-2 mb-2 cursor-pointer">
                         <input type="checkbox" checked={recordEnabled} onChange={e => toggleRecordEnabled(e.target.checked)}
                           className="w-3.5 h-3.5 rounded border-[rgba(243,238,228,0.2)] bg-[#14141a] text-[#c9a227] focus:ring-[#c9a227]" />
-                        <span className="text-[11px] text-[#9c958a]">Auto-record broadcasts to local folder</span>
+                        <span className="text-[11px] text-[#9c958a]">Also save a local copy to this device</span>
                       </label>
                       {recordEnabled && (
                         <div className="flex items-center gap-2">
@@ -991,6 +997,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         onEnd={(uploadDone) => stopBroadcast(uploadDone)}
         actionLoading={actionLoading}
         recordEnabled={recordEnabled}
+        saveBroadcast={saveBroadcast}
         musicBuffer={musicBuffer || undefined}
         musicName={musicName || undefined}
         initialMusicVolume={musicVolume}

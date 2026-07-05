@@ -82,6 +82,7 @@ interface Props {
   onEnd: (uploadDone: Promise<void>) => void
   actionLoading: boolean
   recordEnabled?: boolean
+  saveBroadcast?: boolean
   musicBuffer?: AudioBuffer
   musicName?: string
   initialMusicVolume?: number
@@ -112,6 +113,7 @@ export default function RadioStudio({
   thumbnailUrl,
   onPause, onResume, onEnd, actionLoading,
   recordEnabled,
+  saveBroadcast = true,
   musicBuffer: initialMusicBuffer,
   musicName: initialMusicName,
   initialMusicVolume = 25
@@ -463,15 +465,17 @@ export default function RadioStudio({
         }
       }
 
-      // Cloud recording — stream all blobs into memory for upload on end
-      const cloudMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus' : 'audio/webm'
-      cloudMimeRef.current = cloudMime
-      cloudBlobsRef.current = []
-      const cloudRecorder = new MediaRecorder(stream, { mimeType: cloudMime, audioBitsPerSecond: 128000 })
-      cloudRecorder.ondataavailable = (e) => { if (e.data.size > 0) cloudBlobsRef.current.push(e.data) }
-      cloudRecorder.start(5000)
-      cloudRecorderRef.current = cloudRecorder
+      // Cloud recording — only collect blobs when broadcaster chose to save the broadcast
+      if (saveBroadcast) {
+        const cloudMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus' : 'audio/webm'
+        cloudMimeRef.current = cloudMime
+        cloudBlobsRef.current = []
+        const cloudRecorder = new MediaRecorder(stream, { mimeType: cloudMime, audioBitsPerSecond: 128000 })
+        cloudRecorder.ondataavailable = (e) => { if (e.data.size > 0) cloudBlobsRef.current.push(e.data) }
+        cloudRecorder.start(5000)
+        cloudRecorderRef.current = cloudRecorder
+      }
 
       statsIntervalRef.current = setInterval(async () => {
         try {
@@ -558,9 +562,13 @@ export default function RadioStudio({
     const mimeSnapshot = cloudMimeRef.current
     const idSnapshot = broadcastId
 
-    // Return a Promise that resolves only after the cloud upload completes
+    // Return a Promise that resolves only after the cloud upload completes (if saving)
     const uploadPromise = new Promise<void>((resolve) => {
-      if (!triggerUpload || blobsSnapshot.length === 0 || !idSnapshot) { resolve(); return }
+      if (!saveBroadcast || !triggerUpload || blobsSnapshot.length === 0 || !idSnapshot) {
+        setUploadProgress('idle')
+        resolve()
+        return
+      }
 
       async function doUpload(blobs: Blob[]) {
         setUploadProgress('uploading')
