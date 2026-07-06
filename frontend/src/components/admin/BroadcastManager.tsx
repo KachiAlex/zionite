@@ -844,7 +844,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                       <label className="flex items-center gap-2 mb-2 cursor-pointer">
                         <input type="checkbox" checked={saveBroadcast} onChange={e => setSaveBroadcast(e.target.checked)}
                           className="w-3.5 h-3.5 rounded border-[rgba(243,238,228,0.2)] bg-[#14141a] text-[#c9a227] focus:ring-[#c9a227]" />
-                        <span className="text-[11px] text-[#9c958a]">Save broadcast recording to cloud for replay</span>
+                        <span className="text-[11px] text-[#9c958a]">Keep a recording of this broadcast (you'll choose whether to upload after ending)</span>
                       </label>
                       <label className="flex items-center gap-2 mb-2 cursor-pointer">
                         <input type="checkbox" checked={recordEnabled} onChange={e => toggleRecordEnabled(e.target.checked)}

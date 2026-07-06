@@ -593,6 +593,18 @@ export default function RadioStudio({
         return
       }
 
+      // Ask the broadcaster whether to upload the kept recording
+      const wantsUpload = window.confirm(
+        'A recording of this broadcast was kept. Upload it to the cloud for replay?'
+      )
+      if (!wantsUpload) {
+        setUploadProgress('idle')
+        setRecordingStatus('Recording discarded.')
+        cloudBlobsRef.current = []
+        resolve()
+        return
+      }
+
       async function doUpload(blobs: Blob[]) {
         setUploadProgress('uploading')
         setRecordingStatus('Uploading recording to cloud...')
