@@ -988,6 +988,11 @@ export default function RadioStudio({
               No soundtrack loaded. Go back to setup to add one.
             </p>
           )}
+          {isLive && musicBufferRef.current && (
+            <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
+              The Feedback Monitor above plays your mic + soundtrack so you can hear what listeners hear.
+            </p>
+          )}
         </div>
 
         {/* Live Chat Panel — broadcaster can see and reply to listeners */}

@@ -182,17 +182,21 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        liveSyncDurationCount: 3,       // Start 3 segments behind live edge (~6s)
-        liveMaxLatencyDurationCount: 8, // Snap if >8 segments behind
-        backBufferLength: 5,
-        maxBufferLength: 10,
-        maxMaxBufferLength: 15,
+        liveSyncDurationCount: 4,       // Start 4 segments behind live edge (~8s) for safer buffer
+        liveMaxLatencyDurationCount: 12, // Allow more drift before snapping
+        backBufferLength: 10,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 30,
         manifestLoadingRetryDelay: 500,
         manifestLoadingMaxRetry: 20,
         levelLoadingRetryDelay: 500,
         levelLoadingMaxRetry: 20,
+        fragLoadingRetryDelay: 500,
+        fragLoadingMaxRetry: 20,
         // Recover automatically from non-fatal media stalls
         recoverMediaError: true,
+        // Be lenient with live stream durations and gaps
+        liveDurationInfinity: true,
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)
@@ -262,8 +266,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
               ? audio.buffered.end(audio.buffered.length - 1) - audio.currentTime
               : 0
             // Only snap when we're far behind AND the buffer is healthy
-            if (behind > 20 && buffer > 2 && !audio.paused) {
-              const target = Math.max(0, liveEdge - 6)
+            if (behind > 30 && buffer > 5 && !audio.paused) {
+              const target = Math.max(0, liveEdge - 8)
               console.warn(`[HLS] Snapping to live edge: ${behind.toFixed(1)}s behind → ${target.toFixed(1)}s`)
               audio.currentTime = target
             }
