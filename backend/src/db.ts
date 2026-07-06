@@ -231,6 +231,35 @@ async function _initTenantSchema() {
     try { await db.query(`UPDATE ${tbl} SET tenant_id=$1 WHERE tenant_id IS NULL`, [defaultTenantId]) } catch {}
   }
 
+  // License table: one active license per tenant
+  await db.query(`CREATE TABLE IF NOT EXISTS tenant_licenses (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
+    plan TEXT NOT NULL DEFAULT 'free',
+    status TEXT NOT NULL DEFAULT 'active',
+    starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    trial_ends_at TIMESTAMP,
+    billing_period TEXT DEFAULT 'monthly',
+    max_users INTEGER,
+    max_storage_gb INTEGER,
+    max_broadcasts INTEGER,
+    features TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+
+  // Seed a default pro license for the default tenant if none exists
+  const defaultLicense = await db.get('SELECT id FROM tenant_licenses WHERE tenant_id=$1', [defaultTenantId])
+  if (!defaultLicense) {
+    const defaultLicenseId = uuidv4()
+    await db.query(`INSERT INTO tenant_licenses (id, tenant_id, plan, status, billing_period, max_users, max_storage_gb, max_broadcasts, features)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [defaultLicenseId, defaultTenantId, 'pro', 'active', 'lifetime', 1000, 200, 1000,
+        JSON.stringify(['sermons','music','livestream','broadcast','radio','events','prayer','testimonies','donations','analytics','custom_domain','api_access'])])
+    console.log('[DB] default license seeded')
+  }
+
   return defaultTenantId
 }
 
@@ -294,6 +323,25 @@ async function _initDbInternal() {
         console.log('[DB] admin already exists, skipping seed')
       } else {
         console.error('[DB] admin seed error:', e.message)
+      }
+    }
+  }
+
+  // Seed the requested superadmin account if it does not exist yet
+  const requestedSuperadmin = await db.get('SELECT * FROM users WHERE email = $1', ['superadmin@zionite.online'])
+  if (!requestedSuperadmin) {
+    try {
+      const hash = await bcrypt.hash('superadmin123', 10)
+      await db.run(
+        `INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (email) DO NOTHING`,
+        ['superadmin-1', 'superadmin@zionite.online', hash, 'Super Admin', 'super_admin', defaultTenantId]
+      )
+      console.log('[DB] requested superadmin seeded')
+    } catch (e: any) {
+      if (e.code === '23505') {
+        console.log('[DB] requested superadmin already exists, skipping seed')
+      } else {
+        console.error('[DB] requested superadmin seed error:', e.message)
       }
     }
   }

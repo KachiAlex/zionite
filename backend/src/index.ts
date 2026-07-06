@@ -26,6 +26,7 @@ import radioRoutes from './routes/radio.js'
 import radioScheduleRoutes from './routes/radio-schedules.js'
 import playlistRoutes from './routes/playlists.js'
 import musicRoutes from './routes/music.js'
+import tenantRoutes from './routes/tenants.js'
 import { cacheMiddleware } from './middleware/cache.js'
 import { resolveTenant, JWT_SECRET } from './middleware/auth.js'
 import jwt from 'jsonwebtoken'
@@ -143,6 +144,7 @@ app.use('/radio', radioRoutes)
 app.use('/radio-schedules', radioScheduleRoutes)
 app.use('/playlists', playlistRoutes)
 app.use('/music', musicRoutes)
+app.use('/tenants', tenantRoutes)
 
 // HLS live stream serving
 const HLS_ROOT = process.env.HLS_DIR || '/tmp/hls'
