@@ -350,20 +350,16 @@ export default function RadioStudio({
     return { ctx, dest, micGain: micG, musicGain: musG }
   }
 
-  // Route music to the device's speakers only when the mix monitor is NOT active.
-  // When the monitor is active, the broadcaster already hears the music through the
-  // mixed monitor stream, so we avoid double audio.
+  // Always route music to the device's local speakers so the broadcaster can hear
+  // the soundtrack for mood/cuing. The Feedback Monitor is separate and plays the
+  // full mix (mic + soundtrack) when enabled.
   function syncLocalMusicRouting() {
     const musG = musicGainNodeRef.current
     const ctx = mixerCtxRef.current
     if (!musG || !ctx) return
-    const monitorActive = monitorEnabled && isLive
-    if (!monitorActive && !musicLocalConnectedRef.current) {
+    if (!musicLocalConnectedRef.current) {
       musG.connect(ctx.destination)
       musicLocalConnectedRef.current = true
-    } else if (monitorActive && musicLocalConnectedRef.current) {
-      try { musG.disconnect(ctx.destination) } catch {}
-      musicLocalConnectedRef.current = false
     }
   }
 
