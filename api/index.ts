@@ -64,7 +64,31 @@ function generateCloudinarySignature(folder: string, timestamp: number) {
 
 // ── Express setup ──────────────────────────────────────────────
 const app = express()
-app.use(cors({ origin: '*', credentials: true }))
+
+const ALLOWED_ORIGINS = [
+  'https://www.zionite.online',
+  'https://zionite.online',
+  'https://zionite.fly.dev',
+  'http://localhost:5173',
+  'http://localhost:3000',
+]
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    if (process.env.NODE_ENV !== 'production') return callback(null, true)
+    console.warn('[CORS] Blocked origin:', origin)
+    callback(new Error(`CORS policy: origin ${origin} not allowed`), false)
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length'],
+  maxAge: 86400,
+  optionsSuccessStatus: 204,
+}))
+
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
