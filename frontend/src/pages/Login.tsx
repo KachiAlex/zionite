@@ -41,6 +41,9 @@ export default function Login() {
       login(data.token, data.user)
 
       switch (data.user.role) {
+        case 'super_admin':
+          navigate('/super-admin')
+          break
         case 'admin':
           navigate('/admin')
           break

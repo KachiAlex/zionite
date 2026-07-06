@@ -93,7 +93,7 @@ export default function Navbar() {
                       <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
                         style={{ background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }}>{user.role}</span>
                     </div>
-                    <Link to={user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard'} onClick={() => setAvatarOpen(false)}
+                    <Link to={user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')} onClick={() => setAvatarOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-3 text-sm transition-colors hover:bg-[rgba(243,238,228,0.04)]"
                       style={{ color: 'var(--parchment)' }}>
                       <LayoutDashboard className="w-4 h-4" style={{ color: 'var(--dim)' }} /> Dashboard
@@ -155,7 +155,7 @@ export default function Navbar() {
           <div className="px-4 pb-4 pt-1 flex flex-col sm:flex-row gap-2 border-t border-[rgba(243,238,228,0.06)] mt-1">
             {user ? (
               <>
-                <Link to={user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard'}
+                <Link to={user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-[rgba(243,238,228,0.06)] text-white">
                   <LayoutDashboard className="w-4 h-4" /> Dashboard
                 </Link>

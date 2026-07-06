@@ -245,7 +245,7 @@ export default function Home() {
               The official digital radio ministry of {tenant?.name || 'The Redemption Project'}. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
             </p>
             <div className="flex items-center justify-center gap-4">
-              <Link to={user ? (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard') : (isLive?`/live/${broadcast.id}`:"/live")} className="btn-gold text-sm">
+              <Link to={user ? (user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')) : (isLive?`/live/${broadcast.id}`:"/live")} className="btn-gold text-sm">
                 <Headphones className="w-4 h-4" /> Listen Live
               </Link>
               <Link to="/archive" className="flex items-center gap-2 text-sm font-semibold text-[#9c958a] hover:text-white transition-colors hover:scale-105 duration-300">
