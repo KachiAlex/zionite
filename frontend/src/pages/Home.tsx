@@ -24,6 +24,10 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function fillTemplate(str: string | undefined, tenantName: string) {
+  return (str || '').replace(/\{tenant\}/g, tenantName)
+}
+
 function SectionHeader({ title, action, to }:{ title:string; action:string; to:string }) {
   return (
     <div className="flex items-center justify-between mb-4">
@@ -137,14 +141,16 @@ const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
 })
 
 export default function Home() {
-  usePageTitle('The Voice of Redemption')
+  const { tenant } = useTenantContext()
+  const tenantName = tenant?.name || 'ZioniteFM'
+  const config = tenant?.home_config || {}
+  usePageTitle(fillTemplate(config.brand?.tagline || 'The Voice of Redemption', tenantName))
   const { data: broadcast } = useActiveBroadcast()
   const { data: sermons = [] } = useFeaturedSermons()
   const { data: musicTracks = [] } = useMusic()
   const { data: guestSpeakers = [] } = useGuestSpeakers()
   const { data: events = [] } = useEvents()
   const { user } = useAuth()
-  const { tenant } = useTenantContext()
   const isLive = broadcast?.status === 'live'
   const { data: radioCurrent } = useRadioCurrent(!isLive)
   const isRadioOn = radioCurrent?.current && !isLive
@@ -232,38 +238,40 @@ export default function Home() {
       {/* ====== HERO ====== */}
       <div className="relative">
         <div className="absolute inset-0">
-          <img src="https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=2000&q=80" alt="" className="w-full h-full object-cover" />
+          <img src={config.hero?.backgroundImage || 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=2000&q=80'} alt="" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-[#0c0c12]/85 via-[#0c0c12]/70 to-[#0c0c12]" />
         </div>
         <div className="relative max-w-[1440px] mx-auto px-4 md:px-6 py-12 sm:py-16 md:py-28">
           <div className="max-w-3xl mx-auto text-center">
-            <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-2 font-bold">Welcome to</p>
+            <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-2 font-bold">{fillTemplate(config.hero?.subtitle || 'Welcome to', tenantName)}</p>
             <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">
-              {tenant?.name || 'ZioniteFM'} –<br />The Voice of Redemption
+              {fillTemplate(config.hero?.title || '{tenant} – The Voice of Redemption', tenantName).split('\n').map((line, i) => <span key={i}>{line}{i === 0 && <br />}</span>)}
             </h1>
             <p className="text-base text-[#9c958a] max-w-xl mx-auto leading-relaxed mb-8 font-semibold">
-              The official digital radio ministry of {tenant?.name || 'The Redemption Project'}. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
+              {fillTemplate(config.hero?.description || 'The official digital radio ministry of {tenant}. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.', tenantName)}
             </p>
             <div className="flex items-center justify-center gap-4">
-              <Link to={user ? (user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')) : (isLive?`/live/${broadcast.id}`:"/live")} className="btn-gold text-sm">
-                <Headphones className="w-4 h-4" /> Listen Live
+              <Link to={config.hero?.primaryCta?.link || (user ? (user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')) : (isLive?`/live/${broadcast.id}`:"/live"))} className="btn-gold text-sm">
+                <Headphones className="w-4 h-4" /> {config.hero?.primaryCta?.text || 'Listen Live'}
               </Link>
-              <Link to="/archive" className="flex items-center gap-2 text-sm font-semibold text-[#9c958a] hover:text-white transition-colors hover:scale-105 duration-300">
-                <BookOpen className="w-4 h-4" /> Browse Sermons
+              <Link to={config.hero?.secondaryCta?.link || '/archive'} className="flex items-center gap-2 text-sm font-semibold text-[#9c958a] hover:text-white transition-colors hover:scale-105 duration-300">
+                <BookOpen className="w-4 h-4" /> {config.hero?.secondaryCta?.text || 'Browse Sermons'}
               </Link>
             </div>
-            <Link to="/register" className="flex items-center justify-center gap-3 mt-8 group">
-              <div className="flex -space-x-2">
-                {["SJ","DM","BK","AO","GO"].map((init,i)=>{
-                  const bg = ["c9a227","8a3326","21222c","1c1d24","48433a"][i]
-                  return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} loading="lazy" className="w-8 h-8 rounded-full border-2 border-[#14141a] group-hover:scale-105 transition-transform duration-300" alt="" />
-                })}
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-semibold text-white group-hover:text-[#c9a227] transition-colors">Join the Community</p>
-                <p className="text-[10px] text-[#9c958a]">Thousands of listeners online</p>
-              </div>
-            </Link>
+            {config.sections?.showCommunityCta !== false && (
+              <Link to="/register" className="flex items-center justify-center gap-3 mt-8 group">
+                <div className="flex -space-x-2">
+                  {["SJ","DM","BK","AO","GO"].map((init,i)=>{
+                    const bg = ["c9a227","8a3326","21222c","1c1d24","48433a"][i]
+                    return <img key={i} src={`https://ui-avatars.com/api/?name=${init}&background=${bg}&color=f3eee4&size=32`} loading="lazy" className="w-8 h-8 rounded-full border-2 border-[#14141a] group-hover:scale-105 transition-transform duration-300" alt="" />
+                  })}
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-white group-hover:text-[#c9a227] transition-colors">{config.hero?.communityCta?.text || 'Join the Community'}</p>
+                  <p className="text-[10px] text-[#9c958a]">{config.hero?.communityCta?.subtext || 'Thousands of listeners online'}</p>
+                </div>
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -453,69 +461,72 @@ export default function Home() {
               </section>
             </div>
 
-            {/* Bottom row: 3 cards */}
+            {/* Bottom row: configurable cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {/* Sermon Transcripts */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-                <SectionHeader title="Sermon Transcripts" action="View All" to="/archive" />
-                <p className="text-xs text-[#9c958a] mb-3">Read, study and download sermon transcripts.</p>
-                <div className="space-y-2">
-                  {["Search by topic","Download PDF","Study offline"].map((item,i)=>{
-                    const icons = [Search, Download, BookOpen]
-                    const Icon = icons[i]
-                    return (
-                      <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
-                        <Icon className="w-3.5 h-3.5 text-[#c9a227]" /> {item}
-                      </div>
-                    )
-                  })}
-                </div>
-                <Link to="/archive" className="btn-gold w-full text-xs mt-4">Browse Transcripts</Link>
-              </section>
+              {config.sections?.showTranscripts !== false && (
+                <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                  <SectionHeader title="Sermon Transcripts" action="View All" to="/archive" />
+                  <p className="text-xs text-[#9c958a] mb-3">Read, study and download sermon transcripts.</p>
+                  <div className="space-y-2">
+                    {["Search by topic","Download PDF","Study offline"].map((item,i)=>{
+                      const icons = [Search, Download, BookOpen]
+                      const Icon = icons[i]
+                      return (
+                        <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
+                          <Icon className="w-3.5 h-3.5 text-[#c9a227]" /> {item}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <Link to="/archive" className="btn-gold w-full text-xs mt-4">Browse Transcripts</Link>
+                </section>
+              )}
 
-              {/* Guest Speaker Spotlight */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-                <SectionHeader title="Guest Speaker Spotlight" action="View All" to="/events" />
-                {guestSpeakers.length > 0 ? (
-                  <div className="flex gap-3">
-                    {guestSpeakers[0].photo_url ? (
-                      <img src={guestSpeakers[0].photo_url} alt={`${guestSpeakers[0].name} guest speaker`} loading="lazy" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
-                    ) : (
-                      <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
-                        <Users className="w-8 h-8 text-[#c9a227]/40" />
+              {config.sections?.showGuestSpeakers !== false && (
+                <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                  <SectionHeader title="Guest Speaker Spotlight" action="View All" to="/events" />
+                  {guestSpeakers.length > 0 ? (
+                    <div className="flex gap-3">
+                      {guestSpeakers[0].photo_url ? (
+                        <img src={guestSpeakers[0].photo_url} alt={`${guestSpeakers[0].name} guest speaker`} loading="lazy" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg bg-[#21222c] flex items-center justify-center flex-shrink-0">
+                          <Users className="w-8 h-8 text-[#c9a227]/40" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-medium text-white">{guestSpeakers[0].name}</p>
+                        <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
+                        <p className="text-xs text-[#9c958a] mt-1">{guestSpeakers[0].topic || 'Special Conference'}</p>
+                        {guestSpeakers[0].date && <p className="text-[10px] text-[#9c958a]">{guestSpeakers[0].date}</p>}
                       </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-medium text-white">{guestSpeakers[0].name}</p>
-                      <span className="text-[10px] bg-[rgba(201,162,39,0.15)] text-[#c9a227] px-2 py-0.5 rounded-full">Guest Minister</span>
-                      <p className="text-xs text-[#9c958a] mt-1">{guestSpeakers[0].topic || 'Special Conference'}</p>
-                      {guestSpeakers[0].date && <p className="text-[10px] text-[#9c958a]">{guestSpeakers[0].date}</p>}
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
-                    <p className="text-sm text-[#9c958a] font-semibold">No guest speakers yet.</p>
-                  </div>
-                )}
-                <Link to="/events" className="btn-gold w-full text-xs mt-3">View Event Details</Link>
-              </section>
+                  ) : (
+                    <div className="text-center py-4">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-[#9c958a]/40" />
+                      <p className="text-sm text-[#9c958a] font-semibold">No guest speakers yet.</p>
+                    </div>
+                  )}
+                  <Link to="/events" className="btn-gold w-full text-xs mt-3">View Event Details</Link>
+                </section>
+              )}
 
-              {/* Giving & Donations */}
-              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-                <SectionHeader title="Giving & Donations" action="" to="#" />
-                <p className="text-xs text-[#9c958a] mb-3">Your giving makes ministry and impact possible.</p>
-                <div className="space-y-2 mb-4">
-                  {["Gospel Broadcasting","Outreach Programs","Missions","Ministry Support"].map(item=>{
-                    return (
-                      <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
-                        <ChevronRight className="w-3 h-3 text-[#c9a227]" /> {item}
-                      </div>
-                    )
-                  })}
-                </div>
-                <Link to="/donate" className="btn-gold w-full text-xs"><Heart className="w-3.5 h-3.5" /> Give Now</Link>
-              </section>
+              {config.sections?.showDonations !== false && (
+                <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                  <SectionHeader title="Giving & Donations" action="" to="#" />
+                  <p className="text-xs text-[#9c958a] mb-3">Your giving makes ministry and impact possible.</p>
+                  <div className="space-y-2 mb-4">
+                    {["Gospel Broadcasting","Outreach Programs","Missions","Ministry Support"].map(item=>{
+                      return (
+                        <div key={item} className="flex items-center gap-2 text-xs text-[#9c958a]">
+                          <ChevronRight className="w-3 h-3 text-[#c9a227]" /> {item}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <Link to="/donate" className="btn-gold w-full text-xs"><Heart className="w-3.5 h-3.5" /> Give Now</Link>
+                </section>
+              )}
             </div>
           </div>
 
@@ -531,9 +542,9 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Upcoming Events */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-              <SectionHeader title="Upcoming Events" action="View All" to="/events" />
+            {config.sections?.showEvents !== false && (
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                <SectionHeader title="Upcoming Events" action="View All" to="/events" />
               {events.length > 0 ? (
                 <div className="space-y-3">
                   {events.slice(0, 3).map(evt => (
@@ -559,17 +570,19 @@ export default function Home() {
                 </div>
               )}
               <Link to="/events" className="btn-gold w-full text-xs mt-3">View All Events</Link>
-            </section>
+              </section>
+            )}
 
-            {/* Community Testimonies */}
-            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
-              <SectionHeader title="Community Testimonies" action="View All" to="/testimonies" />
-              <div className="text-center py-4">
-                <Star className="w-8 h-8 mx-auto mb-2 text-[#c9a227]/60" />
-                <p className="text-xs text-[#9c958a] mb-3">Share what God has done in your life and read inspiring stories from the community.</p>
-              </div>
-              <Link to="/testimonies" className="btn-gold w-full text-xs"><Star className="w-3.5 h-3.5" /> Share / Read Testimonies</Link>
-            </section>
+            {config.sections?.showTestimonies !== false && (
+              <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+                <SectionHeader title="Community Testimonies" action="View All" to="/testimonies" />
+                <div className="text-center py-4">
+                  <Star className="w-8 h-8 mx-auto mb-2 text-[#c9a227]/60" />
+                  <p className="text-xs text-[#9c958a] mb-3">Share what God has done in your life and read inspiring stories from the community.</p>
+                </div>
+                <Link to="/testimonies" className="btn-gold w-full text-xs"><Star className="w-3.5 h-3.5" /> Share / Read Testimonies</Link>
+              </section>
+            )}
 
           </div>
         </div>
@@ -586,13 +599,11 @@ export default function Home() {
                   <Mic2 className="w-3.5 h-3.5 text-[#c9a227]" />
                 </div>
                 <div className="leading-tight">
-                  <div className="text-sm font-medium text-white tracking-wide">{(tenant?.name || 'ZIONITEFM').toUpperCase()}</div>
-                  <div className="text-[9px] text-[#9c958a] tracking-widest uppercase">The Voice of Redemption</div>
+                  <div className="text-sm font-medium text-white tracking-wide">{(tenant?.name || 'ZioniteFM').toUpperCase()}</div>
+                  <div className="text-[9px] text-[#9c958a] tracking-widest uppercase">{fillTemplate(config.brand?.tagline || 'The Voice of Redemption', tenantName)}</div>
                 </div>
               </div>
-              <p className="text-xs text-[#9c958a] leading-relaxed">
-                A Digital Ministry of<br />The Redemption Project
-              </p>
+              <p className="text-xs text-[#9c958a] leading-relaxed" dangerouslySetInnerHTML={{ __html: fillTemplate(config.footer?.brandStatement || 'A Digital Ministry of<br />The Redemption Project', tenantName) }} />
             </div>
 
             {/* Quick Links */}
@@ -613,8 +624,8 @@ export default function Home() {
             <div>
               <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Contact</h4>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><MapPin className="w-3.5 h-3.5 text-[#c9a227]" /> Lagos, Nigeria</div>
-                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Mail className="w-3.5 h-3.5 text-[#c9a227]" /> theredemptionprojectministries@gmail.com</div>
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><MapPin className="w-3.5 h-3.5 text-[#c9a227]" /> {config.footer?.location || 'Lagos, Nigeria'}</div>
+                <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Mail className="w-3.5 h-3.5 text-[#c9a227]" /> {config.footer?.email || 'theredemptionprojectministries@gmail.com'}</div>
                 <div className="flex items-center gap-2 text-xs text-[#9c958a]"><Radio className="w-3.5 h-3.5 text-[#c9a227]" /> 24/7 Live Streaming</div>
               </div>
             </div>
@@ -646,7 +657,7 @@ export default function Home() {
           </div>
 
           <div className="border-t border-[rgba(243,238,228,0.06)] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-[10px] text-[#9c958a]">© 2025 {tenant?.name || 'ZioniteFM'}. All Rights Reserved.</p>
+            <p className="text-[10px] text-[#9c958a]">© 2025 {tenantName}. All Rights Reserved.</p>
             <div className="flex items-center gap-4">
               <Link to="/privacy" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Terms of Use</Link>

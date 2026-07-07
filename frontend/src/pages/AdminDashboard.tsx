@@ -7,7 +7,7 @@ import { useBroadcasts, useSermons, useUsers, usePrayers, useMusic, useDashboard
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
-  Menu, X, Loader2, MapPin, Globe
+  Menu, X, Loader2, MapPin, Globe, Layout
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -22,10 +22,11 @@ const TestimonyManager = lazy(() => import('../components/admin/TestimonyManager
 const EventManager = lazy(() => import('../components/admin/EventManager'))
 const DailyVerseManager = lazy(() => import('../components/admin/DailyVerseManager'))
 const SermonRadioManager = lazy(() => import('../components/admin/SermonRadioManager'))
+const HomePageManager = lazy(() => import('../components/admin/HomePageManager'))
 
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
 
-type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse' | 'radio'
+type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse' | 'radio' | 'homepage'
 
 function formatDuration(totalSeconds: number) {
   const h = Math.floor(totalSeconds / 3600)
@@ -225,6 +226,7 @@ export default function AdminDashboard() {
       <SB label="Reported Content" tab="chat" icon={Shield}/>
       <SL t="Engagement"/>
       <SB label="Daily Word" tab="dailyverse" icon={BookOpen}/>
+      <SB label="Home Page" tab="homepage" icon={Layout}/>
       <SL t="Settings"/>
       <SB label="System Settings" tab="settings" icon={Settings}/>
       {user?.role === 'super_admin' && (
@@ -626,6 +628,13 @@ export default function AdminDashboard() {
               <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Sermon Radio</h2></div>
               <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
                 <SermonRadioManager onRefresh={refresh}/>
+              </Suspense>
+            </div>
+          ):activeTab==='homepage'?(
+            <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
+              <div className="px-4 py-3 rounded-lg bg-[rgba(243,238,228,0.03)] mb-4 border border-[rgba(243,238,228,0.06)]"><h2 className="text-sm font-semibold text-white">Home Page</h2></div>
+              <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+                <HomePageManager/>
               </Suspense>
             </div>
           ):null}

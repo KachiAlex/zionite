@@ -209,6 +209,9 @@ async function _doInitDb() {
   // Add event columns if missing
   try { await dbQuery(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category TEXT`) } catch {}
 
+  // Add tenant home config column if missing
+  try { await dbQuery(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS home_config TEXT`) } catch {}
+
   // ── Multi-tenant: tenants table ─────────────────────────────
   await dbQuery(`CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
@@ -220,6 +223,7 @@ async function _doInitDb() {
     custom_domain TEXT,
     plan TEXT DEFAULT 'free',
     status TEXT DEFAULT 'active',
+    home_config TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
 
@@ -547,6 +551,16 @@ function requireRole(...roles: string[]) {
   }
 }
 
+function parseTenantHomeConfig(tenant: any) {
+  if (!tenant) return tenant
+  if (typeof tenant.home_config === 'string' && tenant.home_config) {
+    try { tenant.home_config = JSON.parse(tenant.home_config) } catch { tenant.home_config = {} }
+  } else if (!tenant.home_config) {
+    tenant.home_config = {}
+  }
+  return tenant
+}
+
 // ── Tenant resolution ────────────────────────────────────────
 // Extracts tenant from subdomain (e.g. firstbaptist.zionite.online)
 // Falls back to 'zionite' if no match
@@ -562,11 +576,11 @@ async function resolveTenant(req: AuthReq, res: Response, next: NextFunction) {
     slug = parts[0]
   }
   try {
-    const tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status FROM tenants WHERE slug=$1', [slug])
+    const tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', [slug])
     if (tenant) {
-      req.tenant = tenant
+      req.tenant = parseTenantHomeConfig(tenant)
     } else {
-      req.tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status FROM tenants WHERE slug=$1', ['zionite'])
+      req.tenant = parseTenantHomeConfig(await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', ['zionite']))
     }
   } catch {
     req.tenant = null
@@ -599,7 +613,7 @@ function withTenant(req: TenantReq, res: Response, next: NextFunction) {
 declare global {
   namespace Express {
     interface Request {
-      tenant?: { id: string; slug: string; name: string; primary_color: string; logo_url?: string; custom_domain?: string; plan: string; status: string }
+      tenant?: { id: string; slug: string; name: string; primary_color: string; logo_url?: string; custom_domain?: string; plan: string; status: string; home_config?: any }
       tenantId?: string
     }
   }
@@ -715,6 +729,17 @@ async function broadcastNotification(type: string, title: string, body: string, 
 app.get('/tenant', (req, res) => {
   if (!req.tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
   res.json({ tenant: req.tenant })
+})
+
+app.patch('/tenant/home-config', auth, requireTenantRole('admin', 'super_admin'), async (req: TenantReq, res) => {
+  try {
+    await initDb()
+    if (!req.tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
+    const { home_config } = req.body
+    await dbQuery('UPDATE tenants SET home_config=$1 WHERE id=$2', [JSON.stringify(home_config || {}), req.tenant.id])
+    const updated = await dbGet('SELECT * FROM tenants WHERE id=$1', [req.tenant.id])
+    res.json({ tenant: parseTenantHomeConfig(updated) })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Auth routes ────────────────────────────────────────────────

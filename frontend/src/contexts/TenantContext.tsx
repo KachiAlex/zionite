@@ -1,17 +1,6 @@
 import { createContext, useContext, useEffect } from 'react'
 import { useTenant } from '../lib/api'
-
-interface Tenant {
-  id: string
-  slug: string
-  name: string
-  description?: string
-  logo_url?: string
-  primary_color: string
-  custom_domain?: string
-  plan: string
-  status: string
-}
+import type { Tenant } from '../lib/api'
 
 interface TenantContextType {
   tenant: Tenant | null

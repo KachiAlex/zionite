@@ -21,7 +21,33 @@ export interface GuestSpeaker { id: string; name: string; bio: string; photo_url
 export interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string; category?: string }
 export interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string }
 export interface User { id: string; email: string; name?: string; role: string; tenantId?: string; created_at?: string }
-export interface Tenant { id: string; slug: string; name: string; description?: string; logo_url?: string; primary_color: string; custom_domain?: string; plan: string; status: string }
+export interface HomeConfig {
+  hero?: {
+    title?: string
+    subtitle?: string
+    description?: string
+    backgroundImage?: string
+    primaryCta?: { text?: string; link?: string }
+    secondaryCta?: { text?: string; link?: string }
+    communityCta?: { text?: string; subtext?: string }
+  }
+  brand?: { tagline?: string }
+  footer?: {
+    brandStatement?: string
+    location?: string
+    email?: string
+  }
+  sections?: {
+    showTestimonies?: boolean
+    showPrayerWall?: boolean
+    showEvents?: boolean
+    showDonations?: boolean
+    showGuestSpeakers?: boolean
+    showTranscripts?: boolean
+    showCommunityCta?: boolean
+  }
+}
+export interface Tenant { id: string; slug: string; name: string; description?: string; logo_url?: string; primary_color: string; custom_domain?: string; plan: string; status: string; home_config?: HomeConfig }
 export interface Prayer { id: string; name: string | null; request: string; is_anonymous: boolean; prayers_count: number; created_at: string }
 
 /* ─── Queries ─── */
