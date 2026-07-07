@@ -2,7 +2,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import SearchOverlay from './SearchOverlay'
-import { Search, Heart, Users, Menu, X, LayoutDashboard, LogOut, LogIn, Radio, BookOpen, Music, HandHeart, Calendar, Info } from 'lucide-react'
+import { Search, Heart, Users, Menu, X, LayoutDashboard, LogOut, LogIn, Radio, BookOpen, Music, HandHeart, Calendar, Info, Star } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -31,6 +31,7 @@ export default function Navbar() {
     { label: 'Sermons', path: '/archive', icon: BookOpen },
     { label: 'Music', path: '/music', icon: Music },
     { label: 'Prayer Wall', path: '/prayer', icon: Heart },
+    { label: 'Testimonies', path: '/testimonies', icon: Star },
     { label: 'Events', path: '/events', icon: Calendar },
     { label: 'About Us', path: '/about', icon: Info },
   ]

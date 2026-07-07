@@ -14,7 +14,7 @@ import {
   Users, BookOpen, Headphones, ChevronRight,
   Download, Facebook, Instagram, Youtube, Twitter,
   Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music, Share2,
-  SkipBack, SkipForward, Volume2, Square
+  SkipBack, SkipForward, Volume2, Square, Star
 } from "lucide-react"
 
 function formatTime(seconds: number) {
@@ -561,6 +561,16 @@ export default function Home() {
               <Link to="/events" className="btn-gold w-full text-xs mt-3">View All Events</Link>
             </section>
 
+            {/* Community Testimonies */}
+            <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
+              <SectionHeader title="Community Testimonies" action="View All" to="/testimonies" />
+              <div className="text-center py-4">
+                <Star className="w-8 h-8 mx-auto mb-2 text-[#c9a227]/60" />
+                <p className="text-xs text-[#9c958a] mb-3">Share what God has done in your life and read inspiring stories from the community.</p>
+              </div>
+              <Link to="/testimonies" className="btn-gold w-full text-xs"><Star className="w-3.5 h-3.5" /> Share / Read Testimonies</Link>
+            </section>
+
           </div>
         </div>
       </div>
@@ -589,9 +599,9 @@ export default function Home() {
             <div>
               <h4 className="text-xs font-medium text-white uppercase tracking-wider mb-3">Quick Links</h4>
               <div className="space-y-2">
-                {["Home","Live Radio","Sermons","Prayer Wall","Events","About Us"].map(item=>{
-                  const paths = ["/","/live","/archive","/prayer","/events","/about"]
-                  const i = ["Home","Live Radio","Sermons","Prayer Wall","Events","About Us"].indexOf(item)
+                {["Home","Live Radio","Sermons","Prayer Wall","Testimonies","Events","About Us"].map(item=>{
+                  const paths = ["/","/live","/archive","/prayer","/testimonies","/events","/about"]
+                  const i = ["Home","Live Radio","Sermons","Prayer Wall","Testimonies","Events","About Us"].indexOf(item)
                   return (
                     <Link key={item} to={paths[i]} className="block text-xs text-[#9c958a] hover:text-[#c9a227] transition-colors">{item}</Link>
                   )

@@ -4,7 +4,7 @@ import { initWebSocket } from './websocket.js'
 import { initRadioScheduler } from './sermon-radio.js'
 import { startNotificationWorker } from './services/notificationService.js'
 
-const PORT = Number(process.env.PORT) || 3001
+const PORT = Number(process.env.PORT) || 3000
 
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err)
