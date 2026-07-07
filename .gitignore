@@ -12,6 +12,7 @@ build/
 .env
 .env.local
 .env.*.local
+.env*
 !.env.example
 
 # IDE
@@ -37,4 +38,3 @@ frontend/.gradle/
 *.aab
 
 .vercel
-.env*
