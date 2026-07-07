@@ -1,5 +1,5 @@
-﻿import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+﻿import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AudioPlayerProvider } from './contexts/AudioPlayerContext'
 import { FavoritesProvider } from './contexts/FavoritesContext'
@@ -28,6 +28,7 @@ const Events = lazy(() => import('./pages/Events'))
 const EventDetail = lazy(() => import('./pages/EventDetail'))
 const AboutUs = lazy(() => import('./pages/AboutUs'))
 const Donate = lazy(() => import('./pages/Donate'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 
 function PageLoader() {
   return (
@@ -35,6 +36,33 @@ function PageLoader() {
       <div className="w-8 h-8 border-2 border-[#c9a227] border-t-transparent rounded-full animate-spin" />
     </div>
   )
+}
+
+function DeepLinkHandler() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    let remove: (() => void) | undefined
+    const init = async () => {
+      try {
+        const { App } = await import('@capacitor/app')
+        const listener = await App.addListener('appUrlOpen', (event) => {
+          try {
+            const url = new URL(event.url)
+            const path = url.pathname + url.search
+            navigate(path)
+          } catch (e) {
+            console.error('[DEEP_LINK] invalid url', event.url, e)
+          }
+        })
+        remove = listener.remove
+      } catch (e) {
+        // Capacitor not available (web)
+      }
+    }
+    init()
+    return () => remove?.()
+  }, [navigate])
+  return null
 }
 
 function AnimatedRoutes() {
@@ -58,6 +86,7 @@ function AnimatedRoutes() {
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/about" element={<AboutUs />} />
         <Route path="/donate" element={<Donate />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route
           path="/dashboard"
           element={
@@ -102,6 +131,7 @@ function App() {
         <FavoritesProvider>
           <NotificationProvider>
           <BrowserRouter>
+            <DeepLinkHandler />
             <ErrorBoundary>
               <Layout>
                 <Suspense fallback={<PageLoader />}>

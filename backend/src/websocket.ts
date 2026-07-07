@@ -114,7 +114,11 @@ export function initWebSocket(httpServer: HttpServer) {
 
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       await pauseRadioForBroadcast()
-      await restartHlsBroadcast(broadcastId)
+      if (!isHlsActive(broadcastId)) {
+        await restartHlsBroadcast(broadcastId)
+      } else {
+        console.log(`[WS] start_broadcast_hls ${broadcastId}: HLS already active, keeping existing encoder`)
+      }
     })
 
     socket.on('end_broadcast_hls', async (broadcastId: string) => {

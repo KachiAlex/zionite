@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import { db, initDb } from './db.js'
+import { enqueueNotification } from './services/notificationService.js'
 
 const STREAM_KEY = 'radio'
 
@@ -225,6 +226,13 @@ export async function startRadio(playlistId: string, shuffle = false, repeatMode
   }
 
   await startSermonItem(items[0], 0)
+  enqueueNotification({
+    category: 'sermon_radio',
+    type: 'sermon_radio_start',
+    title: 'Sermon Radio is now playing',
+    body: `Tune in to ${items[0].title || 'Sermon Radio'} on ZioniteFM.`,
+    url: '/radio'
+  }).catch((e: any) => console.error('[RADIO] enqueue notification failed:', e.message))
   console.log(`[RADIO] Started streaming playlist ${playlistId} with ${items.length} items (shuffle=${shuffle}, repeat=${repeatMode})`)
 }
 
@@ -299,6 +307,13 @@ export async function resumeRadioAfterBroadcast() {
       }
       const item = items[itemIndex]
       await startSermonItem(item, offsetSeconds)
+      enqueueNotification({
+        category: 'sermon_radio',
+        type: 'sermon_radio_resume',
+        title: 'Sermon Radio is back on',
+        body: `Live broadcast ended. Tune back in to ${item.title || 'Sermon Radio'} on ZioniteFM.`,
+        url: '/radio'
+      }).catch((e: any) => console.error('[RADIO] enqueue notification failed:', e.message))
       console.log(`[RADIO] Resumed after broadcast at item ${itemIndex}, offset ${offsetSeconds}s`)
     } else {
       console.log('[RADIO] Saved playlist item no longer valid, not resuming')

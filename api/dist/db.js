@@ -177,6 +177,46 @@ const SCHEMA_QUERIES = [
     `CREATE TABLE IF NOT EXISTS daily_verses (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, reference TEXT, type TEXT DEFAULT 'verse',
     created_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS notification_preferences (
+    user_id TEXT PRIMARY KEY,
+    email_enabled BOOLEAN DEFAULT TRUE,
+    push_enabled BOOLEAN DEFAULT TRUE,
+    live_broadcast_push BOOLEAN DEFAULT TRUE,
+    live_broadcast_email BOOLEAN DEFAULT TRUE,
+    sermon_radio_push BOOLEAN DEFAULT TRUE,
+    sermon_radio_email BOOLEAN DEFAULT TRUE,
+    daily_verse_push BOOLEAN DEFAULT TRUE,
+    daily_verse_email BOOLEAN DEFAULT TRUE,
+    events_push BOOLEAN DEFAULT TRUE,
+    events_email BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS notification_log (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT,
+    push_count INTEGER DEFAULT 0,
+    email_count INTEGER DEFAULT 0,
+    fcm_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+    `CREATE TABLE IF NOT EXISTS notification_queue (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    retry_count INTEGER DEFAULT 0,
+    scheduled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ];
 // ── Multi-tenant schema ────────────────────────────────────────
@@ -199,7 +239,7 @@ async function _initTenantSchema() {
         'guest_speakers', 'donations', 'prayer_requests', 'prayer_interactions',
         'events', 'event_rsvps', 'testimonies', 'campaigns', 'newsletter_subscribers',
         'push_subscriptions', 'webauthn_credentials', 'fcm_tokens',
-        'notification_preferences', 'notification_log', 'spiritual_health',
+        'notification_preferences', 'notification_log', 'notification_queue', 'spiritual_health',
         'playlists', 'playlist_items', 'radio_schedules', 'radio_state', 'daily_verses'
     ];
     for (const tbl of tablesNeedingTenant) {

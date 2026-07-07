@@ -392,6 +392,14 @@ async function _doInitDb() {
     user_id TEXT PRIMARY KEY,
     email_enabled BOOLEAN DEFAULT TRUE,
     push_enabled BOOLEAN DEFAULT TRUE,
+    live_broadcast_push BOOLEAN DEFAULT TRUE,
+    live_broadcast_email BOOLEAN DEFAULT TRUE,
+    sermon_radio_push BOOLEAN DEFAULT TRUE,
+    sermon_radio_email BOOLEAN DEFAULT TRUE,
+    daily_verse_push BOOLEAN DEFAULT TRUE,
+    daily_verse_email BOOLEAN DEFAULT TRUE,
+    events_push BOOLEAN DEFAULT TRUE,
+    events_email BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
@@ -404,6 +412,20 @@ async function _doInitDb() {
     push_count INTEGER DEFAULT 0,
     email_count INTEGER DEFAULT 0,
     fcm_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+  await dbQuery(`CREATE TABLE IF NOT EXISTS notification_queue (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    retry_count INTEGER DEFAULT 0,
+    scheduled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP,
+    error TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
   await dbQuery(`CREATE TABLE IF NOT EXISTS spiritual_health (

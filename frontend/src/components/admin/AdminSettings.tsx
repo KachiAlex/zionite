@@ -3,7 +3,7 @@ import axios from 'axios'
 import { API_BASE } from '../../lib/api'
 import {
   Lock, Loader2, Bell, BellOff, Fingerprint, Trash2,
-  Mail, Users, Send, CheckCircle, Smartphone, ShieldCheck, BookOpen
+  Mail, Users, Send, CheckCircle, Smartphone, ShieldCheck, BookOpen, History
 } from 'lucide-react'
 import { useNotifications } from '../../contexts/NotificationContext'
 
@@ -63,6 +63,8 @@ export default function AdminSettings() {
   const [sendResult, setSendResult] = useState<string | null>(null)
   const [subCount, setSubCount] = useState<number | null>(null)
   const [newsletterCount, setNewsletterCount] = useState<number | null>(null)
+  const [history, setHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -70,6 +72,10 @@ export default function AdminSettings() {
       .then(r => setSubCount(r.data.count)).catch(() => {})
     axios.get(`${API_BASE}/api/newsletter/subscribers`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => setNewsletterCount(r.data.total)).catch(() => {})
+    setLoadingHistory(true)
+    axios.get(`${API_BASE}/api/push/history?limit=20`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => setHistory(r.data.history || [])).catch(() => {})
+      .finally(() => setLoadingHistory(false))
   }, [token])
 
   async function changePassword(e: React.FormEvent) {
@@ -160,6 +166,36 @@ export default function AdminSettings() {
             </p>
           )}
         </form>
+      </div>
+
+      {/* ── Notification History ── */}
+      <div className={card} style={cardStyle}>
+        <h3 className="font-semibold flex items-center gap-2 text-sm text-white">
+          <History className="w-4 h-4 text-[#c9a227]" /> Recent Notifications
+        </h3>
+        <p className="text-xs text-[#9c958a]">Last broadcast notifications and their delivery counts.</p>
+        {loadingHistory ? (
+          <p className="text-xs text-[#9c958a]">Loading...</p>
+        ) : history.length === 0 ? (
+          <p className="text-xs text-[#9c958a]">No notifications sent yet.</p>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {history.map((h) => (
+              <div key={h.id} className="rounded-xl p-3" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-white font-medium truncate">{h.title}</p>
+                  <span className="text-[10px] text-[#9c958a] shrink-0">{new Date(h.created_at).toLocaleString()}</span>
+                </div>
+                <p className="text-[11px] text-[#9c958a] line-clamp-2">{h.body}</p>
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-[#9c958a]">
+                  <span className="flex items-center gap-1"><Bell className="w-3 h-3 text-[#c9a227]" /> {h.push_count || 0}</span>
+                  <span className="flex items-center gap-1"><Smartphone className="w-3 h-3 text-[#c9a227]" /> {h.fcm_count || 0}</span>
+                  <span className="flex items-center gap-1"><Mail className="w-3 h-3 text-[#3b82f6]" /> {h.email_count || 0}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Spiritual Health Monitor ── */}

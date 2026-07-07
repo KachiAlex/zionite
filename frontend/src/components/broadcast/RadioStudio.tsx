@@ -150,6 +150,7 @@ export default function RadioStudio({
   const [uploadError, setUploadError] = useState('')
   const [micStream, setMicStream] = useState<MediaStream | null>(null)
   const [monitorEnabled, setMonitorEnabled] = useState(true)
+  const monitorEnabledRef = useRef(monitorEnabled)
   const [monitorVolume, setMonitorVolume] = useState(60)
   const mixMonitorAudioRef = useRef<HTMLAudioElement | null>(null)
   const [recordingStatus, setRecordingStatus] = useState('')
@@ -260,6 +261,7 @@ export default function RadioStudio({
 
   // Start/stop mix monitor when broadcaster toggles it during live broadcast
   useEffect(() => {
+    monitorEnabledRef.current = monitorEnabled
     syncLocalMusicRouting()
     if (!isLive || !streamRef.current) return
     if (monitorEnabled) {
@@ -350,16 +352,21 @@ export default function RadioStudio({
     return { ctx, dest, micGain: micG, musicGain: musG }
   }
 
-  // Always route music to the device's local speakers so the broadcaster can hear
-  // the soundtrack for mood/cuing. The Feedback Monitor is separate and plays the
-  // full mix (mic + soundtrack) when enabled.
+  // Route music to the device's local speakers ONLY when the full mix monitor is
+  // off. When monitoring is on, the monitor already plays the mixed audio (mic +
+  // soundtrack), so routing music directly to ctx.destination would make the
+  // soundtrack audible twice and create an echo/duplication.
   function syncLocalMusicRouting() {
     const musG = musicGainNodeRef.current
     const ctx = mixerCtxRef.current
     if (!musG || !ctx) return
-    if (!musicLocalConnectedRef.current) {
+    const routeToLocal = !monitorEnabledRef.current
+    if (routeToLocal && !musicLocalConnectedRef.current) {
       musG.connect(ctx.destination)
       musicLocalConnectedRef.current = true
+    } else if (!routeToLocal && musicLocalConnectedRef.current) {
+      try { musG.disconnect(ctx.destination) } catch {}
+      musicLocalConnectedRef.current = false
     }
   }
 

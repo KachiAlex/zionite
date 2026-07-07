@@ -1,18 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import webpush from 'web-push'
 import { db, initDb } from '../db.js'
 import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { enqueueNotification } from '../services/notificationService.js'
 
 const router = Router()
-
-// Configure web-push VAPID keys from env
-const vapidPublic = process.env.VAPID_PUBLIC_KEY || ''
-const vapidPrivate = process.env.VAPID_PRIVATE_KEY || ''
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@zionite.online'
-if (vapidPublic && vapidPrivate) {
-  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate)
-}
 
 // Store web push subscription
 router.post('/subscribe', async (req: Request, res: Response) => {
@@ -84,8 +76,14 @@ router.post('/verse', authenticateToken, requireRole('admin', 'broadcaster'), as
       [id, title, content, reference || '', type, createdBy]
     )
 
-    // Send push notifications in background
-    sendPushNotifications(title, content, reference).catch((e: any) => console.error('[PUSH] broadcast error:', e.message))
+    // Queue daily verse notification for reliable delivery
+    enqueueNotification({
+      category: 'daily_verse',
+      type: type === 'prophetic_word' ? 'prophetic_word' : 'daily_verse',
+      title: title,
+      body: reference ? `${content} — ${reference}` : content,
+      url: '/'
+    }).catch((e: any) => console.error('[PUSH] enqueue error:', e.message))
 
     res.json({ success: true, id })
   } catch (err: any) {
@@ -110,6 +108,79 @@ router.get('/verses', async (req, res) => {
   }
 })
 
+router.get('/preferences/:userId', authenticateToken, async (req, res) => {
+  try {
+    await initDb()
+    const { userId } = req.params
+    const requestingUser = (req as any).user
+    if (requestingUser?.id !== userId && requestingUser?.role !== 'admin' && requestingUser?.role !== 'super_admin') {
+      res.status(403).json({ error: 'Forbidden' }); return
+    }
+    const row = await db.get(
+      `SELECT user_id, email_enabled, push_enabled,
+              live_broadcast_push, live_broadcast_email,
+              sermon_radio_push, sermon_radio_email,
+              daily_verse_push, daily_verse_email,
+              events_push, events_email
+       FROM notification_preferences WHERE user_id = $1`,
+      [userId]
+    )
+    res.json({ preferences: row || { user_id: userId } })
+  } catch (err: any) {
+    console.error('[PUSH] preferences get error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.patch('/preferences/:userId', authenticateToken, async (req, res) => {
+  try {
+    await initDb()
+    const { userId } = req.params
+    const requestingUser = (req as any).user
+    if (requestingUser?.id !== userId && requestingUser?.role !== 'admin' && requestingUser?.role !== 'super_admin') {
+      res.status(403).json({ error: 'Forbidden' }); return
+    }
+    const {
+      email_enabled, push_enabled,
+      live_broadcast_push, live_broadcast_email,
+      sermon_radio_push, sermon_radio_email,
+      daily_verse_push, daily_verse_email,
+      events_push, events_email
+    } = req.body
+    const id = uuidv4()
+    await db.run(
+      `INSERT INTO notification_preferences (
+         user_id, email_enabled, push_enabled,
+         live_broadcast_push, live_broadcast_email,
+         sermon_radio_push, sermon_radio_email,
+         daily_verse_push, daily_verse_email,
+         events_push, events_email, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         email_enabled = COALESCE($2, notification_preferences.email_enabled),
+         push_enabled = COALESCE($3, notification_preferences.push_enabled),
+         live_broadcast_push = COALESCE($4, notification_preferences.live_broadcast_push),
+         live_broadcast_email = COALESCE($5, notification_preferences.live_broadcast_email),
+         sermon_radio_push = COALESCE($6, notification_preferences.sermon_radio_push),
+         sermon_radio_email = COALESCE($7, notification_preferences.sermon_radio_email),
+         daily_verse_push = COALESCE($8, notification_preferences.daily_verse_push),
+         daily_verse_email = COALESCE($9, notification_preferences.daily_verse_email),
+         events_push = COALESCE($10, notification_preferences.events_push),
+         events_email = COALESCE($11, notification_preferences.events_email),
+         updated_at = NOW()`,
+      [userId, email_enabled, push_enabled,
+       live_broadcast_push, live_broadcast_email,
+       sermon_radio_push, sermon_radio_email,
+       daily_verse_push, daily_verse_email,
+       events_push, events_email]
+    )
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[PUSH] preferences update error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Admin: list all subscriptions (for stats)
 router.get('/stats', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
@@ -122,51 +193,48 @@ router.get('/stats', authenticateToken, requireRole('admin'), async (req, res) =
   }
 })
 
-// Background push broadcaster
-async function sendPushNotifications(title: string, body: string, reference?: string) {
-  const fullBody = reference ? `${body} — ${reference}` : body
-
-  // 1. Web Push
-  if (vapidPublic && vapidPrivate) {
-    const subs = await db.all(`SELECT endpoint, p256dh, auth FROM push_subscriptions`)
-    const payload = JSON.stringify({ title: 'ZioniteFM', body: fullBody, icon: '/logo.png', badge: '/logo.png' })
-    for (const sub of subs) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
-        )
-      } catch (e: any) {
-        if (e.statusCode === 410 || e.statusCode === 404) {
-          await db.run(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint])
-        }
-      }
-    }
+router.get('/subscribers/count', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    await initDb()
+    const webCount = await db.get(`SELECT COUNT(*) as count FROM push_subscriptions`)
+    const fcmCount = await db.get(`SELECT COUNT(*) as count FROM fcm_tokens`)
+    res.json({ count: Number(webCount?.count || 0) + Number(fcmCount?.count || 0) })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
+})
 
-  // 2. FCM (native apps)
-  const fcmServerKey = process.env.FCM_SERVER_KEY
-  if (fcmServerKey) {
-    const tokens = await db.all(`SELECT token FROM fcm_tokens`)
-    for (const row of tokens) {
-      try {
-        await fetch('https://fcm.googleapis.com/fcm/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `key=${fcmServerKey}`
-          },
-          body: JSON.stringify({
-            to: row.token,
-            notification: { title: 'ZioniteFM', body: fullBody },
-            data: { type: 'daily_verse', title, body, reference }
-          })
-        })
-      } catch (e: any) {
-        console.error('[PUSH] FCM send error:', e.message)
-      }
-    }
+router.get('/history', authenticateToken, requireRole('admin', 'super_admin'), async (req, res) => {
+  try {
+    await initDb()
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 200)
+    const rows = await db.all(
+      `SELECT id, type, title, body, url, push_count, email_count, fcm_count, created_at
+       FROM notification_log ORDER BY created_at DESC LIMIT $1`,
+      [limit]
+    )
+    res.json({ history: rows || [] })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
   }
-}
+})
+
+router.post('/broadcast', authenticateToken, requireRole('admin', 'broadcaster'), async (req, res) => {
+  try {
+    await initDb()
+    const { title, body, url } = req.body
+    if (!title || !body) { res.status(400).json({ error: 'Title and body required' }); return }
+    const id = await enqueueNotification({
+      category: 'manual',
+      type: 'manual_broadcast',
+      title,
+      body,
+      url: url || '/'
+    })
+    res.json({ success: true, id, message: 'Broadcast queued for delivery' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 export default router

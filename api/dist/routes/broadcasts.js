@@ -7,6 +7,7 @@ import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { optimizeImage } from '../middleware/optimizeImage.js';
 import { pauseRadioForBroadcast, resumeRadioAfterBroadcast } from '../sermon-radio.js';
 import { stopHlsBroadcast } from '../hls.js';
+import { enqueueNotification } from '../services/notificationService.js';
 const uploadImage = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
@@ -154,6 +155,13 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
         }
         await db.run("UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1", [id]);
         await pauseRadioForBroadcast();
+        enqueueNotification({
+            category: 'live_broadcast',
+            type: 'live_broadcast_start',
+            title: 'We are live!',
+            body: `${broadcast.title || 'ZioniteFM'} is streaming now.`,
+            url: `/live/${id}`
+        }).catch((e) => console.error('[BROADCASTS] enqueue notification failed:', e.message));
         res.json({ success: true });
     }
     catch (err) {

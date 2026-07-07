@@ -182,11 +182,11 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        liveSyncDurationCount: 4,       // Start 4 segments behind live edge (~8s) for safer buffer
-        liveMaxLatencyDurationCount: 12, // Allow more drift before snapping
+        liveSyncDurationCount: 6,       // Start 6 segments behind live edge (~12s) for safer buffer
+        liveMaxLatencyDurationCount: 25, // Allow more drift before snapping (50s with 2s segments)
         backBufferLength: 10,
-        maxBufferLength: 20,
-        maxMaxBufferLength: 30,
+        maxBufferLength: 45,           // Match the backend playlist size (20 segments ~ 40s)
+        maxMaxBufferLength: 60,
         manifestLoadingRetryDelay: 500,
         manifestLoadingMaxRetry: 20,
         levelLoadingRetryDelay: 500,
@@ -204,10 +204,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
       hls.on(Hls.Events.MANIFEST_LOADING, (_event, data) => {
         console.log('[HLS] Manifest loading:', data.url)
-      })
-
-      hls.on(Hls.Events.MANIFEST_LOADED, (_event, data) => {
-        console.log('[HLS] Manifest loaded:', data.url, 'levels:', data.levels?.length)
       })
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
@@ -236,9 +232,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }
       })
 
-      hls.on(Hls.Events.MANIFEST_LOADED, (_event, data) => {
-        console.log('[HLS] Manifest loaded, levels:', data.levels?.length)
-      })
       hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
         console.log('[HLS] Level loaded', data.level, 'details duration:', data.details?.totalduration?.toFixed(2))
       })

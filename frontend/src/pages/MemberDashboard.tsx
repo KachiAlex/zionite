@@ -228,7 +228,8 @@ export default function MemberDashboard() {
   const { user } = useAuth()
   const {
     pushEnabled, pushSupported, requestPush, disablePush, loadingPush,
-    biometricSupported, biometricRegistered, registerBiometric, loadingBiometric
+    biometricSupported, biometricRegistered, registerBiometric, loadingBiometric,
+    preferences, loadingPreferences, updatePreferences
   } = useNotifications()
   const navigate = useNavigate()
   const location = useLocation()
@@ -541,6 +542,45 @@ export default function MemberDashboard() {
                       }`}>
                       {loadingPush ? '...' : pushEnabled ? 'Disable Notifications' : 'Enable Notifications'}
                     </button>
+                  )}
+                </div>
+
+                {/* Notification Preferences */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-medium text-white flex items-center gap-1.5"><Bell className="w-3.5 h-3.5 text-[#c9a227]" /> Notification Preferences</p>
+                  {loadingPreferences ? (
+                    <p className="text-[10px] text-[#9c958a]">Loading...</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {[
+                        { key: 'live_broadcast', label: 'Live Broadcasts' },
+                        { key: 'sermon_radio', label: 'Sermon Radio' },
+                        { key: 'daily_verse', label: 'Daily Verses' },
+                        { key: 'events', label: 'Events & Reminders' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="rounded-lg bg-[#14141a] p-3 space-y-2">
+                          <p className="text-[11px] text-white font-medium">{label}</p>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 text-[10px] text-[#9c958a] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={preferences[`${key}_push` as keyof typeof preferences] !== false}
+                                onChange={(e) => updatePreferences({ [`${key}_push`]: e.target.checked } as any)}
+                                className="accent-[#c9a227]"
+                              /> Push
+                            </label>
+                            <label className="flex items-center gap-2 text-[10px] text-[#9c958a] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={preferences[`${key}_email` as keyof typeof preferences] !== false}
+                                onChange={(e) => updatePreferences({ [`${key}_email`]: e.target.checked } as any)}
+                                className="accent-[#c9a227]"
+                              /> Email
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 

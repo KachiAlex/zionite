@@ -11,6 +11,7 @@ interface BroadcastHls {
   ffmpeg: ChildProcess
   dir: string
   manifest: string
+  segmentPattern: string
   ended: boolean
   initSent: boolean
   chunksReceived: boolean
@@ -175,10 +176,11 @@ function doStart(blsId: string) {
   ensureDir(dir)
   const manifest = path.join(dir, 'stream.m3u8')
 
-  // Clean old files
-  for (const f of fs.readdirSync(dir)) {
-    fs.unlinkSync(path.join(dir, f))
-  }
+  // Use a unique segment filename prefix per FFmpeg run so that restarts do not
+  // overwrite/delete segments that listeners may still be fetching. Old segments
+  // are left in place and will be cleaned up by the next explicit broadcast stop.
+  const runPrefix = `seg_${Date.now()}_`
+  const segmentPattern = path.join(dir, `${runPrefix}%03d.ts`)
 
   const ffmpeg = spawn('ffmpeg', [
     '-hide_banner',
@@ -198,11 +200,11 @@ function doStart(blsId: string) {
     // HLS output
     '-f', 'hls',
     '-hls_time', '2',               // 2-second segments (matches MediaRecorder chunk interval)
-    '-hls_init_time', '1',        // First segment after 1s for quick startup
-    '-hls_list_size', '6',          // Keep 6 segments (~12s latency)
+    '-hls_init_time', '1',          // First segment after 1s for quick startup
+    '-hls_list_size', '20',         // Keep 20 segments (~40s latency) for listener resilience
     '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
     '-hls_segment_type', 'mpegts',
-    '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
+    '-hls_segment_filename', segmentPattern,
     manifest
   ])
 
@@ -259,7 +261,7 @@ function doStart(blsId: string) {
     active.delete(blsId)
   })
 
-  const state: BroadcastHls = { ffmpeg, dir, manifest, ended: false, initSent: false, chunksReceived: false, lastChunkAt: Date.now(), timeoutRef: null }
+  const state: BroadcastHls = { ffmpeg, dir, manifest, segmentPattern, ended: false, initSent: false, chunksReceived: false, lastChunkAt: Date.now(), timeoutRef: null }
   active.set(blsId, state)
 
   // Auto-stop if broadcaster goes silent for 120s (disconnect / crash)
@@ -286,9 +288,13 @@ function forceStop(blsId: string) {
     if (!hls.ffmpeg.killed) hls.ffmpeg.kill('SIGKILL')
   } catch {}
   active.delete(blsId)
-  // Clean old files so listeners get fresh manifest
+  // Only delete the current FFmpeg run's segments so listeners buffering older
+  // segments from a previous run are not abruptly dropped.
   try {
-    for (const f of fs.readdirSync(hls.dir)) fs.unlinkSync(path.join(hls.dir, f))
+    const currentPrefix = path.basename(hls.segmentPattern).replace('%03d.ts', '')
+    for (const f of fs.readdirSync(hls.dir)) {
+      if (f.startsWith(currentPrefix)) fs.unlinkSync(path.join(hls.dir, f))
+    }
   } catch {}
 }
 

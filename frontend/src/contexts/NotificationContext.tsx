@@ -1,6 +1,20 @@
 ﻿import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { API_BASE } from '../lib/api'
 
+export interface NotificationPreferences {
+  user_id?: string
+  email_enabled?: boolean
+  push_enabled?: boolean
+  live_broadcast_push?: boolean
+  live_broadcast_email?: boolean
+  sermon_radio_push?: boolean
+  sermon_radio_email?: boolean
+  daily_verse_push?: boolean
+  daily_verse_email?: boolean
+  events_push?: boolean
+  events_email?: boolean
+}
+
 interface NotificationContextType {
   pushEnabled: boolean
   pushSupported: boolean
@@ -13,6 +27,9 @@ interface NotificationContextType {
   credentials: BiometricCred[]
   loadingPush: boolean
   loadingBiometric: boolean
+  preferences: NotificationPreferences
+  loadingPreferences: boolean
+  updatePreferences: (patch: Partial<NotificationPreferences>) => Promise<void>
 }
 
 interface BiometricCred {
@@ -58,15 +75,31 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [loadingBiometric, setLoadingBiometric] = useState(false)
   const [credentials, setCredentials] = useState<BiometricCred[]>([])
   const [biometricRegistered, setBiometricRegistered] = useState(false)
+  const [preferences, setPreferences] = useState<NotificationPreferences>({})
+  const [loadingPreferences, setLoadingPreferences] = useState(false)
 
   const pushSupported = typeof window !== 'undefined' && (isNative || ('serviceWorker' in navigator && 'PushManager' in window))
   const biometricSupported = typeof window !== 'undefined' && !!window.PublicKeyCredential
 
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  const userId = getUserId()
+
+  useEffect(() => {
+    if (!userId || !token) return
+    setLoadingPreferences(true)
+    fetch(`${API_BASE}/api/push/preferences/${userId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => setPreferences(data.preferences || {}))
+      .catch(() => {})
+      .finally(() => setLoadingPreferences(false))
+  }, [userId, token])
+
   useEffect(() => {
     if (!pushSupported) return
     if (isNative) {
-      // Register FCM token for native apps
+      // Register FCM token for native apps and listen for tap actions
       registerFcmToken().then(setPushEnabled).catch(() => {})
+      listenForNativeNotificationClicks().catch(() => {})
     } else {
       navigator.serviceWorker.ready.then(async (reg) => {
         const sub = await reg.pushManager.getSubscription()
@@ -102,6 +135,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function updatePreferences(patch: Partial<NotificationPreferences>) {
+    if (!userId || !token) return
+    const next = { ...preferences, ...patch }
+    setPreferences(next)
+    try {
+      const res = await fetch(`${API_BASE}/api/push/preferences/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(patch)
+      })
+      if (!res.ok) throw new Error('Failed to update preferences')
+    } catch (e: any) {
+      console.error('Preferences update error:', e)
+      setPreferences(prev => prev)
+    }
+  }
+
   async function unregisterFcmToken() {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
@@ -109,6 +159,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       // Best effort: we cannot read the token after unregister, but we can try to remove from server
       await PushNotifications.unregister()
     } catch (e: any) { console.error('FCM unregister error:', e) }
+  }
+
+  async function listenForNativeNotificationClicks() {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      PushNotifications.addListener('pushNotificationActionPerformed', (event: any) => {
+        const url = event.notification?.data?.url || event.notification?.data?.link
+        if (typeof url === 'string') {
+          const path = url.startsWith('/') ? url : '/' + url
+          window.location.href = path
+        }
+      })
+    } catch (e: any) { console.error('FCM tap listener error:', e) }
   }
 
   useEffect(() => {
@@ -272,7 +335,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     <NotificationContext.Provider value={{
       pushEnabled, pushSupported, requestPush, disablePush,
       biometricSupported, biometricRegistered, registerBiometric, removeBiometric, credentials,
-      loadingPush, loadingBiometric
+      loadingPush, loadingBiometric, preferences, loadingPreferences, updatePreferences
     }}>
       {children}
     </NotificationContext.Provider>
