@@ -253,6 +253,41 @@ async function _doInitDb() {
     try { await dbQuery(`UPDATE ${tbl} SET tenant_id=$1 WHERE tenant_id IS NULL`, [defaultTenantId]) } catch {}
   }
 
+  // ── Plan catalogue: reusable plan definitions managed by superadmin ──
+  await dbQuery(`CREATE TABLE IF NOT EXISTS license_plans (
+    id TEXT PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    max_users INTEGER,
+    max_storage_gb INTEGER,
+    max_broadcasts INTEGER,
+    features TEXT,
+    price_monthly INTEGER DEFAULT 0,
+    price_yearly INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    is_public BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`)
+
+  const existingPlan = await dbGet('SELECT id FROM license_plans LIMIT 1')
+  if (!existingPlan) {
+    const plans = [
+      { slug: 'free', name: 'Free', description: 'Single-admin starter plan for small ministries.', max_users: 1, max_storage_gb: 5, max_broadcasts: 2, features: ['sermons', 'music', 'prayer', 'events'], price_monthly: 0, price_yearly: 0 },
+      { slug: 'basic', name: 'Basic', description: 'Small team plan with livestream and giving.', max_users: 3, max_storage_gb: 50, max_broadcasts: 20, features: ['sermons', 'music', 'livestream', 'broadcast', 'events', 'prayer', 'testimonies', 'donations'], price_monthly: 2900, price_yearly: 29000 },
+      { slug: 'pro', name: 'Pro', description: 'Full-featured plan with radio, analytics and custom domain.', max_users: 10, max_storage_gb: 200, max_broadcasts: 100, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain'], price_monthly: 7900, price_yearly: 79000 },
+      { slug: 'enterprise', name: 'Enterprise', description: 'Unlimited white-label plan with API access and priority support.', max_users: 1000, max_storage_gb: 2000, max_broadcasts: 1000, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain', 'api_access', 'white_label'], price_monthly: 24900, price_yearly: 249000 }
+    ]
+    for (const p of plans) {
+      await dbQuery(
+        `INSERT INTO license_plans (id, slug, name, description, max_users, max_storage_gb, max_broadcasts, features, price_monthly, price_yearly)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [uuidv4(), p.slug, p.name, p.description, p.max_users, p.max_storage_gb, p.max_broadcasts, JSON.stringify(p.features), p.price_monthly, p.price_yearly]
+      )
+    }
+  }
+
   // ── License table: one active license per tenant ───────────
   await dbQuery(`CREATE TABLE IF NOT EXISTS tenant_licenses (
     id TEXT PRIMARY KEY,
@@ -2180,11 +2215,24 @@ app.post('/radio/skip', auth, requireRole('admin'), async (req: AuthReq, res) =>
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-const PLAN_DEFAULTS: Record<string, { max_users: number; max_storage_gb: number; max_broadcasts: number; features: string[] }> = {
-  free: { max_users: 1, max_storage_gb: 5, max_broadcasts: 2, features: ['sermons', 'music', 'prayer', 'events'] },
-  basic: { max_users: 3, max_storage_gb: 50, max_broadcasts: 20, features: ['sermons', 'music', 'livestream', 'broadcast', 'events', 'prayer', 'testimonies', 'donations'] },
-  pro: { max_users: 10, max_storage_gb: 200, max_broadcasts: 100, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain'] },
-  enterprise: { max_users: 1000, max_storage_gb: 2000, max_broadcasts: 1000, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain', 'api_access', 'white_label'] }
+async function getPlanDefaults(slug: string) {
+  const plan = await dbGet('SELECT * FROM license_plans WHERE slug=$1 AND is_active=true', [slug])
+  if (!plan) return null
+  return {
+    max_users: plan.max_users,
+    max_storage_gb: plan.max_storage_gb,
+    max_broadcasts: plan.max_broadcasts,
+    features: plan.features ? JSON.parse(plan.features) : []
+  }
+}
+
+async function getPlanDefaultsOrFree(slug: string) {
+  return (await getPlanDefaults(slug)) || (await getPlanDefaults('free')) || {
+    max_users: 1,
+    max_storage_gb: 5,
+    max_broadcasts: 2,
+    features: ['sermons', 'music', 'prayer', 'events']
+  }
 }
 
 function serializeLicense(row: any) {
@@ -2227,7 +2275,7 @@ app.post('/tenants', auth, requireRole('super_admin'), async (req, res) => {
     const id = uuidv4()
     await dbQuery(`INSERT INTO tenants (id, slug, name, description, primary_color, custom_domain, plan, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [id, slug, name, description || null, primary_color || '#c9a227', custom_domain || null, plan, 'active'])
-    const defaults = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.free
+    const defaults = await getPlanDefaultsOrFree(plan)
     const licenseId = uuidv4()
     await dbQuery(`INSERT INTO tenant_licenses (id, tenant_id, plan, status, max_users, max_storage_gb, max_broadcasts, features) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [licenseId, id, plan, 'active', defaults.max_users, defaults.max_storage_gb, defaults.max_broadcasts, JSON.stringify(defaults.features)])
@@ -2252,10 +2300,10 @@ app.patch('/tenants/:id/license', auth, requireRole('super_admin'), async (req, 
     const { plan, status, starts_at, expires_at, trial_ends_at, billing_period, max_users, max_storage_gb, max_broadcasts, features } = req.body
     const tenant = await dbGet('SELECT id FROM tenants WHERE id=$1', [tenantId])
     if (!tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
-    const license = await dbGet('SELECT id FROM tenant_licenses WHERE tenant_id=$1', [tenantId])
-    const defaults = plan ? PLAN_DEFAULTS[plan] : null
+    const license = await dbGet('SELECT id, plan FROM tenant_licenses WHERE tenant_id=$1', [tenantId])
     const finalPlan = plan || license?.plan || 'free'
-    const finalFeatures = features ? JSON.stringify(features) : (defaults ? JSON.stringify(defaults.features) : null)
+    const defaults = await getPlanDefaultsOrFree(finalPlan)
+    const finalFeatures = features ? JSON.stringify(features) : JSON.stringify(defaults.features)
     if (license) {
       await dbQuery(`UPDATE tenant_licenses SET
         plan=COALESCE($1, plan), status=COALESCE($2, status), starts_at=COALESCE($3, starts_at), expires_at=COALESCE($4, expires_at),
@@ -2263,16 +2311,16 @@ app.patch('/tenants/:id/license', auth, requireRole('super_admin'), async (req, 
         max_storage_gb=COALESCE($8, max_storage_gb), max_broadcasts=COALESCE($9, max_broadcasts), features=COALESCE($10, features), updated_at=NOW()
         WHERE id=$11`, [
           finalPlan, status, starts_at || null, expires_at || null, trial_ends_at || null, billing_period || null,
-          max_users ?? null, max_storage_gb ?? null, max_broadcasts ?? null, finalFeatures, license.id
+          max_users ?? defaults.max_users, max_storage_gb ?? defaults.max_storage_gb, max_broadcasts ?? defaults.max_broadcasts,
+          finalFeatures, license.id
         ])
     } else {
       const licenseId = uuidv4()
-      const defaultsToUse = PLAN_DEFAULTS[finalPlan] || PLAN_DEFAULTS.free
       await dbQuery(`INSERT INTO tenant_licenses (id, tenant_id, plan, status, starts_at, expires_at, trial_ends_at, billing_period, max_users, max_storage_gb, max_broadcasts, features)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [licenseId, tenantId, finalPlan, status || 'active', starts_at || null, expires_at || null, trial_ends_at || null,
-         billing_period || null, max_users ?? defaultsToUse.max_users, max_storage_gb ?? defaultsToUse.max_storage_gb,
-         max_broadcasts ?? defaultsToUse.max_broadcasts, finalFeatures || JSON.stringify(defaultsToUse.features)])
+         billing_period || null, max_users ?? defaults.max_users, max_storage_gb ?? defaults.max_storage_gb,
+         max_broadcasts ?? defaults.max_broadcasts, finalFeatures])
     }
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
@@ -2291,6 +2339,96 @@ app.post('/tenants/:id/owner', auth, requireRole('super_admin'), async (req, res
     await dbQuery(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
       [id, email, hash, name, 'admin', tenantId])
     res.status(201).json({ user: { id, email, name, role: 'admin', tenant_id: tenantId } })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+// ── License plan management (super_admin only) ───────────────
+app.get('/license-plans', auth, requireRole('super_admin'), async (_req, res) => {
+  try {
+    await initDb()
+    const rows = await dbQuery('SELECT * FROM license_plans ORDER BY price_monthly ASC, name ASC')
+    const plans = rows.map((r: any) => ({
+      ...r,
+      features: r.features ? JSON.parse(r.features) : []
+    }))
+    res.json(plans)
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/license-plans/:slug', auth, requireRole('super_admin'), async (req, res) => {
+  try {
+    await initDb()
+    const row = await dbGet('SELECT * FROM license_plans WHERE slug=$1', [req.params.slug])
+    if (!row) { res.status(404).json({ error: 'License plan not found' }); return }
+    res.json({ ...row, features: row.features ? JSON.parse(row.features) : [] })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/license-plans', auth, requireRole('super_admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { slug, name, description, max_users, max_storage_gb, max_broadcasts, features, price_monthly, price_yearly, is_active, is_public } = req.body
+    if (!slug || !name) { res.status(400).json({ error: 'slug and name are required' }); return }
+    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    if (!cleanSlug) { res.status(400).json({ error: 'Invalid slug' }); return }
+    const existing = await dbGet('SELECT id FROM license_plans WHERE slug=$1', [cleanSlug])
+    if (existing) { res.status(409).json({ error: 'Plan slug already exists' }); return }
+    const id = uuidv4()
+    await dbQuery(
+      `INSERT INTO license_plans (id, slug, name, description, max_users, max_storage_gb, max_broadcasts, features, price_monthly, price_yearly, is_active, is_public)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, cleanSlug, name, description || null, max_users ?? null, max_storage_gb ?? null, max_broadcasts ?? null,
+       Array.isArray(features) ? JSON.stringify(features) : JSON.stringify((features || '').split(',').map((s: string) => s.trim()).filter(Boolean)),
+       price_monthly ?? 0, price_yearly ?? 0, is_active === undefined ? true : is_active, is_public === undefined ? true : is_public]
+    )
+    const row = await dbGet('SELECT * FROM license_plans WHERE id=$1', [id])
+    res.status(201).json({ ...row, features: row.features ? JSON.parse(row.features) : [] })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/license-plans/:id', auth, requireRole('super_admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const { slug, name, description, max_users, max_storage_gb, max_broadcasts, features, price_monthly, price_yearly, is_active, is_public } = req.body
+    const existing = await dbGet('SELECT * FROM license_plans WHERE id=$1', [id])
+    if (!existing) { res.status(404).json({ error: 'License plan not found' }); return }
+    if (slug) {
+      const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '')
+      const duplicate = await dbGet('SELECT id FROM license_plans WHERE slug=$1 AND id<>$2', [cleanSlug, id])
+      if (duplicate) { res.status(409).json({ error: 'Plan slug already exists' }); return }
+    }
+    const featuresValue = features !== undefined
+      ? (Array.isArray(features) ? JSON.stringify(features) : JSON.stringify((features || '').split(',').map((s: string) => s.trim()).filter(Boolean)))
+      : existing.features
+    await dbQuery(
+      `UPDATE license_plans SET
+        slug=COALESCE($1, slug), name=COALESCE($2, name), description=COALESCE($3, description),
+        max_users=COALESCE($4, max_users), max_storage_gb=COALESCE($5, max_storage_gb), max_broadcasts=COALESCE($6, max_broadcasts),
+        features=COALESCE($7, features), price_monthly=COALESCE($8, price_monthly), price_yearly=COALESCE($9, price_yearly),
+        is_active=COALESCE($10, is_active), is_public=COALESCE($11, is_public), updated_at=NOW()
+      WHERE id=$12`,
+      [
+        slug ? slug.toLowerCase().replace(/[^a-z0-9-]/g, '') : null, name || null, description === '' ? null : (description || null),
+        max_users ?? null, max_storage_gb ?? null, max_broadcasts ?? null, featuresValue,
+        price_monthly ?? null, price_yearly ?? null, is_active === undefined ? null : is_active, is_public === undefined ? null : is_public, id
+      ]
+    )
+    const row = await dbGet('SELECT * FROM license_plans WHERE id=$1', [id])
+    res.json({ ...row, features: row.features ? JSON.parse(row.features) : [] })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/license-plans/:id', auth, requireRole('super_admin'), async (req, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const existing = await dbGet('SELECT * FROM license_plans WHERE id=$1', [id])
+    if (!existing) { res.status(404).json({ error: 'License plan not found' }); return }
+    const inUse = await dbGet('SELECT id FROM tenant_licenses WHERE plan=$1 LIMIT 1', [existing.slug])
+    if (inUse) { res.status(409).json({ error: 'Plan is in use by one or more tenants and cannot be deleted' }); return }
+    await dbQuery('DELETE FROM license_plans WHERE id=$1', [id])
+    res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 

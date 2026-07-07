@@ -6,38 +6,39 @@ import { authenticateToken, requireRole } from '../middleware/auth.js'
 
 const router = Router()
 
-const PLAN_DEFAULTS: Record<string, { max_users: number; max_storage_gb: number; max_broadcasts: number; features: string[] }> = {
-  free: {
-    max_users: 1,
-    max_storage_gb: 5,
-    max_broadcasts: 2,
-    features: ['sermons', 'music', 'prayer', 'events']
-  },
-  basic: {
-    max_users: 3,
-    max_storage_gb: 50,
-    max_broadcasts: 20,
-    features: ['sermons', 'music', 'livestream', 'broadcast', 'events', 'prayer', 'testimonies', 'donations']
-  },
-  pro: {
-    max_users: 10,
-    max_storage_gb: 200,
-    max_broadcasts: 100,
-    features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain']
-  },
-  enterprise: {
-    max_users: 1000,
-    max_storage_gb: 2000,
-    max_broadcasts: 1000,
-    features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain', 'api_access', 'white_label']
-  }
-}
-
 function serializeLicense(row: any) {
   if (!row) return null
   return {
     ...row,
     features: row.features ? JSON.parse(row.features) : []
+  }
+}
+
+function serializePlan(row: any) {
+  if (!row) return null
+  return {
+    ...row,
+    features: row.features ? JSON.parse(row.features) : []
+  }
+}
+
+async function getPlanDefaults(slug: string) {
+  const plan = await db.get('SELECT * FROM license_plans WHERE slug=$1 AND is_active=true', [slug])
+  if (!plan) return null
+  return {
+    max_users: plan.max_users,
+    max_storage_gb: plan.max_storage_gb,
+    max_broadcasts: plan.max_broadcasts,
+    features: plan.features ? JSON.parse(plan.features) : []
+  }
+}
+
+async function getPlanDefaultsOrFree(slug: string) {
+  return (await getPlanDefaults(slug)) || (await getPlanDefaults('free')) || {
+    max_users: 1,
+    max_storage_gb: 5,
+    max_broadcasts: 2,
+    features: ['sermons', 'music', 'prayer', 'events']
   }
 }
 
@@ -95,7 +96,7 @@ router.post('/', authenticateToken, requireRole('super_admin'), async (req, res)
     await db.query(`INSERT INTO tenants (id, slug, name, description, primary_color, custom_domain, plan, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [id, slug, name, description || null, primary_color || '#c9a227', custom_domain || null, plan, 'active'])
 
-    const defaults = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.free
+    const defaults = await getPlanDefaultsOrFree(plan)
     const licenseId = uuidv4()
     await db.query(`INSERT INTO tenant_licenses (id, tenant_id, plan, status, max_users, max_storage_gb, max_broadcasts, features) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [licenseId, id, plan, 'active', defaults.max_users, defaults.max_storage_gb, defaults.max_broadcasts, JSON.stringify(defaults.features)])
@@ -127,10 +128,10 @@ router.patch('/:id/license', authenticateToken, requireRole('super_admin'), asyn
     const tenant = await db.get('SELECT id FROM tenants WHERE id=$1', [tenantId])
     if (!tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
 
-    const license = await db.get('SELECT id FROM tenant_licenses WHERE tenant_id=$1', [tenantId])
-    const defaults = plan ? PLAN_DEFAULTS[plan] : null
+    const license = await db.get('SELECT id, plan FROM tenant_licenses WHERE tenant_id=$1', [tenantId])
     const finalPlan = plan || license?.plan || 'free'
-    const finalFeatures = features ? JSON.stringify(features) : (defaults ? JSON.stringify(defaults.features) : null)
+    const defaults = await getPlanDefaultsOrFree(finalPlan)
+    const finalFeatures = features ? JSON.stringify(features) : JSON.stringify(defaults.features)
 
     if (license) {
       await db.query(`UPDATE tenant_licenses SET
@@ -147,17 +148,16 @@ router.patch('/:id/license', authenticateToken, requireRole('super_admin'), asyn
         updated_at=NOW()
       WHERE id=$11`, [
         finalPlan, status, starts_at || null, expires_at || null, trial_ends_at || null,
-        billing_period || null, max_users ?? null, max_storage_gb ?? null, max_broadcasts ?? null,
-        finalFeatures, license.id
+        billing_period || null, max_users ?? defaults.max_users, max_storage_gb ?? defaults.max_storage_gb,
+        max_broadcasts ?? defaults.max_broadcasts, finalFeatures, license.id
       ])
     } else {
       const licenseId = uuidv4()
-      const defaultsToUse = PLAN_DEFAULTS[finalPlan] || PLAN_DEFAULTS.free
       await db.query(`INSERT INTO tenant_licenses (id, tenant_id, plan, status, starts_at, expires_at, trial_ends_at, billing_period, max_users, max_storage_gb, max_broadcasts, features)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [licenseId, tenantId, finalPlan, status || 'active', starts_at || null, expires_at || null, trial_ends_at || null,
-         billing_period || null, max_users ?? defaultsToUse.max_users, max_storage_gb ?? defaultsToUse.max_storage_gb,
-         max_broadcasts ?? defaultsToUse.max_broadcasts, finalFeatures || JSON.stringify(defaultsToUse.features)])
+         billing_period || null, max_users ?? defaults.max_users, max_storage_gb ?? defaults.max_storage_gb,
+         max_broadcasts ?? defaults.max_broadcasts, finalFeatures])
     }
 
     res.json({ success: true })

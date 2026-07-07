@@ -223,6 +223,38 @@ async function _initTenantSchema() {
         }
         catch { }
     }
+    // Plan catalogue: reusable plan definitions managed by superadmin
+    await db.query(`CREATE TABLE IF NOT EXISTS license_plans (
+    id TEXT PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    max_users INTEGER,
+    max_storage_gb INTEGER,
+    max_broadcasts INTEGER,
+    features TEXT,
+    price_monthly INTEGER DEFAULT 0,
+    price_yearly INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    is_public BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+    // Seed default plan catalogue if empty
+    const existingPlan = await db.get('SELECT id FROM license_plans LIMIT 1');
+    if (!existingPlan) {
+        const plans = [
+            { slug: 'free', name: 'Free', description: 'Single-admin starter plan for small ministries.', max_users: 1, max_storage_gb: 5, max_broadcasts: 2, features: ['sermons', 'music', 'prayer', 'events'], price_monthly: 0, price_yearly: 0 },
+            { slug: 'basic', name: 'Basic', description: 'Small team plan with livestream and giving.', max_users: 3, max_storage_gb: 50, max_broadcasts: 20, features: ['sermons', 'music', 'livestream', 'broadcast', 'events', 'prayer', 'testimonies', 'donations'], price_monthly: 2900, price_yearly: 29000 },
+            { slug: 'pro', name: 'Pro', description: 'Full-featured plan with radio, analytics and custom domain.', max_users: 10, max_storage_gb: 200, max_broadcasts: 100, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain'], price_monthly: 7900, price_yearly: 79000 },
+            { slug: 'enterprise', name: 'Enterprise', description: 'Unlimited white-label plan with API access and priority support.', max_users: 1000, max_storage_gb: 2000, max_broadcasts: 1000, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain', 'api_access', 'white_label'], price_monthly: 24900, price_yearly: 249000 }
+        ];
+        for (const p of plans) {
+            await db.query(`INSERT INTO license_plans (id, slug, name, description, max_users, max_storage_gb, max_broadcasts, features, price_monthly, price_yearly)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [uuidv4(), p.slug, p.name, p.description, p.max_users, p.max_storage_gb, p.max_broadcasts, JSON.stringify(p.features), p.price_monthly, p.price_yearly]);
+        }
+        console.log('[DB] license plans seeded');
+    }
     // License table: one active license per tenant
     await db.query(`CREATE TABLE IF NOT EXISTS tenant_licenses (
     id TEXT PRIMARY KEY,

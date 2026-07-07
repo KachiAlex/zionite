@@ -5,7 +5,7 @@ import { useTenant } from '../lib/api'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Users, Globe, Plus, Check, X, ArrowLeft, KeyRound, Shield, Calendar, UserPlus } from 'lucide-react'
+import { Building2, Users, Globe, Plus, Check, X, ArrowLeft, KeyRound, Shield, Calendar, UserPlus, Layers, CreditCard, Tag, DollarSign, Eye, EyeOff, Trash2, Settings2 } from 'lucide-react'
 
 interface TenantForm {
   slug: string
@@ -35,16 +35,40 @@ interface OwnerForm {
   name: string
 }
 
-const PLAN_OPTIONS = ['free', 'basic', 'pro', 'enterprise']
+interface LicensePlan {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  max_users: number
+  max_storage_gb: number
+  max_broadcasts: number
+  features: string[]
+  price_monthly: number
+  price_yearly: number
+  is_active: boolean
+  is_public: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface PlanForm {
+  id?: string
+  slug: string
+  name: string
+  description: string
+  max_users: string
+  max_storage_gb: string
+  max_broadcasts: string
+  features: string
+  price_monthly: string
+  price_yearly: string
+  is_active: boolean
+  is_public: boolean
+}
+
 const STATUS_OPTIONS = ['active', 'trialing', 'expired', 'suspended', 'cancelled']
 const BILLING_OPTIONS = ['monthly', 'annual', 'lifetime']
-
-const PLAN_DEFAULTS: Record<string, { max_users: number; max_storage_gb: number; max_broadcasts: number; features: string[] }> = {
-  free: { max_users: 1, max_storage_gb: 5, max_broadcasts: 2, features: ['sermons', 'music', 'prayer', 'events'] },
-  basic: { max_users: 3, max_storage_gb: 50, max_broadcasts: 20, features: ['sermons', 'music', 'livestream', 'broadcast', 'events', 'prayer', 'testimonies', 'donations'] },
-  pro: { max_users: 10, max_storage_gb: 200, max_broadcasts: 100, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain'] },
-  enterprise: { max_users: 1000, max_storage_gb: 2000, max_broadcasts: 1000, features: ['sermons', 'music', 'livestream', 'broadcast', 'radio', 'events', 'prayer', 'testimonies', 'donations', 'analytics', 'custom_domain', 'api_access', 'white_label'] }
-}
 
 function toLocalDateTimeInput(date?: string) {
   if (!date) return ''
@@ -62,6 +86,27 @@ function licenseStatusColor(status?: string) {
   return 'bg-[#9c958a]/20 text-[#9c958a]'
 }
 
+function formatPrice(cents: number) {
+  if (!cents) return 'Free'
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+function emptyPlanForm(): PlanForm {
+  return {
+    slug: '',
+    name: '',
+    description: '',
+    max_users: '',
+    max_storage_gb: '',
+    max_broadcasts: '',
+    features: '',
+    price_monthly: '',
+    price_yearly: '',
+    is_active: true,
+    is_public: true
+  }
+}
+
 export default function SuperAdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -75,6 +120,10 @@ export default function SuperAdminDashboard() {
   const [licenseSaving, setLicenseSaving] = useState(false)
   const [ownerForm, setOwnerForm] = useState<OwnerForm | null>(null)
   const [ownerSaving, setOwnerSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState<'tenants' | 'plans'>('tenants')
+  const [planForm, setPlanForm] = useState<PlanForm | null>(null)
+  const [planSaving, setPlanSaving] = useState(false)
+  const [planDeleting, setPlanDeleting] = useState<string | null>(null)
 
   if (user?.role !== 'super_admin') {
     return (
@@ -105,6 +154,15 @@ export default function SuperAdminDashboard() {
     queryFn: async () => {
       const { data } = await axios.get(`${API_BASE}/api/auth/users`, { headers: authHeaders })
       return data.users as any[]
+    },
+    enabled: user?.role === 'super_admin'
+  })
+
+  const { data: plansResp } = useQuery({
+    queryKey: ['license-plans'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_BASE}/api/license-plans`, { headers: authHeaders })
+      return data.plans as LicensePlan[]
     },
     enabled: user?.role === 'super_admin'
   })
@@ -169,17 +227,17 @@ export default function SuperAdminDashboard() {
     }
   }
 
-  function applyPlanDefaults(plan: string) {
+  function applyPlanDefaults(planSlug: string) {
     if (!licenseForm) return
-    const d = PLAN_DEFAULTS[plan]
-    if (!d) return
+    const plan = plansResp?.find((p: LicensePlan) => p.slug === planSlug)
+    if (!plan) return
     setLicenseForm({
       ...licenseForm,
-      plan,
-      max_users: d.max_users.toString(),
-      max_storage_gb: d.max_storage_gb.toString(),
-      max_broadcasts: d.max_broadcasts.toString(),
-      features: d.features.join(', ')
+      plan: planSlug,
+      max_users: plan.max_users?.toString() || '',
+      max_storage_gb: plan.max_storage_gb?.toString() || '',
+      max_broadcasts: plan.max_broadcasts?.toString() || '',
+      features: (plan.features || []).join(', ')
     })
   }
 
@@ -198,6 +256,72 @@ export default function SuperAdminDashboard() {
     } finally {
       setOwnerSaving(false)
     }
+  }
+
+  async function handlePlanSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!planForm) return
+    setPlanSaving(true)
+    try {
+      const payload = {
+        slug: planForm.slug,
+        name: planForm.name,
+        description: planForm.description || null,
+        max_users: planForm.max_users ? parseInt(planForm.max_users) : null,
+        max_storage_gb: planForm.max_storage_gb ? parseInt(planForm.max_storage_gb) : null,
+        max_broadcasts: planForm.max_broadcasts ? parseInt(planForm.max_broadcasts) : null,
+        features: planForm.features.split(',').map((f: string) => f.trim()).filter(Boolean),
+        price_monthly: planForm.price_monthly ? Math.round(parseFloat(planForm.price_monthly) * 100) : 0,
+        price_yearly: planForm.price_yearly ? Math.round(parseFloat(planForm.price_yearly) * 100) : 0,
+        is_active: planForm.is_active,
+        is_public: planForm.is_public
+      }
+      if (planForm.id) {
+        await axios.patch(`${API_BASE}/api/license-plans/${planForm.id}`, payload, { headers: authHeaders })
+      } else {
+        await axios.post(`${API_BASE}/api/license-plans`, payload, { headers: authHeaders })
+      }
+      qc.invalidateQueries({ queryKey: ['license-plans'] })
+      setPlanForm(null)
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to save plan')
+    } finally {
+      setPlanSaving(false)
+    }
+  }
+
+  async function handlePlanDelete(slug: string) {
+    if (!confirm('Delete this plan? Tenants using it will not be affected, but you cannot delete a plan that is assigned to a tenant.')) return
+    setPlanDeleting(slug)
+    try {
+      await axios.delete(`${API_BASE}/api/license-plans/${slug}`, { headers: authHeaders })
+      qc.invalidateQueries({ queryKey: ['license-plans'] })
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete plan')
+    } finally {
+      setPlanDeleting(null)
+    }
+  }
+
+  function openPlanForm(plan?: LicensePlan) {
+    if (!plan) {
+      setPlanForm(emptyPlanForm())
+      return
+    }
+    setPlanForm({
+      id: plan.slug,
+      slug: plan.slug,
+      name: plan.name,
+      description: plan.description || '',
+      max_users: plan.max_users?.toString() || '',
+      max_storage_gb: plan.max_storage_gb?.toString() || '',
+      max_broadcasts: plan.max_broadcasts?.toString() || '',
+      features: (plan.features || []).join(', '),
+      price_monthly: plan.price_monthly ? (plan.price_monthly / 100).toFixed(2) : '',
+      price_yearly: plan.price_yearly ? (plan.price_yearly / 100).toFixed(2) : '',
+      is_active: plan.is_active,
+      is_public: plan.is_public
+    })
   }
 
   return (
@@ -235,116 +359,200 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        {/* Tenants */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-serif text-lg font-bold">Churches / Tenants</h2>
-            <button onClick={() => setShowForm(true)} className="btn-gold text-sm flex items-center gap-2">
-              <Plus className="w-4 h-4" /> New Tenant
-            </button>
-          </div>
+        {/* Tabs */}
+        <div className="flex items-center gap-2 mb-6 border-b border-[rgba(243,238,228,0.08)]">
+          <button
+            onClick={() => setActiveTab('tenants')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'tenants' ? 'border-[#c9a227] text-[#c9a227]' : 'border-transparent text-[#9c958a] hover:text-white'}`}>
+            <Building2 className="w-4 h-4" /> Tenants
+          </button>
+          <button
+            onClick={() => setActiveTab('plans')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'plans' ? 'border-[#c9a227] text-[#c9a227]' : 'border-transparent text-[#9c958a] hover:text-white'}`}>
+            <Layers className="w-4 h-4" /> License Plans
+          </button>
+        </div>
 
-          {showForm && (
-            <form onSubmit={handleCreate} className="bg-[#14141a] border border-[rgba(243,238,228,0.08)] rounded-xl p-5 mb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="text-xs text-[#9c958a] block mb-1">Slug (subdomain)</label>
-                  <input type="text" required value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="input-dark w-full text-sm" placeholder="firstbaptist" />
-                </div>
-                <div>
-                  <label className="text-xs text-[#9c958a] block mb-1">Name</label>
-                  <input type="text" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-dark w-full text-sm" placeholder="First Baptist Church" />
-                </div>
-                <div>
-                  <label className="text-xs text-[#9c958a] block mb-1">Primary Color</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={form.primary_color} onChange={e => setForm({ ...form, primary_color: e.target.value })} className="w-10 h-8 rounded border-0 bg-transparent" />
-                    <input type="text" value={form.primary_color} onChange={e => setForm({ ...form, primary_color: e.target.value })} className="input-dark w-full text-sm" />
+        {/* Tenants tab */}
+        {activeTab === 'tenants' && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-serif text-lg font-bold">Churches / Tenants</h2>
+              <button onClick={() => setShowForm(true)} className="btn-gold text-sm flex items-center gap-2">
+                <Plus className="w-4 h-4" /> New Tenant
+              </button>
+            </div>
+
+            {showForm && (
+              <form onSubmit={handleCreate} className="bg-[#14141a] border border-[rgba(243,238,228,0.08)] rounded-xl p-5 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="text-xs text-[#9c958a] block mb-1">Slug (subdomain)</label>
+                    <input type="text" required value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="input-dark w-full text-sm" placeholder="firstbaptist" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#9c958a] block mb-1">Name</label>
+                    <input type="text" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-dark w-full text-sm" placeholder="First Baptist Church" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#9c958a] block mb-1">Primary Color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={form.primary_color} onChange={e => setForm({ ...form, primary_color: e.target.value })} className="w-10 h-8 rounded border-0 bg-transparent" />
+                      <input type="text" value={form.primary_color} onChange={e => setForm({ ...form, primary_color: e.target.value })} className="input-dark w-full text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#9c958a] block mb-1">Plan</label>
+                    <select value={form.plan} onChange={e => setForm({ ...form, plan: e.target.value })} className="input-dark w-full text-sm">
+                      {(plansResp || []).map((p: LicensePlan) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-[#9c958a] block mb-1">Description</label>
+                    <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="input-dark w-full text-sm" placeholder="A brief description of the church" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-[#9c958a] block mb-1">Custom Domain (optional)</label>
+                    <input type="text" value={form.custom_domain} onChange={e => setForm({ ...form, custom_domain: e.target.value })} className="input-dark w-full text-sm" placeholder="church.example.com" />
                   </div>
                 </div>
-                <div>
-                  <label className="text-xs text-[#9c958a] block mb-1">Plan</label>
-                  <select value={form.plan} onChange={e => setForm({ ...form, plan: e.target.value })} className="input-dark w-full text-sm">
-                    {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
-                  </select>
+                <div className="flex items-center gap-2">
+                  <button type="submit" disabled={saving} className="btn-gold text-sm flex items-center gap-2">
+                    <Check className="w-4 h-4" /> {saving ? 'Creating...' : 'Create'}
+                  </button>
+                  <button type="button" onClick={() => setShowForm(false)} className="btn-line text-sm flex items-center gap-2">
+                    <X className="w-4 h-4" /> Cancel
+                  </button>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs text-[#9c958a] block mb-1">Description</label>
-                  <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="input-dark w-full text-sm" placeholder="A brief description of the church" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs text-[#9c958a] block mb-1">Custom Domain (optional)</label>
-                  <input type="text" value={form.custom_domain} onChange={e => setForm({ ...form, custom_domain: e.target.value })} className="input-dark w-full text-sm" placeholder="church.example.com" />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="submit" disabled={saving} className="btn-gold text-sm flex items-center gap-2">
-                  <Check className="w-4 h-4" /> {saving ? 'Creating...' : 'Create'}
-                </button>
-                <button type="button" onClick={() => setShowForm(false)} className="btn-line text-sm flex items-center gap-2">
-                  <X className="w-4 h-4" /> Cancel
-                </button>
-              </div>
-            </form>
-          )}
+              </form>
+            )}
 
-          <div className="bg-[#14141a] border border-[rgba(243,238,228,0.06)] rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[rgba(243,238,228,0.06)] text-[#9c958a]">
-                  <th className="text-left px-4 py-3">Name</th>
-                  <th className="text-left px-4 py-3">Slug</th>
-                  <th className="text-left px-4 py-3">Plan</th>
-                  <th className="text-left px-4 py-3">License</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-left px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tenantsResp?.map((t: any) => (
-                  <tr key={t.id} className="border-b border-[rgba(243,238,228,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
-                    <td className="px-4 py-3 font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full border border-white/10" style={{ backgroundColor: t.primary_color }} />
-                        {t.name}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[#9c958a]">{t.slug}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.plan === 'pro' ? 'bg-[#c9a227]/20 text-[#c9a227]' : t.plan === 'enterprise' ? 'bg-emerald-500/20 text-emerald-400' : t.plan === 'basic' ? 'bg-blue-500/20 text-blue-400' : 'bg-[#9c958a]/20 text-[#9c958a]'}`}>{t.plan}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full w-fit ${licenseStatusColor(t.license?.status)}`}>
-                          {t.license?.status || 'none'}
-                        </span>
-                        {t.license?.expires_at && (
-                          <span className="text-[10px] text-[#9c958a]">Expires {new Date(t.license.expires_at).toLocaleDateString()}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>{t.status}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => openLicenseModal(t)} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-[rgba(243,238,228,0.12)] text-[#c9a227]" title="Edit license">
-                          <KeyRound className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => { setEditingTenant(t); setOwnerForm({ email: '', password: '', name: '' }) }} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-[rgba(243,238,228,0.12)] text-[#9c958a] hover:text-white" title="Create owner">
-                          <UserPlus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="bg-[#14141a] border border-[rgba(243,238,228,0.06)] rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[rgba(243,238,228,0.06)] text-[#9c958a]">
+                    <th className="text-left px-4 py-3">Name</th>
+                    <th className="text-left px-4 py-3">Slug</th>
+                    <th className="text-left px-4 py-3">Plan</th>
+                    <th className="text-left px-4 py-3">License</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-left px-4 py-3">Actions</th>
                   </tr>
-                ))}
-                {!tenantsResp?.length && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[#9c958a]">No tenants found.</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {tenantsResp?.map((t: any) => (
+                    <tr key={t.id} className="border-b border-[rgba(243,238,228,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
+                      <td className="px-4 py-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full border border-white/10" style={{ backgroundColor: t.primary_color }} />
+                          {t.name}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-[#9c958a]">{t.slug}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${t.plan === 'pro' ? 'bg-[#c9a227]/20 text-[#c9a227]' : t.plan === 'enterprise' ? 'bg-emerald-500/20 text-emerald-400' : t.plan === 'basic' ? 'bg-blue-500/20 text-blue-400' : 'bg-[#9c958a]/20 text-[#9c958a]'}`}>{t.plan}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={`text-xs px-2 py-0.5 rounded-full w-fit ${licenseStatusColor(t.license?.status)}`}>
+                            {t.license?.status || 'none'}
+                          </span>
+                          {t.license?.expires_at && (
+                            <span className="text-[10px] text-[#9c958a]">Expires {new Date(t.license.expires_at).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${t.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>{t.status}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openLicenseModal(t)} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-[rgba(243,238,228,0.12)] text-[#c9a227]" title="Edit license">
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => { setEditingTenant(t); setOwnerForm({ email: '', password: '', name: '' }) }} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-[rgba(243,238,228,0.12)] text-[#9c958a] hover:text-white" title="Create owner">
+                            <UserPlus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!tenantsResp?.length && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-[#9c958a]">No tenants found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* License Plans tab */}
+        {activeTab === 'plans' && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-serif text-lg font-bold">License Plans</h2>
+              <button onClick={() => openPlanForm()} className="btn-gold text-sm flex items-center gap-2">
+                <Plus className="w-4 h-4" /> New Plan
+              </button>
+            </div>
+
+            <div className="bg-[#14141a] border border-[rgba(243,238,228,0.06)] rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[rgba(243,238,228,0.06)] text-[#9c958a]">
+                    <th className="text-left px-4 py-3">Plan</th>
+                    <th className="text-left px-4 py-3">Slug</th>
+                    <th className="text-left px-4 py-3">Limits</th>
+                    <th className="text-left px-4 py-3">Pricing</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-left px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plansResp?.map((p: LicensePlan) => (
+                    <tr key={p.id} className="border-b border-[rgba(243,238,228,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{p.name}</span>
+                          {!p.is_public && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#9c958a]/20 text-[#9c958a]">Hidden</span>}
+                        </div>
+                        <div className="text-xs text-[#9c958a] max-w-xs truncate">{p.description}</div>
+                      </td>
+                      <td className="px-4 py-3 text-[#9c958a]"><code className="text-xs">{p.slug}</code></td>
+                      <td className="px-4 py-3 text-[#9c958a] text-xs">
+                        <div>{p.max_users} users</div>
+                        <div>{p.max_storage_gb} GB</div>
+                        <div>{p.max_broadcasts} broadcasts</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="flex items-center gap-1"><CreditCard className="w-3 h-3 text-[#c9a227]" /> {formatPrice(p.price_monthly)}/mo</div>
+                        <div className="flex items-center gap-1"><DollarSign className="w-3 h-3 text-[#9c958a]" /> {formatPrice(p.price_yearly)}/yr</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${p.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {p.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openPlanForm(p)} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-[rgba(243,238,228,0.12)] text-[#c9a227]" title="Edit plan">
+                            <Settings2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handlePlanDelete(p.slug)} disabled={planDeleting === p.slug} className="p-1.5 rounded-lg bg-[rgba(243,238,228,0.06)] hover:bg-red-500/20 text-[#9c958a] hover:text-red-400" title="Delete plan">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!plansResp?.length && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-[#9c958a]">No license plans found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* License modal */}
@@ -360,7 +568,7 @@ export default function SuperAdminDashboard() {
                 <div>
                   <label className="text-xs text-[#9c958a] block mb-1">Plan</label>
                   <select value={licenseForm.plan} onChange={e => applyPlanDefaults(e.target.value)} className="input-dark w-full text-sm">
-                    {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+                    {(plansResp || []).map((p: LicensePlan) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -445,6 +653,80 @@ export default function SuperAdminDashboard() {
                   <Check className="w-4 h-4" /> {ownerSaving ? 'Creating...' : 'Create Owner'}
                 </button>
                 <button type="button" onClick={() => { setOwnerForm(null); setEditingTenant(null) }} className="btn-line text-sm flex items-center gap-2">
+                  <X className="w-4 h-4" /> Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Plan modal */}
+      {planForm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-[#14141a] border border-[rgba(243,238,228,0.08)] rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="w-5 h-5 text-[#c9a227]" />
+              <h3 className="font-serif text-lg font-bold">{planForm.id ? 'Edit Plan' : 'New Plan'}</h3>
+            </div>
+            <form onSubmit={handlePlanSave}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Slug</label>
+                  <input type="text" required disabled={!!planForm.id} value={planForm.slug} onChange={e => setPlanForm({ ...planForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="input-dark w-full text-sm" placeholder="pro" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Name</label>
+                  <input type="text" required value={planForm.name} onChange={e => setPlanForm({ ...planForm, name: e.target.value })} className="input-dark w-full text-sm" placeholder="Pro" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-[#9c958a] block mb-1">Description</label>
+                  <input type="text" value={planForm.description} onChange={e => setPlanForm({ ...planForm, description: e.target.value })} className="input-dark w-full text-sm" placeholder="Brief description shown to tenants" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Max Users</label>
+                  <input type="number" required value={planForm.max_users} onChange={e => setPlanForm({ ...planForm, max_users: e.target.value })} className="input-dark w-full text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Max Storage (GB)</label>
+                  <input type="number" required value={planForm.max_storage_gb} onChange={e => setPlanForm({ ...planForm, max_storage_gb: e.target.value })} className="input-dark w-full text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Max Broadcasts</label>
+                  <input type="number" required value={planForm.max_broadcasts} onChange={e => setPlanForm({ ...planForm, max_broadcasts: e.target.value })} className="input-dark w-full text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Monthly Price (USD)</label>
+                  <div className="relative">
+                    <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9c958a]" />
+                    <input type="number" step="0.01" min="0" value={planForm.price_monthly} onChange={e => setPlanForm({ ...planForm, price_monthly: e.target.value })} className="input-dark w-full text-sm pl-9" placeholder="0.00" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-[#9c958a] block mb-1">Yearly Price (USD)</label>
+                  <div className="relative">
+                    <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9c958a]" />
+                    <input type="number" step="0.01" min="0" value={planForm.price_yearly} onChange={e => setPlanForm({ ...planForm, price_yearly: e.target.value })} className="input-dark w-full text-sm pl-9" placeholder="0.00" />
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-[#9c958a] block mb-1">Features (comma-separated)</label>
+                  <input type="text" value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })} className="input-dark w-full text-sm" placeholder="sermons, music, livestream, ..." />
+                </div>
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" id="is_active" checked={planForm.is_active} onChange={e => setPlanForm({ ...planForm, is_active: e.target.checked })} className="w-4 h-4 rounded border-[rgba(243,238,228,0.2)] bg-[#14141a] text-[#c9a227] focus:ring-[#c9a227]" />
+                  <label htmlFor="is_active" className="text-sm text-[#9c958a]">Active</label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" id="is_public" checked={planForm.is_public} onChange={e => setPlanForm({ ...planForm, is_public: e.target.checked })} className="w-4 h-4 rounded border-[rgba(243,238,228,0.2)] bg-[#14141a] text-[#c9a227] focus:ring-[#c9a227]" />
+                  <label htmlFor="is_public" className="text-sm text-[#9c958a]">Public</label>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="submit" disabled={planSaving} className="btn-gold text-sm flex items-center gap-2">
+                  <Check className="w-4 h-4" /> {planSaving ? 'Saving...' : 'Save Plan'}
+                </button>
+                <button type="button" onClick={() => setPlanForm(null)} className="btn-line text-sm flex items-center gap-2">
                   <X className="w-4 h-4" /> Cancel
                 </button>
               </div>
