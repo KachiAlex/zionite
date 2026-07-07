@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { createServer } from 'http'
 import app from './index.js'
 import { initWebSocket } from './websocket.js'
