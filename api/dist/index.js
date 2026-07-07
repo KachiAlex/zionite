@@ -42,6 +42,9 @@ const ALLOWED_ORIGINS = [
     'https://zionite.fly.dev',
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
 ];
 app.use(cors({
     origin: (origin, callback) => {
