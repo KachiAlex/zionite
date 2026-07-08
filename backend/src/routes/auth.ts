@@ -50,7 +50,7 @@ router.post('/register', async (req: any, res) => {
       'INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)',
       [id, email, hash, name, 'listener', req.tenantId]
     )
-    const token = jwt.sign({ id, email, name, role: 'listener' }, JWT_SECRET, { expiresIn: '7d' })
+    const token = jwt.sign({ id, email, name, role: 'listener', tenantId: req.tenantId }, JWT_SECRET, { expiresIn: '7d' })
     res.json({ token, user: { id, email, name, role: 'listener' } })
   } catch (err: any) {
     console.error('[AUTH] register error:', err.message)
@@ -77,7 +77,7 @@ router.post('/login', async (req: any, res) => {
     if (!valid) { res.status(401).json({ error: 'Invalid credentials' }); return }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.name, role: user.role },
+      { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: req.tenantId },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
