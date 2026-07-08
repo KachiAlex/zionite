@@ -122,7 +122,7 @@ export default function RadioStudio({
   const [micGain, setMicGain] = useState(90)
 
   /* ── Background music mixer state ── */
-  const [musicVolume, setMusicVolume] = useState(initialMusicVolume || 15)
+  const [musicVolume, setMusicVolume] = useState(initialMusicVolume || 8)
   const [musicPlaying, setMusicPlaying] = useState(false)
   const [musicLoop, setMusicLoop] = useState(true)
   const musicName = initialMusicName || ''
