@@ -154,7 +154,7 @@ export default function RadioStudio({
   const isNativePlatform = typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.()
   const [monitorEnabled, setMonitorEnabled] = useState(!isNativePlatform)
   const monitorEnabledRef = useRef(monitorEnabled)
-  const [monitorVolume, setMonitorVolume] = useState(60)
+  const [monitorVolume, setMonitorVolume] = useState(isNativePlatform ? 20 : 60)
   const mixMonitorAudioRef = useRef<HTMLAudioElement | null>(null)
   const [recordingStatus, setRecordingStatus] = useState('')
   const [recordDirHandle, setRecordDirHandle] = useState<FileSystemDirectoryHandle | null>(null)
@@ -220,7 +220,15 @@ export default function RadioStudio({
 
   useEffect(() => {
     // Request mic permission first so labels are visible, then enumerate
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+    navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        voiceIsolation: true,
+        echoCancellationType: { ideal: 'system' },
+      } as any
+    })
       .then(s => { s.getTracks().forEach(t => t.stop()); enumerateDevices() })
       .catch(() => enumerateDevices())
     navigator.mediaDevices.addEventListener('devicechange', enumerateDevices)
@@ -369,7 +377,11 @@ export default function RadioStudio({
     const musG = musicGainNodeRef.current
     const ctx = mixerCtxRef.current
     if (!musG || !ctx) return
-    const routeToLocal = !monitorEnabledRef.current
+    // On native mobile apps, never route the soundtrack to the device speaker;
+    // the mic is right next to the speaker and the soundtrack feeds back into
+    // the broadcast as echo. The broadcaster can enable the full mix monitor
+    // with headphones, or rely on the web preview.
+    const routeToLocal = !isNativePlatform && !monitorEnabledRef.current
     if (routeToLocal && !musicLocalConnectedRef.current) {
       musG.connect(ctx.destination)
       musicLocalConnectedRef.current = true
@@ -441,9 +453,14 @@ export default function RadioStudio({
 
       const deviceId = activeDeviceIdRef.current
       const rawMicStream = await navigator.mediaDevices.getUserMedia({
-        audio: deviceId
-          ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-          : { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          voiceIsolation: true,
+          echoCancellationType: { ideal: 'system' },
+        } as any
       })
 
       /* ── Build mixer graph ── */
