@@ -119,10 +119,10 @@ export default function RadioStudio({
   initialMusicVolume = 25
 }: Props) {
   const [micMuted, setMicMuted] = useState(false)
-  const [micGain, setMicGain] = useState(80)
+  const [micGain, setMicGain] = useState(90)
 
   /* ── Background music mixer state ── */
-  const [musicVolume, setMusicVolume] = useState(initialMusicVolume)
+  const [musicVolume, setMusicVolume] = useState(initialMusicVolume || 15)
   const [musicPlaying, setMusicPlaying] = useState(false)
   const [musicLoop, setMusicLoop] = useState(true)
   const musicName = initialMusicName || ''
