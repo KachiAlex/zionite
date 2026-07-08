@@ -32,7 +32,20 @@ const router = Router()
 router.get('/', async (req, res) => {
   try {
     await initDb()
-    const broadcasts = await db.all('SELECT * FROM broadcasts ORDER BY created_at DESC')
+    const { date, status } = req.query
+    const params: any[] = []
+    let where = ''
+
+    if (date && typeof date === 'string') {
+      where += " WHERE DATE(COALESCE(started_at, created_at)) = DATE($1)"
+      params.push(date)
+    }
+    if (status && typeof status === 'string') {
+      where += where ? ' AND status=$2' : ' WHERE status=$1'
+      params.push(status)
+    }
+
+    const broadcasts = await db.all(`SELECT * FROM broadcasts${where} ORDER BY COALESCE(started_at, created_at) DESC`, params)
     res.json({ broadcasts })
   } catch (err: any) {
     console.error('[BROADCASTS] list error:', err.message)
@@ -284,6 +297,43 @@ router.patch('/:id/recording', authenticateToken, requireRole('broadcaster', 'ad
     res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res) => {
+  try {
+    await initDb()
+    const { id } = req.params
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id=$1', [id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+
+    // Prevent deleting a live broadcast without ending it first
+    if (broadcast.status === 'live') {
+      res.status(400).json({ error: 'Cannot delete a live broadcast. End it first.' }); return
+    }
+
+    // Delete associated recording from Cloudinary if present
+    if (broadcast.recording_url) {
+      try {
+        const match = broadcast.recording_url.match(/\/upload\/v\d+\/(.+?)\.webm/)
+        if (match?.[1]) {
+          await cloudinary.uploader.destroy(match[1], { resource_type: 'video' })
+        }
+      } catch (e: any) {
+        console.warn('[BROADCASTS] delete recording warning:', e.message)
+      }
+    }
+
+    // Clean up related data
+    await db.run('DELETE FROM chat_messages WHERE broadcast_id=$1', [id])
+    await db.run('DELETE FROM stream_chunks WHERE broadcast_id=$1', [id])
+    await db.run('DELETE FROM stream_listeners WHERE broadcast_id=$1', [id])
+    await db.run('DELETE FROM broadcasts WHERE id=$1', [id])
+
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[BROADCASTS] delete error:', err.message)
+    res.status(500).json({ error: 'Failed to delete broadcast' })
   }
 })
 

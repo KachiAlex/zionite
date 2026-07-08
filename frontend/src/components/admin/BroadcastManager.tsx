@@ -6,7 +6,7 @@ import {
   Radio, Play, Square, Plus, Loader2, ArrowLeft,
   Mic, BookOpen, ExternalLink, AlertCircle, Monitor, ChevronDown, ChevronUp,
   HardDrive, Folder, Download, X, MessageSquare, Calendar, Clock, User,
-  Music, Upload
+  Music, Upload, Trash2
 } from 'lucide-react'
 import { getRecordingConfig, setRecordingConfig } from '../../lib/recording'
 import RadioStudio from '../broadcast/RadioStudio'
@@ -102,6 +102,10 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [selectedBroadcast, setSelectedBroadcast] = useState<Broadcast | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([])
   const [chatLoading, setChatLoading] = useState(false)
+  const [dateFilter, setDateFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | Broadcast['status']>('all')
+  const [broadcastToDelete, setBroadcastToDelete] = useState<Broadcast | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   async function openBroadcastDetail(b: Broadcast) {
@@ -122,6 +126,40 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     setChatHistory([])
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
   }
+
+  async function deleteBroadcast(b: Broadcast) {
+    if (b.status === 'live') {
+      alert('Cannot delete a live broadcast. End it first.')
+      return
+    }
+    setBroadcastToDelete(b)
+  }
+
+  async function confirmDelete() {
+    if (!broadcastToDelete) return
+    setDeleteLoading(true)
+    try {
+      await axios.delete(`${API_BASE}/api/broadcasts/${broadcastToDelete.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setBroadcastToDelete(null)
+      onRefresh()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete broadcast')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const filteredBroadcasts = broadcasts.filter(b => {
+    if (statusFilter !== 'all' && b.status !== statusFilter) return false
+    if (dateFilter) {
+      const d = new Date(b.started_at || b.created_at)
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      if (local !== dateFilter) return false
+    }
+    return true
+  })
 
   async function downloadRecording(id: string) {
     try {
@@ -634,15 +672,46 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
         {/* Stats summary */}
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Live Now', value: broadcasts.filter(b => b.status === 'live').length, color: '#4ade80' },
-            { label: 'Scheduled', value: broadcasts.filter(b => b.status === 'scheduled').length, color: '#eab308' },
-            { label: 'Total', value: broadcasts.length, color: '#c9a227' },
+            { label: 'Live Now', value: filteredBroadcasts.filter(b => b.status === 'live').length, color: '#4ade80' },
+            { label: 'Scheduled', value: filteredBroadcasts.filter(b => b.status === 'scheduled').length, color: '#eab308' },
+            { label: 'Showing', value: filteredBroadcasts.length, color: '#c9a227' },
           ].map((s, i) => (
             <div key={i} className="p-3 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] text-center">
               <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
               <p className="text-[10px] text-[#9c958a]">{s.label}</p>
             </div>
           ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] flex-1">
+            <Calendar className="w-3.5 h-3.5 text-[#c9a227]" />
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none flex-1"
+            />
+            {dateFilter && (
+              <button onClick={() => setDateFilter('')} className="text-[#9c958a] hover:text-white">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] flex-1">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="bg-transparent text-xs text-white outline-none flex-1"
+            >
+              <option value="all" className="bg-[#14141a]">All statuses</option>
+              <option value="live" className="bg-[#14141a]">Live</option>
+              <option value="scheduled" className="bg-[#14141a]">Scheduled</option>
+              <option value="paused" className="bg-[#14141a]">Paused</option>
+              <option value="ended" className="bg-[#14141a]">Ended</option>
+            </select>
+          </div>
         </div>
 
         {/* Broadcast list */}
@@ -652,18 +721,17 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
               <Radio className="w-3.5 h-3.5 text-[#c9a227]" /> All Broadcasts
             </h3>
           </div>
-          {broadcasts.length === 0 ? (
+          {filteredBroadcasts.length === 0 ? (
             <div className="p-8 text-center text-[#9c958a] text-xs">
               <Radio className="w-8 h-8 mx-auto mb-3 opacity-20" />
-              <p>No broadcasts yet. Create your first broadcast to go live.</p>
+              <p>{dateFilter || statusFilter !== 'all' ? 'No broadcasts match the selected filters.' : 'No broadcasts yet. Create your first broadcast to go live.'}</p>
             </div>
           ) : (
             <div className="divide-y divide-[rgba(243,238,228,0.04)]">
-              {broadcasts.map(b => (
+              {filteredBroadcasts.map(b => (
                 <div key={b.id}
-                  className="px-4 py-3 flex items-center justify-between hover:bg-[rgba(243,238,228,0.04)] transition-colors cursor-pointer"
-                  onClick={() => openBroadcastDetail(b)}>
-                  <div className="min-w-0 flex items-center gap-3">
+                  className="px-4 py-3 flex items-center justify-between hover:bg-[rgba(243,238,228,0.04)] transition-colors group">
+                  <div className="min-w-0 flex items-center gap-3 flex-1 cursor-pointer" onClick={() => openBroadcastDetail(b)}>
                     {b.thumbnail_url ? (
                       <img src={b.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
                     ) : (
@@ -694,12 +762,44 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                         <Download className="w-3 h-3" />
                       </span>
                     )}
+                    {b.status !== 'live' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteBroadcast(b) }}
+                        title="Delete broadcast"
+                        className="p-1.5 rounded-md text-[#9c958a] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Delete confirmation modal */}
+        {broadcastToDelete && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
+            <div className="w-full sm:max-w-sm p-5 rounded-t-2xl sm:rounded-2xl bg-[#14141a] border border-[rgba(243,238,228,0.08)]">
+              <h3 className="text-sm font-bold text-white mb-2">Delete broadcast?</h3>
+              <p className="text-xs text-[#9c958a] mb-4">
+                This will permanently remove <span className="text-white">{broadcastToDelete.title}</span> and all its chat, stream chunks, and recording.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setBroadcastToDelete(null)}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[rgba(243,238,228,0.08)] hover:bg-[rgba(243,238,228,0.12)] transition-colors">
+                  Cancel
+                </button>
+                <button onClick={confirmDelete} disabled={deleteLoading}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-red-500/80 hover:bg-red-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
+                  {deleteLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

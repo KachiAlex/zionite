@@ -818,7 +818,24 @@ app.post('/auth/change-password', auth, async (req: AuthReq, res) => {
 
 // ── Broadcast routes ─────────────────────────────────────────
 app.get('/broadcasts', async (req: TenantReq, res) => {
-  try { await initDb(); const rows = await dbQuery('SELECT * FROM broadcasts WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId]); res.json({ broadcasts: rows }) }
+  try {
+    await initDb()
+    const { date, status } = req.query
+    const params: any[] = [req.tenantId]
+    let where = ' WHERE tenant_id=$1'
+
+    if (date && typeof date === 'string') {
+      where += " AND DATE(COALESCE(started_at, created_at)) = DATE($2)"
+      params.push(date)
+    }
+    if (status && typeof status === 'string') {
+      where += ` AND status=$${params.length + 1}`
+      params.push(status)
+    }
+
+    const rows = await dbQuery(`SELECT * FROM broadcasts${where} ORDER BY COALESCE(started_at, created_at) DESC`, params)
+    res.json({ broadcasts: rows })
+  }
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
@@ -875,6 +892,28 @@ app.patch('/broadcasts/:id/resume', auth, requireRole('admin', 'broadcaster'), a
   try {
     await initDb()
     await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1", [req.params.id])
+    res.json({ success: true })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/broadcasts/:id', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const broadcast = await dbGet('SELECT * FROM broadcasts WHERE id=$1', [req.params.id])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    if (broadcast.status === 'live') { res.status(400).json({ error: 'Cannot delete a live broadcast. End it first.' }); return }
+
+    if (broadcast.recording_url) {
+      try {
+        const match = broadcast.recording_url.match(/\/upload\/v\d+\/(.+?)\.webm/)
+        if (match?.[1]) await cloudinary.uploader.destroy(match[1], { resource_type: 'video' })
+      } catch (e: any) { console.warn('[BROADCASTS] delete recording warning:', e.message) }
+    }
+
+    await dbQuery('DELETE FROM chat_messages WHERE broadcast_id=$1', [req.params.id])
+    await dbQuery('DELETE FROM stream_chunks WHERE broadcast_id=$1', [req.params.id])
+    await dbQuery('DELETE FROM stream_listeners WHERE broadcast_id=$1', [req.params.id])
+    await dbQuery('DELETE FROM broadcasts WHERE id=$1', [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
