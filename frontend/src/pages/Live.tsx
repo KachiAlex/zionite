@@ -504,82 +504,96 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   }, [showVolume])
 
   return (
-    <div className="mx-2 sm:mx-4 mt-3 mb-4 rounded-xl p-3 sm:p-4 bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-[#ef4444]" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ef4444]" />
-          </span>
-          <span className="text-[11px] font-semibold tracking-wider text-white">LIVE AUDIO</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono flex items-center gap-1 text-[#9c958a]">
-            <Users className="w-3 h-3" /> {listenerCount}
-          </span>
-          <span className="text-[10px] font-mono text-[#9c958a]">{statusText}</span>
-          <button onClick={() => setDebug(d => !d)} className="text-[9px] font-mono text-[#5a5550] hover:text-[#c9a227] transition-colors" title="Toggle debug stats">
-            {debug ? '×' : '◈'}
-          </button>
-        </div>
-      </div>
-
-      {!started ? (
-        <button onClick={() => handleStart()}
-          className="w-full py-3.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] bg-[#c9a227] text-[#1b1208]">
-          <Headphones className="w-4 h-4" /> Tap to Start Listening
-        </button>
-      ) : (
-        <div>
-          {debug && (
-            <div className="mb-2 flex items-center gap-3 text-[9px] font-mono text-[#5a5550] border-b border-[rgba(243,238,228,0.04)] pb-1.5">
-              <span>LAT {stats.latency.toFixed(1)}s</span>
-              <span>BUF {stats.buffer.toFixed(1)}s</span>
-              <span>{stats.bitrate > 0 ? `${stats.bitrate}kbps` : '---'}</span>
+    <div className="mx-2 sm:mx-4 mt-3 mb-4 rounded-xl overflow-hidden bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
+      {/* Thumbnail background/cover */}
+      {thumbnailUrl && (
+        <div className="relative w-full h-32 sm:h-40">
+          <img src={thumbnailUrl} alt={title || 'Broadcast'} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#14141a] via-[#14141a]/80 to-transparent" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#14141a]/80 backdrop-blur-sm flex items-center justify-center border-2 border-[#c9a227]/30">
+              <Radio className="w-8 h-8 sm:w-10 sm:h-10 text-[#c9a227]" />
             </div>
-          )}
-          <div className="flex items-center gap-3">
-          <button onClick={togglePlay}
-            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
-            style={{ background: isPlaying ? '#c9a227' : '#1c1d24', border: `2px solid ${isPlaying ? '#c9a227' : 'rgba(243,238,228,0.08)'}` }}>
-            {isPlaying ? <Pause className="w-4 h-4 text-[#1b1208]" /> : <Play className="w-4 h-4 text-[#c9a227] ml-0.5" />}
-          </button>
-          <div className="flex-1 min-w-0">
-            <AudioBars active={isPlaying} />
-          </div>
-          <div data-volume-ctrl="1" className="relative shrink-0 flex flex-col items-center">
-            {/* Vertical slider popover */}
-            {showVolume && (
-              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pb-2 pt-3 px-2 rounded-xl bg-[#1c1d24] border border-[rgba(243,238,228,0.1)] shadow-xl z-30"
-                style={{ height: 120 }}>
-                <span className="text-[9px] font-mono text-[#9c958a]">{volume}</span>
-                <input
-                  type="range" min={0} max={100} value={volume}
-                  onChange={e => setVolume(parseInt(e.target.value))}
-                  className="appearance-none cursor-pointer rounded-full"
-                  style={{
-                    writingMode: 'vertical-lr' as any,
-                    direction: 'rtl',
-                    width: 4,
-                    height: 72,
-                    background: `linear-gradient(to top, #c9a227 ${volume}%, rgba(243,238,228,0.08) ${volume}%)`,
-                    outline: 'none',
-                  }}
-                />
-              </div>
-            )}
-            <button
-              onClick={() => setShowVolume(v => !v)}
-              className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
-              style={{ background: showVolume ? 'rgba(201,162,39,0.15)' : 'transparent' }}
-              title={`Volume: ${volume}%`}
-            >
-              <VolumeIcon className="w-3.5 h-3.5" style={{ color: showVolume ? '#c9a227' : '#9c958a' }} />
-            </button>
-          </div>
           </div>
         </div>
       )}
+      <div className="p-3 sm:p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-[#ef4444]" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ef4444]" />
+            </span>
+            <span className="text-[11px] font-semibold tracking-wider text-white">LIVE AUDIO</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono flex items-center gap-1 text-[#9c958a]">
+              <Users className="w-3 h-3" /> {listenerCount}
+            </span>
+            <span className="text-[10px] font-mono text-[#9c958a]">{statusText}</span>
+            <button onClick={() => setDebug(d => !d)} className="text-[9px] font-mono text-[#5a5550] hover:text-[#c9a227] transition-colors" title="Toggle debug stats">
+              {debug ? '×' : '◈'}
+            </button>
+          </div>
+        </div>
+
+        {!started ? (
+          <button onClick={() => handleStart()}
+            className="w-full py-3.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] bg-[#c9a227] text-[#1b1208]">
+            <Headphones className="w-4 h-4" /> Tap to Start Listening
+          </button>
+        ) : (
+          <div>
+            {debug && (
+              <div className="mb-2 flex items-center gap-3 text-[9px] font-mono text-[#5a5550] border-b border-[rgba(243,238,228,0.04)] pb-1.5">
+                <span>LAT {stats.latency.toFixed(1)}s</span>
+                <span>BUF {stats.buffer.toFixed(1)}s</span>
+                <span>{stats.bitrate > 0 ? `${stats.bitrate}kbps` : '---'}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <button onClick={togglePlay}
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
+                style={{ background: isPlaying ? '#c9a227' : '#1c1d24', border: `2px solid ${isPlaying ? '#c9a227' : 'rgba(243,238,228,0.08)'}` }}>
+                {isPlaying ? <Pause className="w-4 h-4 text-[#1b1208]" /> : <Play className="w-4 h-4 text-[#c9a227] ml-0.5" />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <AudioBars active={isPlaying} />
+              </div>
+              <div data-volume-ctrl="1" className="relative shrink-0 flex flex-col items-center">
+                {/* Vertical slider popover */}
+                {showVolume && (
+                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pb-2 pt-3 px-2 rounded-xl bg-[#1c1d24] border border-[rgba(243,238,228,0.1)] shadow-xl z-30"
+                    style={{ height: 120 }}>
+                    <span className="text-[9px] font-mono text-[#9c958a]">{volume}</span>
+                    <input
+                      type="range" min={0} max={100} value={volume}
+                      onChange={e => setVolume(parseInt(e.target.value))}
+                      className="appearance-none cursor-pointer rounded-full"
+                      style={{
+                        writingMode: 'vertical-lr' as any,
+                        direction: 'rtl',
+                        width: 4,
+                        height: 72,
+                        background: `linear-gradient(to top, #c9a227 ${volume}%, rgba(243,238,228,0.08) ${volume}%)`,
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowVolume(v => !v)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+                  style={{ background: showVolume ? 'rgba(201,162,39,0.15)' : 'transparent' }}
+                  title={`Volume: ${volume}%`}
+                >
+                  <VolumeIcon className="w-3.5 h-3.5" style={{ color: showVolume ? '#c9a227' : '#9c958a' }} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

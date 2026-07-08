@@ -743,22 +743,34 @@ export default function RadioStudio({
 
   return (
     <div>
-      {/* Status Header */}
+      {/* Status Header with Thumbnail */}
       <div className="p-5 flex items-center justify-between flex-wrap gap-3"
         style={{ background: isLive ? 'var(--gold)' : 'var(--oxblood)', color: isLive ? '#1b1208' : 'var(--parchment)' }}>
         <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center"
-              style={{ background: isLive ? 'rgba(27,18,8,0.2)' : 'rgba(255,255,255,0.1)' }}>
-              <Radio className="w-6 h-6" />
+          {thumbnailUrl ? (
+            <div className="relative">
+              <img src={thumbnailUrl} alt={title} className="w-12 h-12 rounded-lg object-cover" />
+              {isLive && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#1b1208' }} />
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5" style={{ background: '#1b1208' }} />
+                </span>
+              )}
             </div>
-            {isLive && (
-              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#1b1208' }} />
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5" style={{ background: '#1b1208' }} />
-              </span>
-            )}
-          </div>
+          ) : (
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{ background: isLive ? 'rgba(27,18,8,0.2)' : 'rgba(255,255,255,0.1)' }}>
+                <Radio className="w-6 h-6" />
+              </div>
+              {isLive && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#1b1208' }} />
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5" style={{ background: '#1b1208' }} />
+                </span>
+              )}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <span className="px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide"

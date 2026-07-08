@@ -844,8 +844,8 @@ app.get('/broadcasts/active', async (req: TenantReq, res) => {
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.get('/broadcasts/:id', async (req, res) => {
-  try { await initDb(); const row = await dbGet('SELECT * FROM broadcasts WHERE id=$1', [req.params.id]); res.json({ broadcast: row }) }
+app.get('/broadcasts/:id', async (req: TenantReq, res) => {
+  try { await initDb(); const row = await dbGet('SELECT * FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId]); res.json({ broadcast: row }) }
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
@@ -855,43 +855,44 @@ app.post('/broadcasts', auth, requireRole('admin', 'broadcaster'), async (req: A
     const { title, description, scripture_reference, rtmp_url, stream_key, thumbnail_url, speaker } = req.body
     if (!title) { res.status(400).json({ error: 'Title is required' }); return }
     const id = uuidv4()
-    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url, rtmp_url, stream_key, thumbnail_url, speaker) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null, rtmp_url || null, stream_key || null, thumbnail_url || null, speaker || null])
+    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url, rtmp_url, stream_key, thumbnail_url, speaker, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null, rtmp_url || null, stream_key || null, thumbnail_url || null, speaker || null, req.tenantId])
     res.status(201).json({ id, title, status: 'scheduled', thumbnail_url, speaker })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/end', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
+app.patch('/broadcasts/:id/end', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1", [req.params.id])
+    await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/start', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
+app.patch('/broadcasts/:id/start', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    const broadcast = await dbGet('SELECT title FROM broadcasts WHERE id=$1', [req.params.id])
-    await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1", [req.params.id])
+    const broadcast = await dbGet('SELECT title FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
+    await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
     res.json({ success: true })
     // Notify subscribers asynchronously
     broadcastNotification('broadcast_live', broadcast?.title || 'Live Broadcast', 'A broadcast is now live on ZioniteFM', `/live/${req.params.id}`).catch(() => {})
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/pause', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
+app.patch('/broadcasts/:id/pause', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='paused' WHERE id=$1", [req.params.id])
+    await dbQuery("UPDATE broadcasts SET status='paused' WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.patch('/broadcasts/:id/resume', auth, requireRole('admin', 'broadcaster'), async (req, res) => {
+app.patch('/broadcasts/:id/resume', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1", [req.params.id])
+    await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
