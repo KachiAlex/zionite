@@ -149,7 +149,10 @@ export default function RadioStudio({
   const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
   const [uploadError, setUploadError] = useState('')
   const [micStream, setMicStream] = useState<MediaStream | null>(null)
-  const [monitorEnabled, setMonitorEnabled] = useState(true)
+  // Disable the local mix monitor by default on native mobile apps: the speaker
+  // is close to the mic and causes audible feedback/echo for listeners.
+  const isNativePlatform = typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.()
+  const [monitorEnabled, setMonitorEnabled] = useState(!isNativePlatform)
   const monitorEnabledRef = useRef(monitorEnabled)
   const [monitorVolume, setMonitorVolume] = useState(60)
   const mixMonitorAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -340,9 +343,15 @@ export default function RadioStudio({
     mixerCtxRef.current = ctx
     const dest = ctx.createMediaStreamDestination()
     mixerDestRef.current = dest
+    // High-pass filter removes low-frequency handling/rumble noise common on mobile mics
+    const hpf = ctx.createBiquadFilter()
+    hpf.type = 'highpass'
+    hpf.frequency.value = 80
+    hpf.connect(dest)
+
     const micG = ctx.createGain()
     micG.gain.value = micGain / 100
-    micG.connect(dest)
+    micG.connect(hpf)
     micGainNodeRef.current = micG
     const musG = ctx.createGain()
     musG.gain.value = musicVolume / 100

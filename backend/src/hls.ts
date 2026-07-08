@@ -195,6 +195,9 @@ function doStart(blsId: string) {
     '-b:a', '128k',
     '-ar', '44100',
     '-ac', '2',
+
+    // Audio cleanup: remove low rumble / high hiss and normalize loudness
+    '-af', 'highpass=f=80,lowpass=f=12000,loudnorm=I=-16:LRA=11:TP=-1.5',
     '-bufsize', '256k',
 
     // HLS output
