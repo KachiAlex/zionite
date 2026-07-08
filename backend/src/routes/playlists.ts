@@ -1,36 +1,36 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { db, initDb } from '../db.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req: any, res) => {
   try {
     await initDb()
-    const rows = await db.all('SELECT * FROM playlists ORDER BY created_at DESC')
+    const rows = await db.all('SELECT * FROM playlists WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId])
     res.json({ playlists: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/', authenticateToken, requireRole('admin'), async (req: AuthenticatedRequest, res) => {
   try {
     await initDb()
     const { title, description, repeat_mode, shuffle } = req.body
     if (!title) { res.status(400).json({ error: 'Title required' }); return }
     const id = uuidv4()
     await db.run(
-      `INSERT INTO playlists (id, title, description, repeat_mode, shuffle) VALUES ($1,$2,$3,$4,$5)`,
-      [id, title, description || null, repeat_mode || 'none', !!shuffle]
+      `INSERT INTO playlists (id, title, description, repeat_mode, shuffle, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, title, description || null, repeat_mode || 'none', !!shuffle, req.tenantId]
     )
     res.status(201).json({ id, title })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-router.get('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.get('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    const playlist = await db.get('SELECT * FROM playlists WHERE id = $1', [req.params.id])
+    const playlist = await db.get('SELECT * FROM playlists WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
     if (!playlist) { res.status(404).json({ error: 'Playlist not found' }); return }
     const items = await db.all(
       `SELECT pi.*, COALESCE(s.title, m.title) as content_title, COALESCE(s.speaker, m.artist) as content_speaker
@@ -79,10 +79,10 @@ router.delete('/:playlistId/items/:itemId', authenticateToken, requireRole('admi
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    await db.run('DELETE FROM playlists WHERE id = $1', [req.params.id])
+    await db.run('DELETE FROM playlists WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
     res.json({ ok: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })

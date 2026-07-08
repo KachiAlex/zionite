@@ -3,7 +3,7 @@ import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import { db, initDb } from '../db.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
 import { getRadioStatus } from '../sermon-radio.js'
 
 const router = Router()
@@ -17,14 +17,14 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } })
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: any, res) => {
   try {
     await initDb()
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined
     const query = limit
-      ? 'SELECT * FROM sermons ORDER BY date DESC LIMIT $1'
-      : 'SELECT * FROM sermons ORDER BY date DESC'
-    const sermons = limit ? await db.all(query, [limit]) : await db.all(query)
+      ? 'SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT $2'
+      : 'SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC'
+    const sermons = limit ? await db.all(query, [req.tenantId, limit]) : await db.all(query, [req.tenantId])
     res.json({ sermons })
   } catch (err: any) {
     console.error('[SERMONS] list error:', err.message)
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), async (req, res) => {
+router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), async (req: AuthenticatedRequest, res) => {
   try {
     await initDb()
     const { title, description, scripture_reference, speaker, series, date, duration, video_url, thumbnail_url } = req.body
@@ -44,10 +44,10 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
     const audioUrl = audioFile ? `/uploads/${audioFile.filename}` : (req.body.audio_url || '')
     const thumbnailUrl = thumbnailFile ? `/uploads/${thumbnailFile.filename}` : (thumbnail_url || '')
     await db.run(
-      `INSERT INTO sermons (id, title, description, scripture_reference, speaker, series, audio_url, video_url, thumbnail_url, date, duration)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO sermons (id, title, description, scripture_reference, speaker, series, audio_url, video_url, thumbnail_url, date, duration, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [id, title, description || null, scripture_reference || null, speaker || null, series || null,
-       audioUrl || null, video_url || null, thumbnailUrl || null, date || new Date().toISOString().split('T')[0], duration ? parseInt(duration, 10) : null]
+       audioUrl || null, video_url || null, thumbnailUrl || null, date || new Date().toISOString().split('T')[0], duration ? parseInt(duration, 10) : null, req.tenantId]
     )
     res.json({ sermon: { id, title, description, scripture_reference, speaker, series, audio_url: audioUrl, video_url, thumbnail_url: thumbnailUrl, date, duration } })
   } catch (err: any) {
@@ -57,14 +57,15 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
 })
 
 // Featured sermons
-router.get('/featured', async (req, res) => {
+router.get('/featured', async (req: any, res) => {
   try {
     await initDb()
     let rows = await db.all(
-      `SELECT * FROM sermons WHERE is_featured = TRUE ORDER BY date DESC`
+      `SELECT * FROM sermons WHERE tenant_id=$1 AND is_featured = TRUE ORDER BY date DESC`,
+      [req.tenantId]
     )
     if (!rows || rows.length === 0) {
-      rows = await db.all(`SELECT * FROM sermons ORDER BY date DESC LIMIT 4`)
+      rows = await db.all(`SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT 4`, [req.tenantId])
     }
     res.json({ sermons: rows })
   } catch (err: any) {
@@ -72,16 +73,16 @@ router.get('/featured', async (req, res) => {
   }
 })
 
-router.post('/featured', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/featured', authenticateToken, requireRole('admin'), async (req: AuthenticatedRequest, res) => {
   try {
     await initDb()
     const { sermon_id, display_order } = req.body
     if (!sermon_id) return res.status(400).json({ error: 'sermon_id required' })
     const id = uuidv4()
     await db.run(
-      `INSERT INTO featured_sermons (id, sermon_id, display_order) VALUES ($1, $2, $3)
+      `INSERT INTO featured_sermons (id, sermon_id, display_order, tenant_id) VALUES ($1, $2, $3, $4)
        ON CONFLICT (sermon_id) DO UPDATE SET display_order = EXCLUDED.display_order`,
-      [id, sermon_id, display_order || 0]
+      [id, sermon_id, display_order || 0, req.tenantId]
     )
     res.json({ ok: true })
   } catch (err: any) {
@@ -140,7 +141,7 @@ router.post('/:id/transcript', authenticateToken, requireRole('admin'), async (r
   }
 })
 
-router.get('/radio/current', async (_req, res) => {
+router.get('/radio/current', async (req: any, res) => {
   try {
     await initDb()
     const now = new Date()
@@ -158,11 +159,12 @@ router.get('/radio/current', async (_req, res) => {
        FROM radio_schedules rs
        JOIN playlists p ON p.id = rs.playlist_id
        WHERE rs.is_active = TRUE AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
+         AND p.tenant_id = $2
        ORDER BY rs.start_time DESC LIMIT 1`,
-      [now.toISOString()]
+      [now.toISOString(), req.tenantId]
     )
     if (!schedule) {
-      const latest = await db.get('SELECT * FROM sermons ORDER BY date DESC LIMIT 1')
+      const latest = await db.get('SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT 1', [req.tenantId])
       res.json({
         current: latest ? { title: latest.title, speaker: latest.speaker, audioUrl: latest.audio_url, thumbnailUrl: latest.thumbnail_url, scriptureReference: latest.scripture_reference, offsetSeconds: 0 } : null,
         playlist: null,

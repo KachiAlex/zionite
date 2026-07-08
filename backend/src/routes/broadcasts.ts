@@ -29,19 +29,19 @@ const uploadRecording = multer({
 
 const router = Router()
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: any, res) => {
   try {
     await initDb()
     const { date, status } = req.query
-    const params: any[] = []
-    let where = ''
+    const params: any[] = [req.tenantId]
+    let where = ' WHERE tenant_id=$1'
 
     if (date && typeof date === 'string') {
-      where += " WHERE DATE(COALESCE(started_at, created_at)) = DATE($1)"
+      where += " AND DATE(COALESCE(started_at, created_at)) = DATE($2)"
       params.push(date)
     }
     if (status && typeof status === 'string') {
-      where += where ? ' AND status=$2' : ' WHERE status=$1'
+      where += ` AND status=$${params.length + 1}`
       params.push(status)
     }
 
@@ -53,20 +53,22 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.get('/active', async (req, res) => {
+router.get('/active', async (req: any, res) => {
   try {
     await initDb()
-    let broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' ORDER BY started_at DESC LIMIT 1")
+    let broadcast = await db.get("SELECT * FROM broadcasts WHERE status = 'live' AND tenant_id=$1 ORDER BY started_at DESC LIMIT 1", [req.tenantId])
     // Fallback: if chunks are flowing but no broadcast record exists (mobile broadcaster
     // may send chunks via WebSocket without creating a DB record), synthesize one.
     if (!broadcast) {
       const recentChunk = await db.get(
-        `SELECT broadcast_id, MAX(created_at) as last_chunk_at FROM stream_chunks
-         WHERE created_at > NOW() - INTERVAL '5 minutes'
-         GROUP BY broadcast_id ORDER BY last_chunk_at DESC LIMIT 1`
+        `SELECT sc.broadcast_id, MAX(sc.created_at) as last_chunk_at FROM stream_chunks sc
+         JOIN broadcasts b ON b.id = sc.broadcast_id
+         WHERE sc.created_at > NOW() - INTERVAL '5 minutes' AND b.tenant_id=$1
+         GROUP BY sc.broadcast_id ORDER BY last_chunk_at DESC LIMIT 1`,
+        [req.tenantId]
       )
       if (recentChunk) {
-        broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [recentChunk.broadcast_id])
+        broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [recentChunk.broadcast_id, req.tenantId])
         if (!broadcast) {
           broadcast = {
             id: recentChunk.broadcast_id,
@@ -96,10 +98,10 @@ router.get('/active', async (req, res) => {
   }
 })
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: any, res) => {
   try {
     await initDb()
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [req.params.id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     res.json({ broadcast })
   } catch (err: any) {
@@ -116,9 +118,9 @@ router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (
 
     const id = uuidv4()
     await db.run(
-      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key, created_at)
-       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
-      [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null, church_online_url || null, rtmp_url || null, stream_key || null]
+      `INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key, created_at, tenant_id)
+       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, $11)`,
+      [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null, church_online_url || null, rtmp_url || null, stream_key || null, req.tenantId]
     )
     res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user!.id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key })
   } catch (err: any) {
@@ -139,15 +141,15 @@ router.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'adm
   }
 })
 
-router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [id]
+      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id=$2",
+      [id, req.tenantId]
     )
     stopHlsBroadcast(id)
     await resumeRadioAfterBroadcast()
@@ -158,15 +160,15 @@ router.post('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), 
   }
 })
 
-router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [id]
+      "UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id=$2",
+      [id, req.tenantId]
     )
     await pauseRadioForBroadcast()
     enqueueNotification({
@@ -183,15 +185,15 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
   }
 })
 
-router.patch('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+router.patch('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'paused' WHERE id = $1",
-      [id]
+      "UPDATE broadcasts SET status = 'paused' WHERE id = $1 AND tenant_id=$2",
+      [id, req.tenantId]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -200,15 +202,15 @@ router.patch('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin'
   }
 })
 
-router.patch('/:id/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+router.patch('/:id/resume', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'live' WHERE id = $1",
-      [id]
+      "UPDATE broadcasts SET status = 'live' WHERE id = $1 AND tenant_id=$2",
+      [id, req.tenantId]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -217,15 +219,15 @@ router.patch('/:id/resume', authenticateToken, requireRole('broadcaster', 'admin
   }
 })
 
-router.patch('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req, res) => {
+router.patch('/:id/end', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [id]
+      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id=$2",
+      [id, req.tenantId]
     )
     stopHlsBroadcast(id)
     await resumeRadioAfterBroadcast()
@@ -300,11 +302,11 @@ router.patch('/:id/recording', authenticateToken, requireRole('broadcaster', 'ad
   }
 })
 
-router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res) => {
+router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id=$1', [id])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id=$1 AND tenant_id=$2', [id, req.tenantId])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
 
     // Prevent deleting a live broadcast without ending it first
@@ -328,7 +330,7 @@ router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), as
     await db.run('DELETE FROM chat_messages WHERE broadcast_id=$1', [id])
     await db.run('DELETE FROM stream_chunks WHERE broadcast_id=$1', [id])
     await db.run('DELETE FROM stream_listeners WHERE broadcast_id=$1', [id])
-    await db.run('DELETE FROM broadcasts WHERE id=$1', [id])
+    await db.run('DELETE FROM broadcasts WHERE id=$1 AND tenant_id=$2', [id, req.tenantId])
 
     res.json({ success: true })
   } catch (err: any) {
