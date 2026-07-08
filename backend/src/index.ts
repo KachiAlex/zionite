@@ -43,6 +43,7 @@ const ALLOWED_ORIGINS = [
   'https://www.zionite.online',
   'https://zionite.online',
   'https://zionite.fly.dev',
+  'https://zionite.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
   'https://localhost',
