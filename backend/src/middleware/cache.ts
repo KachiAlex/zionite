@@ -5,6 +5,8 @@ const cache = new Map<string, { data: any; expiry: number }>()
 export function cacheMiddleware(durationMs: number = 60000) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET') { next(); return }
+    // Skip caching for real-time/live endpoints
+    if (req.url.endsWith('/active') || req.url.includes('/stream/') && req.url.endsWith('/info')) { next(); return }
     const key = req.originalUrl || req.url
     const hit = cache.get(key)
     if (hit && Date.now() < hit.expiry) {

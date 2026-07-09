@@ -130,18 +130,14 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     lastTimeRef.current = 0
     stallCountRef.current = 0
 
-    // Confirm the broadcaster is actually streaming before starting hls.js,
-    // so listeners don't see a 404 on the manifest while waiting.
+    // Hint from hls-status, but don't block the user tap. We still attempt HLS
+    // immediately because the status check can lag behind the actual manifest.
     try {
       const res = await fetch(`${STREAM_BASE}/api/stream/${broadcastId}/hls-status`, { method: 'GET' })
       if (res.ok) {
         const status = await res.json()
         if (!status.hlsActive) {
-          console.warn('[HLS] Broadcaster not streaming yet')
-          setStarted(false)
-          setStatusText('Broadcaster offline')
-          startRetryPoll()
-          return
+          console.warn('[HLS] hls-status reports not ready yet, but trying HLS anyway')
         }
       }
     } catch (err: any) {
