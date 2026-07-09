@@ -114,9 +114,16 @@ export function initWebSocket(httpServer: HttpServer) {
       const { broadcastId, chunkIndex, chunkData } = payload
       try {
         await initDb()
+        console.log(`[WS] broadcast_chunk ${broadcastId} idx=${chunkIndex} userId=${userId} tenantId=${tenantId}`)
         // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [broadcastId, tenantId])
+        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
+          console.warn(`[WS] broadcast_chunk ${broadcastId}: not found`)
+          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          return
+        }
+        if (broadcast.tenant_id !== tenantId) {
+          console.warn(`[WS] broadcast_chunk ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
           socket.emit('error', { message: 'Broadcast not found or access denied' })
           return
         }
@@ -146,9 +153,15 @@ export function initWebSocket(httpServer: HttpServer) {
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       try {
         await initDb()
-        // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [broadcastId, tenantId])
+        console.log(`[WS] start_broadcast_hls ${broadcastId} userId=${userId} tenantId=${tenantId}`)
+        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
+          console.warn(`[WS] start_broadcast_hls ${broadcastId}: not found`)
+          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          return
+        }
+        if (broadcast.tenant_id !== tenantId) {
+          console.warn(`[WS] start_broadcast_hls ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
           socket.emit('error', { message: 'Broadcast not found or access denied' })
           return
         }
@@ -166,9 +179,15 @@ export function initWebSocket(httpServer: HttpServer) {
     socket.on('end_broadcast_hls', async (broadcastId: string) => {
       try {
         await initDb()
-        // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [broadcastId, tenantId])
+        console.log(`[WS] end_broadcast_hls ${broadcastId} userId=${userId} tenantId=${tenantId}`)
+        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
+          console.warn(`[WS] end_broadcast_hls ${broadcastId}: not found`)
+          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          return
+        }
+        if (broadcast.tenant_id !== tenantId) {
+          console.warn(`[WS] end_broadcast_hls ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
           socket.emit('error', { message: 'Broadcast not found or access denied' })
           return
         }

@@ -438,7 +438,12 @@ export default function RadioStudio({
   async function startStreaming() {
     try {
       // Connect socket for real-time chunk relay
-      const socket = io(SOCKET_BASE, { path: '/socket.io', transports: ['websocket', 'polling'] })
+      const token = localStorage.getItem('token')
+      const socket = io(SOCKET_BASE, {
+        path: '/socket.io',
+        transports: ['websocket', 'polling'],
+        auth: token ? { token } : undefined
+      })
       socketRef.current = socket
       socket.on('connect', () => {
         if (broadcastId) {
