@@ -226,8 +226,6 @@ export default function RadioStudio({
         noiseSuppression: true,
         autoGainControl: true,
         voiceIsolation: true,
-        sampleRate: { ideal: 48000 },
-        channelCount: { ideal: 1 },
         echoCancellationType: { ideal: 'system' },
       } as any
     })
@@ -462,8 +460,6 @@ export default function RadioStudio({
           noiseSuppression: true,
           autoGainControl: true,
           voiceIsolation: true,
-          sampleRate: { ideal: 48000 },
-          channelCount: { ideal: 1 },
           echoCancellationType: { ideal: 'system' },
         } as any
       })
