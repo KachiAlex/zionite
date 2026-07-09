@@ -29,11 +29,13 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
     const decoded = jwt.verify(token, JWT_SECRET) as any
     req.user = decoded
     // Set tenantId from JWT token for mobile app requests
-    if (decoded.tenantId && !req.tenantId) {
+    if (decoded.tenantId) {
       req.tenantId = decoded.tenantId
     }
+    console.log('[AUTH] authenticated user:', { id: decoded.id, email: decoded.email, role: decoded.role, tenantId: req.tenantId })
     next()
-  } catch {
+  } catch (err: any) {
+    console.error('[AUTH] token verification failed:', err.message)
     res.status(403).json({ error: 'Invalid or expired token' })
   }
 }

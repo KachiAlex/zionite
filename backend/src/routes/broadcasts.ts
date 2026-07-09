@@ -114,6 +114,7 @@ router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (
   try {
     await initDb()
     const { title, description, scripture_reference, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key } = req.body
+    console.log('[BROADCASTS] create request:', { title, tenantId: req.tenantId, userId: req.user?.id })
     if (!title) { res.status(400).json({ error: 'Title is required' }); return }
 
     const id = uuidv4()
@@ -122,6 +123,7 @@ router.post('/', authenticateToken, requireRole('broadcaster', 'admin'), async (
        VALUES ($1, $2, $3, $4, 'scheduled', $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, $11)`,
       [id, title, description || null, scripture_reference || null, req.user!.id, thumbnail_url || null, speaker || null, church_online_url || null, rtmp_url || null, stream_key || null, req.tenantId]
     )
+    console.log('[BROADCASTS] created broadcast:', { id, tenantId: req.tenantId })
     res.json({ id, title, description, scripture_reference, status: 'scheduled', broadcaster_id: req.user!.id, thumbnail_url, speaker, church_online_url, rtmp_url, stream_key })
   } catch (err: any) {
     console.error('[BROADCASTS] create error:', err.message)
@@ -164,7 +166,9 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
   try {
     await initDb()
     const { id } = req.params
+    console.log('[BROADCASTS] start request:', { id, tenantId: req.tenantId, userId: req.user?.id })
     const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
+    console.log('[BROADCASTS] broadcast found:', !!broadcast)
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
       "UPDATE broadcasts SET status = 'live', started_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id=$2",

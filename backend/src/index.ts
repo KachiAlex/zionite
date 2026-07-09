@@ -29,8 +29,10 @@ import musicRoutes from './routes/music.js'
 import tenantRoutes from './routes/tenants.js'
 import licensePlanRoutes from './routes/license-plans.js'
 import { cacheMiddleware } from './middleware/cache.js'
-import { resolveTenant, JWT_SECRET } from './middleware/auth.js'
+import { resolveTenant, JWT_SECRET, authenticateToken, requireRole } from './middleware/auth.js'
+import { optimizeImage } from './middleware/optimizeImage.js'
 import jwt from 'jsonwebtoken'
+import multer from 'multer'
 
 // Sentry init
 if (process.env.SENTRY_DSN) {
@@ -127,8 +129,28 @@ app.get('/debug', (_req, res) => {
   })
 })
 
+const uploadImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    cb(null, allowed.includes(file.mimetype))
+  }
+})
+
 // API routes
 app.use('/auth', authRoutes)
+app.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'admin'), uploadImage.single('image'), optimizeImage, async (req: any, res) => {
+  try {
+    if (!req.file) { res.status(400).json({ error: 'Image file required' }); return }
+    const base64 = req.file.buffer.toString('base64')
+    const image_url = `data:${req.file.mimetype};base64,${base64}`
+    res.json({ image_url })
+  } catch (err: any) {
+    console.error('[UPLOADS] image upload error:', err.message)
+    res.status(500).json({ error: 'Failed to upload image' })
+  }
+})
 app.use('/broadcasts', cacheMiddleware(30000), broadcastRoutes)
 app.use('/sermons', cacheMiddleware(60000), sermonRoutes)
 app.use('/schedule', scheduleRoutes)

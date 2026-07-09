@@ -369,7 +369,7 @@ export default function RadioStudio({
     return { ctx, dest, micGain: micG, musicGain: musG }
   }
 
-  // Route music to the device's local speakers ONLY when the full mix monitor is
+  // Route music to the device's local speakers when the full mix monitor is
   // off. When monitoring is on, the monitor already plays the mixed audio (mic +
   // soundtrack), so routing music directly to ctx.destination would make the
   // soundtrack audible twice and create an echo/duplication.
@@ -377,11 +377,7 @@ export default function RadioStudio({
     const musG = musicGainNodeRef.current
     const ctx = mixerCtxRef.current
     if (!musG || !ctx) return
-    // On native mobile apps, never route the soundtrack to the device speaker;
-    // the mic is right next to the speaker and the soundtrack feeds back into
-    // the broadcast as echo. The broadcaster can enable the full mix monitor
-    // with headphones, or rely on the web preview.
-    const routeToLocal = !isNativePlatform && !monitorEnabledRef.current
+    const routeToLocal = !monitorEnabledRef.current
     if (routeToLocal && !musicLocalConnectedRef.current) {
       musG.connect(ctx.destination)
       musicLocalConnectedRef.current = true
