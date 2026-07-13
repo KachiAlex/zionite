@@ -1,0 +1,54 @@
+name: Migrate Cloudinary to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      table:
+        description: 'Table to migrate (music, sermons, events, guest_speakers, or all)'
+        required: true
+        default: 'all'
+      limit:
+        description: 'Maximum number of Cloudinary records to migrate (0 = unlimited)'
+        required: true
+        default: '0'
+      delete_after:
+        description: 'Delete Cloudinary assets after successful migration'
+        required: true
+        default: 'true'
+        type: boolean
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Run migration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          # NODE_OPTIONS: --openssl-legacy-provider
+        run: |
+          cd backend
+          npx tsx scripts/migrate-cloudinary-to-r2.ts \
+            --table=${{ github.event.inputs.table }} \
+            --limit=${{ github.event.inputs.limit }} \
+            ${{ github.event.inputs.delete_after == 'true' && '--delete-after' || '' }}
