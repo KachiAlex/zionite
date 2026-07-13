@@ -47,20 +47,13 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
     return 'Failed to add sermon'
   }
 
-  async function uploadToCloudinary(file: File, folder: string): Promise<string> {
-    const { data: sig } = await axios.get(`${API_BASE}/api/music/signature?folder=${folder}`, {
+  async function uploadToR2(file: File, folder: string): Promise<string> {
+    const { data: presigned } = await axios.get(`${API_BASE}/api/music/upload-url?folder=${folder}&contentType=${encodeURIComponent(file.type || 'application/octet-stream')}&ext=${(file.name.split('.').pop() || 'bin')}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('api_key', sig.apiKey)
-    fd.append('timestamp', sig.timestamp)
-    fd.append('signature', sig.signature)
-    fd.append('folder', sig.folder)
-    const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
-    const up = await res.json()
-    if (!res.ok) throw new Error(up.error?.message || 'Cloudinary upload failed')
-    return up.secure_url
+    const res = await fetch(presigned.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } })
+    if (!res.ok) throw new Error('R2 upload failed')
+    return presigned.publicUrl
   }
 
   async function toggleFeatured(s: Sermon) {
@@ -119,7 +112,7 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
       let thumbnail_url = editForm.thumbnail_url
       if (editThumbnailFile) {
         setEditStep('Uploading thumbnail...')
-        thumbnail_url = await uploadToCloudinary(editThumbnailFile, 'zionite/sermons/thumbnails')
+        thumbnail_url = await uploadToR2(editThumbnailFile, 'zionite/sermons/thumbnails')
       }
       setEditStep('Saving...')
       await axios.patch(`${API_BASE}/api/sermons/${editingSermon.id}`, {
@@ -169,13 +162,13 @@ export default function SermonManager({ sermons, onRefresh }: { sermons: Sermon[
       let thumbnailUrl = ''
 
       if (mode === 'audio' && audioFile) {
-        setUploadStep('Uploading audio to Cloudinary...')
-        audioUrl = await uploadToCloudinary(audioFile, 'zionite/sermons/audio')
+        setUploadStep('Uploading audio to R2...')
+        audioUrl = await uploadToR2(audioFile, 'zionite/sermons/audio')
       }
 
       if (thumbnailFile) {
-        setUploadStep('Uploading thumbnail to Cloudinary...')
-        thumbnailUrl = await uploadToCloudinary(thumbnailFile, 'zionite/sermons/thumbnails')
+        setUploadStep('Uploading thumbnail to R2...')
+        thumbnailUrl = await uploadToR2(thumbnailFile, 'zionite/sermons/thumbnails')
       }
 
       setUploadStep('Saving sermon...')

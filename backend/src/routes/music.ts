@@ -1,25 +1,10 @@
 import { Router } from 'express'
-import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { db, dbWriteSafe, initDb } from '../db.js'
-import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
+import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { getPresignedUploadUrl, r2Configured, deleteFile, extractKeyFromUrl } from '../lib/r2.js'
 
 const router = Router()
-
-function parseCloudinaryUrl() {
-  const url = process.env.CLOUDINARY_URL || ''
-  const match = url.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/)
-  if (!match) return null
-  return { apiKey: match[1], apiSecret: match[2], cloudName: match[3] }
-}
-
-const cloudConfig = parseCloudinaryUrl()
-
-function generateCloudinarySignature(folder: string, timestamp: number) {
-  if (!cloudConfig) return null
-  const paramsToSign = `folder=${folder}&timestamp=${timestamp}${cloudConfig.apiSecret}`
-  return crypto.createHash('sha1').update(paramsToSign).digest('hex')
-}
 
 router.get('/', async (req: any, res) => {
   try {
@@ -35,26 +20,39 @@ router.get('/', async (req: any, res) => {
   }
 })
 
-router.get('/signature', authenticateToken, requireRole('admin'), (req: any, res) => {
-  if (!cloudConfig) {
-    res.status(500).json({ error: 'Cloudinary not configured' })
-    return
+router.get('/upload-url', authenticateToken, requireRole('admin'), async (req: any, res) => {
+  try {
+    if (!r2Configured) {
+      res.status(500).json({ error: 'R2 storage not configured' })
+      return
+    }
+    const folder = (req.query.folder as string) || 'zionite/uploads'
+    const contentType = (req.query.contentType as string) || 'application/octet-stream'
+    const ext = (req.query.ext as string) || undefined
+    const { uploadUrl, publicUrl, key } = await getPresignedUploadUrl(folder, contentType, ext)
+    res.json({ uploadUrl, publicUrl, key })
+  } catch (err: any) {
+    console.error('[MUSIC] presigned URL error:', err.message)
+    res.status(500).json({ error: err.message || 'Failed to generate upload URL' })
   }
-  const folder = (req.query.folder as string) || 'zionite/uploads'
-  const timestamp = Math.round(Date.now() / 1000)
-  const signature = generateCloudinarySignature(folder, timestamp)
-  if (!signature) {
-    res.status(500).json({ error: 'Failed to generate upload signature' })
-    return
+})
+
+// Legacy endpoint name kept for backward compatibility during transition
+router.get('/signature', authenticateToken, requireRole('admin'), async (req: any, res) => {
+  try {
+    if (!r2Configured) {
+      res.status(500).json({ error: 'R2 storage not configured' })
+      return
+    }
+    const folder = (req.query.folder as string) || 'zionite/uploads'
+    const contentType = (req.query.contentType as string) || 'application/octet-stream'
+    const ext = (req.query.ext as string) || undefined
+    const { uploadUrl, publicUrl, key } = await getPresignedUploadUrl(folder, contentType, ext)
+    res.json({ uploadUrl, publicUrl, key })
+  } catch (err: any) {
+    console.error('[MUSIC] signature error:', err.message)
+    res.status(500).json({ error: err.message || 'Failed to generate upload URL' })
   }
-  res.json({
-    signature,
-    timestamp,
-    apiKey: cloudConfig.apiKey,
-    cloudName: cloudConfig.cloudName,
-    folder,
-    uploadUrl: `https://api.cloudinary.com/v1_1/${cloudConfig.cloudName}/auto/upload`
-  })
 })
 
 router.post('/', authenticateToken, requireRole('admin'), async (req: any, res) => {
@@ -79,8 +77,15 @@ router.post('/', authenticateToken, requireRole('admin'), async (req: any, res) 
 router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    const track = await db.get(`SELECT id FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    const track = await db.get(`SELECT id, audio_url, cover_url FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
     if (!track) { res.status(404).json({ error: 'Track not found' }); return }
+    // Delete files from R2
+    for (const url of [track.audio_url, track.cover_url]) {
+      if (url) {
+        const key = extractKeyFromUrl(url)
+        if (key) await deleteFile(key).catch(() => {})
+      }
+    }
     await dbWriteSafe(`DELETE FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
     res.json({ success: true })
   } catch (err: any) {

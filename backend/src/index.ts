@@ -5,6 +5,9 @@ import rateLimit from 'express-rate-limit'
 import * as Sentry from '@sentry/node'
 import path from 'path'
 import fs from 'fs'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
+import { r2Configured, getClient } from './lib/r2.js'
+import { Readable } from 'stream'
 import authRoutes from './routes/auth.js'
 import broadcastRoutes from './routes/broadcasts.js'
 import sermonRoutes from './routes/sermons.js'
@@ -200,6 +203,28 @@ app.use('/live', (req: Request, res: Response, next: NextFunction) => {
 if (process.env.SENTRY_DSN) {
   app.use(Sentry.expressErrorHandler() as any)
 }
+
+// R2 file proxy (serves files from R2 when no public CDN URL is configured)
+app.get('/r2-files/*', async (req: Request, res: Response) => {
+  if (!r2Configured) { res.status(404).json({ error: 'R2 not configured' }); return }
+  const key = req.path.replace(/^\/r2-files\//, '')
+  if (!key) { res.status(400).end(); return }
+  try {
+    const response = await getClient().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET || 'zionite', Key: key }))
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    if (response.ContentType) res.setHeader('Content-Type', response.ContentType)
+    if (response.ContentLength) res.setHeader('Content-Length', response.ContentLength.toString())
+    if (response.Body instanceof Readable) {
+      (response.Body as Readable).pipe(res)
+    } else {
+      res.end()
+    }
+  } catch (err: any) {
+    console.error('[R2] file proxy error:', err.message)
+    res.status(404).json({ error: 'File not found' })
+  }
+})
 
 // 404
 app.use((_req, res) => {

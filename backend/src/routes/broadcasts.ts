@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
-import { v2 as cloudinary } from 'cloudinary'
 import { db, initDb } from '../db.js'
+import { uploadBuffer, deleteFile, extractKeyFromUrl } from '../lib/r2.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
 import { optimizeImage } from '../middleware/optimizeImage.js'
 import { pauseRadioForBroadcast, resumeRadioAfterBroadcast } from '../sermon-radio.js'
@@ -258,15 +258,7 @@ router.post('/:id/recording', authenticateToken, requireRole('broadcaster', 'adm
   try {
     if (!req.file) { res.status(400).json({ error: 'Recording file required' }); return }
     await initDb()
-    const recording_url = await new Promise<string>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: 'zionite/broadcasts', resource_type: 'video', tags: ['broadcast_recording'] },
-        (err, result) => {
-          if (err || !result) reject(err || new Error('Upload failed'))
-          else resolve(result.secure_url)
-        }
-      ).end(req.file!.buffer)
-    })
+    const recording_url = await uploadBuffer(req.file.buffer, 'zionite/broadcasts', req.file.mimetype)
     await db.run(`UPDATE broadcasts SET recording_url=$1, recorded_at=NOW() WHERE id=$2`, [recording_url, req.params.id])
     res.json({ recording_url })
   } catch (err: any) {
@@ -318,13 +310,11 @@ router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), as
       res.status(400).json({ error: 'Cannot delete a live broadcast. End it first.' }); return
     }
 
-    // Delete associated recording from Cloudinary if present
+    // Delete associated recording from R2 if present
     if (broadcast.recording_url) {
       try {
-        const match = broadcast.recording_url.match(/\/upload\/v\d+\/(.+?)\.webm/)
-        if (match?.[1]) {
-          await cloudinary.uploader.destroy(match[1], { resource_type: 'video' })
-        }
+        const key = extractKeyFromUrl(broadcast.recording_url)
+        if (key) await deleteFile(key)
       } catch (e: any) {
         console.warn('[BROADCASTS] delete recording warning:', e.message)
       }

@@ -60,41 +60,27 @@ export default function MusicManager({ music, onRefresh }: { music: MusicTrack[]
       let audioUrl = form.audio_url
       let coverUrl = ''
 
-      // ── Step 1: Upload files directly to Cloudinary (signed) ──
-      // Use fetch (not axios) so the global Authorization header isn't sent to Cloudinary
+      // ── Step 1: Upload files directly to R2 via presigned URL ──
+      // Use fetch (not axios) so the global Authorization header isn't sent to R2
       if (file) {
-        const { data: sig } = await axios.get(`${API_BASE}/api/music/signature?folder=zionite/music/audio`, {
+        const { data: presigned } = await axios.get(`${API_BASE}/api/music/upload-url?folder=zionite/music/audio&contentType=${encodeURIComponent(file.type || 'audio/mpeg')}&ext=${(file.name.split('.').pop() || 'mp3')}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('api_key', sig.apiKey)
-        fd.append('timestamp', sig.timestamp)
-        fd.append('signature', sig.signature)
-        fd.append('folder', sig.folder)
-        const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
-        const up = await res.json()
-        if (!res.ok) throw new Error(up.error?.message || 'Cloudinary audio upload failed')
-        audioUrl = up.secure_url
+        const res = await fetch(presigned.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'audio/mpeg' } })
+        if (!res.ok) throw new Error('R2 audio upload failed')
+        audioUrl = presigned.publicUrl
       }
 
       if (coverFile) {
-        const { data: sig } = await axios.get(`${API_BASE}/api/music/signature?folder=zionite/music/covers`, {
+        const { data: presigned } = await axios.get(`${API_BASE}/api/music/upload-url?folder=zionite/music/covers&contentType=${encodeURIComponent(coverFile.type || 'image/jpeg')}&ext=${(coverFile.name.split('.').pop() || 'jpg')}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        const fd = new FormData()
-        fd.append('file', coverFile)
-        fd.append('api_key', sig.apiKey)
-        fd.append('timestamp', sig.timestamp)
-        fd.append('signature', sig.signature)
-        fd.append('folder', sig.folder)
-        const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
-        const up = await res.json()
-        if (!res.ok) throw new Error(up.error?.message || 'Cloudinary cover upload failed')
-        coverUrl = up.secure_url
+        const res = await fetch(presigned.uploadUrl, { method: 'PUT', body: coverFile, headers: { 'Content-Type': coverFile.type || 'image/jpeg' } })
+        if (!res.ok) throw new Error('R2 cover upload failed')
+        coverUrl = presigned.publicUrl
       }
 
-      // ── Step 2: Save metadata + Cloudinary URLs to backend ──
+      // ── Step 2: Save metadata + R2 URLs to backend ──
       await axios.post(`${API_BASE}/api/music`, {
         title: form.title,
         artist: form.artist,

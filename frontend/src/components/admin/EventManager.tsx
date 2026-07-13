@@ -89,20 +89,13 @@ export default function EventManager() {
     setViewRsvps(null)
   }
 
-  async function uploadToCloudinary(file: File): Promise<string> {
-    const { data: sig } = await axios.get(`${API_BASE}/api/music/signature?folder=events`, {
+  async function uploadToR2(file: File): Promise<string> {
+    const { data: presigned } = await axios.get(`${API_BASE}/api/music/upload-url?folder=events&contentType=${encodeURIComponent(file.type || 'image/jpeg')}&ext=${(file.name.split('.').pop() || 'jpg')}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('api_key', sig.apiKey)
-    fd.append('timestamp', sig.timestamp)
-    fd.append('signature', sig.signature)
-    fd.append('folder', sig.folder)
-    const res = await fetch(sig.uploadUrl, { method: 'POST', body: fd })
-    const up = await res.json()
-    if (!res.ok) throw new Error(up.error?.message || 'Cloudinary upload failed')
-    return up.secure_url
+    const res = await fetch(presigned.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'image/jpeg' } })
+    if (!res.ok) throw new Error('R2 upload failed')
+    return presigned.publicUrl
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -113,7 +106,7 @@ export default function EventManager() {
       let imageUrl = form.image_url
       if (imageFile) {
         setUploadStep('Uploading image...')
-        imageUrl = await uploadToCloudinary(imageFile)
+        imageUrl = await uploadToR2(imageFile)
       }
       const payload = { ...form, image_url: imageUrl }
       if (editingId) {
