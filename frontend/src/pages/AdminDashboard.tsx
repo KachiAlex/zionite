@@ -218,7 +218,7 @@ export default function AdminDashboard() {
       <SL t="Broadcast Management"/>
       <SB label="Live Broadcast" tab="broadcasts" icon={Radio}/>
       <SB label="Sermon Radio" tab="radio" icon={Headphones}/>
-      <SB label="Auto DJ" tab="music" icon={Music}/>
+      <SB label="Music Publishing" tab="music" icon={Music}/>
       <SB label="Stream Analytics" tab="dashboard" icon={BarChart3}/>
       <SL t="Community"/>
       <SB label="Chat Moderation" tab="chat" icon={MessageSquare} badge={chatMessages.length}/>
