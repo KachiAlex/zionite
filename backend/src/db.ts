@@ -202,6 +202,18 @@ const SCHEMA_QUERIES = [
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS live_broadcast_push BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS live_broadcast_email BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS sermon_radio_push BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS sermon_radio_email BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS daily_verse_push BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS daily_verse_email BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS events_push BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS events_email BOOLEAN DEFAULT TRUE`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+  `ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
   `CREATE TABLE IF NOT EXISTS notification_log (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
