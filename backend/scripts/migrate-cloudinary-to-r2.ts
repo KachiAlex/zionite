@@ -1,7 +1,12 @@
 import 'dotenv/config'
 import { v2 as cloudinary } from 'cloudinary'
+import { execSync } from 'child_process'
+import * as os from 'os'
+import * as fs from 'fs'
+import * as path from 'path'
 import { db } from '../src/db.js'
-import { uploadBuffer, r2Configured } from '../src/lib/r2.js'
+import { getPresignedUploadUrl, r2Configured } from '../src/lib/r2.js'
+import { v4 as uuidv4 } from 'uuid'
 
 function parseCloudinaryUrl(): { cloudName: string; apiKey: string; apiSecret: string } | null {
   const url = process.env.CLOUDINARY_URL || ''
@@ -57,6 +62,22 @@ async function fetchFile(url: string): Promise<{ buffer: Buffer; contentType: st
   return { buffer: Buffer.from(arrayBuffer), contentType }
 }
 
+async function uploadViaCurl(buffer: Buffer, folder: string, contentType: string): Promise<string> {
+  const ext = contentType.split('/')[1]?.split(';')[0] || 'bin'
+  const { uploadUrl, publicUrl } = await getPresignedUploadUrl(folder, contentType, ext)
+  const tmpFile = path.join(os.tmpdir(), `migrate-${uuidv4()}.tmp`)
+  fs.writeFileSync(tmpFile, buffer)
+  try {
+    execSync(
+      `curl -s -f -X PUT -H "Content-Type: ${contentType}" --data-binary @${tmpFile} "${uploadUrl}"`,
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    )
+  } finally {
+    fs.unlinkSync(tmpFile)
+  }
+  return publicUrl
+}
+
 interface MigrationConfig {
   table: string
   columns: string[]
@@ -96,7 +117,7 @@ async function migrateRecord(
     console.log(`[MIGRATE] ${table}.${column} id=${id}`)
     const { buffer, contentType } = await fetchFile(url)
     const folder = folderForUrl(url, column)
-    const newUrl = await uploadBuffer(buffer, folder, contentType)
+    const newUrl = await uploadViaCurl(buffer, folder, contentType)
 
     await db.run(`UPDATE ${table} SET ${column}=$1 WHERE id=$2`, [newUrl, id])
     report.migrated++
