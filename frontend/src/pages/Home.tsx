@@ -6,7 +6,7 @@ import { useAuth } from "../contexts/AuthContext"
 import { usePageTitle } from "../hooks/usePageTitle"
 import { useAudioPlayer } from "../contexts/AudioPlayerContext"
 import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents, useRadioCurrent, useStopRadio, API_BASE } from "../lib/api"
-import type { Sermon, MusicTrack } from "../lib/api"
+import type { Sermon, MusicTrack, EventItem } from "../lib/api"
 import { useTenantContext } from "../contexts/TenantContext"
 import StructuredData from "../components/StructuredData"
 import {
@@ -418,8 +418,8 @@ export default function Home() {
                 {sermons.length > 0 ? (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                      {sermons.slice(0, 2).map(s => <SermonCard key={s.id} s={s} />)}
-                      {sermons.slice(2, 4).map(s => (
+                      {sermons.slice(0, 2).map((s: Sermon) => <SermonCard key={s.id} s={s} />)}
+                      {sermons.slice(2, 4).map((s: Sermon) => (
                         <div key={s.id} className="hidden md:block"><SermonCard s={s} /></div>
                       ))}
                     </div>
@@ -442,7 +442,7 @@ export default function Home() {
                 <SectionHeader title="Featured Music" action="View All" to="/music" />
                 {musicTracks.length > 0 ? (
                   <div className="flex flex-wrap gap-3">
-                    {musicTracks.slice(0, 2).map(t => <MusicCard key={t.id} track={t} />)}
+                    {musicTracks.slice(0, 2).map((t: MusicTrack) => <MusicCard key={t.id} track={t} />)}
                   </div>
                 ) : (
                   <div className="text-center py-6">
@@ -536,7 +536,7 @@ export default function Home() {
               <SectionHeader title="Upcoming Events" action="View All" to="/events" />
               {events.length > 0 ? (
                 <div className="space-y-3">
-                  {events.slice(0, 3).map(evt => (
+                  {events.slice(0, 3).map((evt: EventItem) => (
                     <Link key={evt.id} to={`/events/${evt.id}`} className="flex items-start gap-3 group no-underline">
                       {evt.image_url ? (
                         <img src={evt.image_url} alt={`${evt.title} event`} loading="lazy" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 transition-transform group-hover:scale-105" />

@@ -62,20 +62,50 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     ? queue[shuffleOn ? shuffleIndices[shufflePos] : originalIndex]
     : null
 
-  const trackPlay = useCallback((track: Track) => {
+  const activePlayIdRef = useRef<string | null>(null)
+  const playStartRef = useRef<number>(0)
+
+  const trackPlay = useCallback(async (track: Track) => {
     if (!track.trackType) return
     const endpoint = track.trackType === 'music' ? `${API_BASE}/api/music/${track.id}/play` : `${API_BASE}/api/sermons/${track.id}/play`
-    fetch(endpoint, { method: 'POST' }).catch(() => {})
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'web' })
+      })
+      if (track.trackType === 'music' && res.ok) {
+        const data = await res.json()
+        activePlayIdRef.current = data.playId || null
+        playStartRef.current = Date.now()
+      }
+    } catch {}
+  }, [])
+
+  const trackPlayEnd = useCallback((track: Track) => {
+    if (track.trackType !== 'music' || !activePlayIdRef.current) return
+    const elapsed = Math.round((Date.now() - playStartRef.current) / 1000)
+    const completed = elapsed >= (audioRef.current?.duration || 0) - 5
+    fetch(`${API_BASE}/api/music/${track.id}/play`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playId: activePlayIdRef.current, duration_played: elapsed, completed })
+    }).catch(() => {})
+    activePlayIdRef.current = null
   }, [])
 
   const loadAndPlay = useCallback((track: Track) => {
     if (audioRef.current) {
+      // Record play end for previous track if switching
+      if (currentTrack && currentTrack.id !== track.id) {
+        trackPlayEnd(currentTrack)
+      }
       audioRef.current.src = track.audioUrl
       audioRef.current.play().catch(() => setIsPlaying(false))
       setIsPlaying(true)
       trackPlay(track)
     }
-  }, [trackPlay])
+  }, [trackPlay, trackPlayEnd, currentTrack])
 
   const playTrack = useCallback((track: Track) => {
     setQueue([track])
@@ -162,13 +192,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }, [isPlaying, currentTrack])
 
   const stop = useCallback(() => {
+    if (currentTrack) trackPlayEnd(currentTrack)
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
     setIsPlaying(false)
     setProgress(0)
-  }, [])
+  }, [currentTrack, trackPlayEnd])
 
   const setVolume = useCallback((v: number) => {
     setVolumeState(v)
@@ -191,7 +222,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current
     const onTime = () => setProgress(audio.currentTime)
     const onLoaded = () => setDuration(audio.duration || 0)
-    const onEnd = () => nextRef.current()
+    const onEnd = () => {
+      if (currentTrack) trackPlayEnd(currentTrack)
+      nextRef.current()
+    }
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('loadedmetadata', onLoaded)
     audio.addEventListener('ended', onEnd)
@@ -199,6 +233,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('timeupdate', onTime)
       audio.removeEventListener('loadedmetadata', onLoaded)
       audio.removeEventListener('ended', onEnd)
+      if (currentTrack) trackPlayEnd(currentTrack)
     }
   }, [currentTrack])
 

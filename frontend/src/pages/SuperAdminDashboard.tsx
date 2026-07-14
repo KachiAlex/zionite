@@ -5,7 +5,7 @@ import { useTenant } from '../lib/api'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Users, Globe, Plus, Check, X, ArrowLeft, KeyRound, Shield, Calendar, UserPlus, Layers, CreditCard, Tag, DollarSign, Eye, EyeOff, Trash2, Settings2 } from 'lucide-react'
+import { Building2, Users, Globe, Plus, Check, X, ArrowLeft, KeyRound, Shield, Calendar, UserPlus, Layers, CreditCard, DollarSign, Trash2, Settings2 } from 'lucide-react'
 
 interface TenantForm {
   slug: string

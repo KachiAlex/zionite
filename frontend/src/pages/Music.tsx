@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -6,7 +7,7 @@ import { useAudioPlayer } from '../contexts/AudioPlayerContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import {
   Music, Play, Pause, Loader2, Disc3, Search, Share2, Download,
-  Shuffle, Heart, ListMusic, Headphones
+  Shuffle, Heart, ListMusic, Headphones, ArrowLeft, Clock, TrendingUp
 } from 'lucide-react'
 import { downloadWithTags } from '../lib/downloadWithTags'
 
@@ -25,6 +26,8 @@ interface Track {
 
 export default function MusicPage() {
   usePageTitle('Music Library')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const trackId = searchParams.get('track')
   const { currentTrack, isPlaying, playTrack: globalPlayTrack, togglePlay, playQueue, shuffle, toggleShuffle } = useAudioPlayer()
   const { isFavorite, toggleFavorite } = useFavorites()
   const [tracks, setTracks] = useState<Track[]>([])
@@ -32,6 +35,9 @@ export default function MusicPage() {
   const [showLyrics, setShowLyrics] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'favorites'>('all')
+  const [detailTrack, setDetailTrack] = useState<any>(null)
+  const [relatedTracks, setRelatedTracks] = useState<any[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const favoriteIds = new Set(tracks.filter(t => isFavorite(t.id, 'music')).map(t => t.id))
 
@@ -47,6 +53,28 @@ export default function MusicPage() {
   useEffect(() => {
     fetchTracks()
   }, [])
+
+  useEffect(() => {
+    if (trackId) {
+      fetchTrackDetail(trackId)
+    } else {
+      setDetailTrack(null)
+      setRelatedTracks([])
+    }
+  }, [trackId])
+
+  async function fetchTrackDetail(id: string) {
+    setDetailLoading(true)
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/music/${id}`)
+      setDetailTrack(data.track)
+      setRelatedTracks(data.related || [])
+    } catch {
+      setDetailTrack(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
 
   async function fetchTracks() {
     try {
@@ -128,10 +156,146 @@ export default function MusicPage() {
     }
   }
 
+  function formatDuration(seconds: number) {
+    if (!seconds) return '--:--'
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
   return (
     <div className="min-h-screen pb-32" style={{ background: 'var(--ink)', color: 'var(--parchment)' }}>
       <div className="max-w-5xl mx-auto px-6 py-8 lg:py-12">
-        {/* Header */}
+        {/* Track Detail View (shareable link) */}
+        {trackId && (
+          <div className="mb-8">
+            <button
+              onClick={() => setSearchParams({})}
+              className="flex items-center gap-2 text-sm mb-6 transition-colors hover:opacity-70"
+              style={{ color: 'var(--dim)' }}
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to Music Library
+            </button>
+
+            {detailLoading ? (
+              <div className="text-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto" style={{ color: 'var(--gold)' }} />
+              </div>
+            ) : detailTrack ? (
+              <div className="rounded-2xl p-6 lg:p-8" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
+                <div className="flex flex-col sm:flex-row gap-6">
+                  <div className="w-48 h-48 rounded-2xl overflow-hidden shrink-0 mx-auto sm:mx-0" style={{ background: 'var(--ink)' }}>
+                    {detailTrack.cover_url ? (
+                      <img src={detailTrack.cover_url} alt={detailTrack.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Music className="w-16 h-16" style={{ color: 'var(--line)' }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center text-center sm:text-left">
+                    <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: 'Cormorant Garamond, Georgia, serif' }}>
+                      {detailTrack.title}
+                    </h1>
+                    <p className="text-lg mb-1" style={{ color: 'var(--dim)' }}>
+                      {detailTrack.artist || 'Unknown artist'}
+                    </p>
+                    {detailTrack.album && (
+                      <p className="text-sm mb-3" style={{ color: 'var(--dim)' }}>{detailTrack.album}</p>
+                    )}
+                    <div className="flex items-center justify-center sm:justify-start gap-4 text-xs mb-4" style={{ color: 'var(--dim)' }}>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(detailTrack.duration)}</span>
+                      <span className="flex items-center gap-1"><Headphones className="w-3 h-3" /> {(detailTrack.play_count || 0).toLocaleString()} plays</span>
+                      {detailTrack.genre && <span className="flex items-center gap-1"><Music className="w-3 h-3" /> {detailTrack.genre}</span>}
+                    </div>
+                    <div className="flex items-center justify-center sm:justify-start gap-3">
+                      <button
+                        onClick={() => handlePlay(detailTrack)}
+                        className="btn-gold flex items-center gap-2"
+                      >
+                        {currentTrack?.id === detailTrack.id && isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                        {currentTrack?.id === detailTrack.id && isPlaying ? 'Pause' : 'Play'}
+                      </button>
+                      <button
+                        onClick={() => handleShare(detailTrack)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-colors"
+                        style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--dim)' }}
+                      >
+                        <Share2 className="w-4 h-4" /> Share
+                      </button>
+                      <button
+                        onClick={() => handleDownload(detailTrack)}
+                        disabled={downloadingId === detailTrack.id}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-colors disabled:opacity-60"
+                        style={{ background: 'var(--ink)', border: '1px solid var(--line)', color: 'var(--dim)' }}
+                      >
+                        {downloadingId === detailTrack.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {detailTrack.lyrics && (
+                  <div className="mt-6">
+                    <button
+                      onClick={() => setShowLyrics(showLyrics === detailTrack.id ? null : detailTrack.id)}
+                      className="text-sm underline"
+                      style={{ color: 'var(--gold)' }}
+                    >
+                      {showLyrics === detailTrack.id ? 'Hide lyrics' : 'Show lyrics'}
+                    </button>
+                    {showLyrics === detailTrack.id && (
+                      <pre className="text-sm mt-3 whitespace-pre-wrap" style={{ color: 'var(--dim)' }}>
+                        {detailTrack.lyrics}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
+                {relatedTracks.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm">
+                      <TrendingUp className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Related Tracks
+                    </h3>
+                    <div className="space-y-2">
+                      {relatedTracks.map((rt: any) => (
+                        <div
+                          key={rt.id}
+                          onClick={() => setSearchParams({ track: rt.id })}
+                          className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors hover:opacity-80"
+                          style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}
+                        >
+                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0" style={{ background: 'var(--ink-2)' }}>
+                            {rt.cover_url ? (
+                              <img src={rt.cover_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Music className="w-4 h-4" style={{ color: 'var(--line)' }} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{rt.title}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--dim)' }}>{rt.artist || 'Unknown'}</p>
+                          </div>
+                          <span className="text-xs" style={{ color: 'var(--dim)' }}>{formatDuration(rt.duration)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-20">
+                <Music className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--line)' }} />
+                <p style={{ color: 'var(--dim)' }}>Track not found</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Header (hidden in detail view) */}
+        {!trackId && (
         <div className="text-center mb-10">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--gold)' }}>
             <Disc3 className="w-8 h-8" style={{ color: '#1b1208' }} />
@@ -143,8 +307,10 @@ export default function MusicPage() {
             Stream worship music and gospel tracks
           </p>
         </div>
+        )}
 
-        {/* Search + filters */}
+        {/* Search + filters (hidden in detail view) */}
+        {!trackId && (
         <div className="flex flex-col sm:flex-row items-center gap-3 mb-6 max-w-2xl mx-auto">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--dim)' }} />
@@ -168,9 +334,10 @@ export default function MusicPage() {
             </button>
           </div>
         </div>
+        )}
 
-        {/* Play controls */}
-        {!loading && filtered.length > 0 && (
+        {/* Play controls (hidden in detail view) */}
+        {!trackId && !loading && filtered.length > 0 && (
           <div className="flex items-center justify-center gap-3 mb-8">
             <button onClick={handlePlayAll} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors"
               style={{ background: 'var(--gold)', color: '#1b1208' }}>
@@ -183,8 +350,8 @@ export default function MusicPage() {
           </div>
         )}
 
-        {/* Tracks grid */}
-        {loading ? (
+        {/* Tracks grid (hidden in detail view) */}
+        {!trackId && (loading ? (
           <div className="text-center py-20">
             <Loader2 className="w-8 h-8 animate-spin mx-auto" style={{ color: 'var(--gold)' }} />
           </div>
@@ -280,7 +447,7 @@ export default function MusicPage() {
               </div>
             ))}
           </div>
-        )}
+        ))}
       </div>
 
     </div>

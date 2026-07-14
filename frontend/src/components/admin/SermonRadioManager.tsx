@@ -30,6 +30,7 @@ export default function SermonRadioManager({ onRefresh }: { onRefresh?: () => vo
   const { data: radioStatus } = useRadioStatus()
   const pauseRadioMutation = usePauseRadio()
   const resumeRadioMutation = useResumeRadio()
+  void pauseRadioMutation; void resumeRadioMutation
   const isRadioPlaying = !!radioStatus?.status
   const [itemForm, setItemForm] = useState({ content_type: 'sermon', content_id: '', order_index: 0, duration_minutes: 30 })
   const [addingItem, setAddingItem] = useState(false)

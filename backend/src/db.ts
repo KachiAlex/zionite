@@ -142,6 +142,25 @@ const SCHEMA_QUERIES = [
     file_format TEXT, file_size INTEGER, play_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
   `ALTER TABLE music ADD COLUMN IF NOT EXISTS play_count INTEGER DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS music_plays (
+    id TEXT PRIMARY KEY,
+    track_id TEXT NOT NULL,
+    user_id TEXT,
+    session_id TEXT,
+    duration_played INTEGER DEFAULT 0,
+    completed BOOLEAN DEFAULT FALSE,
+    platform TEXT DEFAULT 'web',
+    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_music_plays_track ON music_plays (track_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_music_plays_played_at ON music_plays (played_at)`,
+  `CREATE TABLE IF NOT EXISTS music_share_clicks (
+    id TEXT PRIMARY KEY,
+    track_id TEXT NOT NULL,
+    referrer TEXT,
+    opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_music_share_clicks_track ON music_share_clicks (track_id)`,
   `ALTER TABLE radio_state ADD COLUMN IF NOT EXISTS manual_stop BOOLEAN DEFAULT FALSE`,
   `ALTER TABLE radio_state ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT FALSE`,
   `CREATE TABLE IF NOT EXISTS stream_chunks (
@@ -263,7 +282,8 @@ async function _initTenantSchema() {
     'events','event_rsvps','testimonies','campaigns','newsletter_subscribers',
     'push_subscriptions','webauthn_credentials','fcm_tokens',
     'notification_preferences','notification_log','notification_queue','spiritual_health',
-    'playlists','playlist_items','radio_schedules','radio_state','daily_verses'
+    'playlists','playlist_items','radio_schedules','radio_state','daily_verses',
+    'music_plays','music_share_clicks'
   ]
   for (const tbl of tablesNeedingTenant) {
     try { await db.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS tenant_id TEXT`) } catch {}

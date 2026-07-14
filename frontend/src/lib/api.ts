@@ -73,7 +73,7 @@ export function useActiveBroadcast() {
       return data.broadcast as Broadcast | null
     },
     retry: 1,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
     refetchInterval: 8000,
     staleTime: 5000,
   })
@@ -189,7 +189,7 @@ export function useChatMessages(broadcastId?: string) {
     const path = broadcastId ? `/chat/broadcast/${broadcastId}` : '/chat/general'
     const { data } = await api.get(path)
     return data.messages
-  }, refetchInterval: 8000, enabled: !!broadcastId, retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000) })
+  }, refetchInterval: 8000, enabled: !!broadcastId, retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000) })
 }
 
 export function useSearch(q: string) {

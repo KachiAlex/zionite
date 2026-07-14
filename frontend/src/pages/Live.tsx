@@ -189,8 +189,6 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         levelLoadingMaxRetry: 20,
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetry: 20,
-        // Recover automatically from non-fatal media stalls
-        recoverMediaError: true,
         // Be lenient with live stream durations and gaps
         liveDurationInfinity: true,
       })

@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useBroadcasts, useSermons, useUsers, usePrayers, useMusic, useDashboardAnalytics , API_BASE } from '../lib/api'
+import type { Broadcast, User } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
 
   /* ── Live broadcast duration timer ── */
   useEffect(() => {
-    const live = broadcasts.find(b => b.status === 'live')
+    const live = broadcasts.find((b: Broadcast) => b.status === 'live')
     if (!live?.started_at) { setLiveElapsed(0); return }
     const start = new Date(live.started_at).getTime()
     setLiveElapsed(Math.floor((Date.now() - start) / 1000))
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
 
   // Fetch geo data for live broadcast
   useEffect(() => {
-    const live = broadcasts.find(b => b.status === 'live')
+    const live = broadcasts.find((b: Broadcast) => b.status === 'live')
     if (!live) { setGeoData({ byCountry: [], locations: [] }); return }
     const token = localStorage.getItem('token')
     const fetchGeo = async () => {
@@ -146,7 +147,7 @@ export default function AdminDashboard() {
 
   /* ── Broadcast control helpers ── */
   async function endLiveBroadcast() {
-    const live = broadcasts.find(b => b.status === 'live')
+    const live = broadcasts.find((b: Broadcast) => b.status === 'live')
     if (!live) return
     setBcActionLoading(true)
     try {
@@ -161,7 +162,7 @@ export default function AdminDashboard() {
   }
 
   async function pauseLiveBroadcast() {
-    const live = broadcasts.find(b => b.status === 'live')
+    const live = broadcasts.find((b: Broadcast) => b.status === 'live')
     if (!live) return
     setBcActionLoading(true)
     try {
@@ -195,7 +196,7 @@ export default function AdminDashboard() {
       </div>
       {!sidebarCollapsed && (
         <>
-          {broadcasts.some(b => b.status === 'live') && (
+          {broadcasts.some((b: Broadcast) => b.status === 'live') && (
             <div className="mb-3 p-2 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/30 flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ef4444] opacity-75" />
@@ -302,7 +303,7 @@ export default function AdminDashboard() {
                 })}
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-                {(()=>{const live=broadcasts.find(b=>b.status==='live');return(
+                {(()=>{const live=broadcasts.find((b: Broadcast)=>b.status==='live');return(
                 <div className="lg:col-span-5 p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-semibold text-white tracking-wide">LIVE BROADCAST CONTROL</h3>
@@ -572,7 +573,7 @@ export default function AdminDashboard() {
                 <div className="p-8 text-center"><Users className="w-8 h-8 mx-auto mb-3 text-[rgba(243,238,228,0.1)]"/><p className="text-xs text-[#9c958a]">No users yet</p></div>
               ):null}
               <div className="space-y-1">
-                {users.map(u=>u?(
+                {users.map((u: User)=>u?(
                   <div key={u.id} className="px-4 py-3 rounded-lg flex items-center justify-between hover:bg-[rgba(243,238,228,0.03)] transition-colors">
                     <div><p className="text-xs font-medium text-white">{u.name||u.email}</p><p className="text-[10px] text-[#9c958a] mt-0.5">{u.email}</p></div>
                     <select value={u.role} onChange={e=>updateUserRole(u.id,e.target.value)} className="text-xs rounded-md px-2.5 py-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-[#f3eee4] outline-none">
