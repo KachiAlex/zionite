@@ -12,10 +12,9 @@ on:
         required: true
         default: '0'
       delete_after:
-        description: 'Delete Cloudinary assets after successful migration'
+        description: 'Delete Cloudinary assets after successful migration (true/false)'
         required: true
-        default: 'true'
-        type: boolean
+        default: 'false'
 
 jobs:
   migrate:
@@ -28,8 +27,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
         run: |
@@ -48,7 +45,6 @@ jobs:
           # NODE_OPTIONS: --openssl-legacy-provider
         run: |
           cd backend
-          npx tsx scripts/migrate-cloudinary-to-r2.ts \
-            --table=${{ github.event.inputs.table }} \
-            --limit=${{ github.event.inputs.limit }} \
-            ${{ github.event.inputs.delete_after == 'true' && '--delete-after' || '' }}
+          ARGS="--table=${{ github.event.inputs.table }} --limit=${{ github.event.inputs.limit }}"
+          if [ "${{ github.event.inputs.delete_after }}" = "true" ]; then ARGS="$ARGS --delete-after"; fi
+          npx tsx scripts/migrate-cloudinary-to-r2.ts $ARGS
