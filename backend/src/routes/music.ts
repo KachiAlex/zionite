@@ -20,36 +20,6 @@ router.get('/', async (req: any, res) => {
   }
 })
 
-// Public track detail (for shareable links — no auth required)
-router.get('/:id', async (req: any, res) => {
-  try {
-    await initDb()
-    const track = await db.get(
-      `SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, play_count, created_at FROM music WHERE id=$1`,
-      [req.params.id]
-    )
-    if (!track) { res.status(404).json({ error: 'Track not found' }); return }
-
-    // Record share click
-    const referrer = req.headers.referer || req.headers.referrer || null
-    await dbWriteSafe(
-      `INSERT INTO music_share_clicks (id, track_id, referrer, tenant_id) VALUES ($1, $2, $3, $4)`,
-      [uuidv4(), req.params.id, referrer as any, req.tenantId || null]
-    ).catch(() => {})
-
-    // Get related tracks (same genre, exclude current)
-    const related = await db.all(
-      `SELECT id, title, artist, cover_url, duration FROM music WHERE genre=$1 AND id != $2 ORDER BY play_count DESC LIMIT 5`,
-      [track.genre, req.params.id]
-    ).catch(() => [])
-
-    res.json({ track, related })
-  } catch (err: any) {
-    console.error('[MUSIC] detail error:', err.message)
-    res.status(500).json({ error: 'Failed to fetch track' })
-  }
-})
-
 router.get('/upload-url', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     if (!r2Configured) {
@@ -104,68 +74,7 @@ router.post('/', authenticateToken, requireRole('admin'), async (req: any, res) 
   }
 })
 
-// Record play start — creates a music_plays row
-router.post('/:id/play', async (req: any, res) => {
-  try {
-    await initDb()
-    const { session_id, platform } = req.body
-    const playId = uuidv4()
-    const userId = (req as any).user?.id || null
-    const sessionId = session_id || (req.headers['x-session-id'] as string) || null
-
-    await dbWriteSafe(
-      `INSERT INTO music_plays (id, track_id, user_id, session_id, platform, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [playId, req.params.id, userId, sessionId, platform || 'web', req.tenantId || null]
-    )
-    await dbWriteSafe(
-      `UPDATE music SET play_count = COALESCE(play_count, 0) + 1 WHERE id = $1`,
-      [req.params.id]
-    )
-    res.json({ playId })
-  } catch (err: any) {
-    console.error('[MUSIC] play error:', err.message)
-    res.status(500).json({ error: 'Failed to record play' })
-  }
-})
-
-// Update play session on pause/stop/switch — records duration played
-router.patch('/:id/play', async (req: any, res) => {
-  try {
-    await initDb()
-    const { playId, duration_played, completed } = req.body
-    if (!playId) { res.status(400).json({ error: 'playId required' }); return }
-
-    await dbWriteSafe(
-      `UPDATE music_plays SET duration_played = $1, completed = $2 WHERE id = $3`,
-      [parseInt(duration_played) || 0, !!completed, playId]
-    )
-    res.json({ ok: true })
-  } catch (err: any) {
-    console.error('[MUSIC] play update error:', err.message)
-    res.status(500).json({ error: 'Failed to update play session' })
-  }
-})
-
-router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
-  try {
-    await initDb()
-    const track = await db.get(`SELECT id, audio_url, cover_url FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
-    if (!track) { res.status(404).json({ error: 'Track not found' }); return }
-    for (const url of [track.audio_url, track.cover_url]) {
-      if (url) {
-        const key = extractKeyFromUrl(url)
-        if (key) await deleteFile(key).catch(() => {})
-      }
-    }
-    await dbWriteSafe(`DELETE FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
-    res.json({ success: true })
-  } catch (err: any) {
-    console.error('[MUSIC] delete error:', err.message)
-    res.status(500).json({ error: 'Failed to delete track' })
-  }
-})
-
-// ── Analytics endpoints ──
+// ── Analytics endpoints (static paths before /:id) ──
 
 // Admin: overview analytics for all music
 router.get('/analytics/overview', authenticateToken, requireRole('admin'), async (req: any, res) => {
@@ -289,6 +198,97 @@ router.get('/:id/analytics', authenticateToken, requireRole('admin'), async (req
   } catch (err: any) {
     console.error('[MUSIC] track analytics error:', err.message)
     res.status(500).json({ error: 'Failed to fetch track analytics' })
+  }
+})
+
+// Public track detail (for shareable links — no auth required)
+router.get('/:id', async (req: any, res) => {
+  try {
+    await initDb()
+    const track = await db.get(
+      `SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, play_count, created_at FROM music WHERE id=$1`,
+      [req.params.id]
+    )
+    if (!track) { res.status(404).json({ error: 'Track not found' }); return }
+
+    // Record share click
+    const referrer = req.headers.referer || req.headers.referrer || null
+    await dbWriteSafe(
+      `INSERT INTO music_share_clicks (id, track_id, referrer, tenant_id) VALUES ($1, $2, $3, $4)`,
+      [uuidv4(), req.params.id, referrer as any, req.tenantId || null]
+    ).catch(() => {})
+
+    // Get related tracks (same genre, exclude current)
+    const related = await db.all(
+      `SELECT id, title, artist, cover_url, duration FROM music WHERE genre=$1 AND id != $2 ORDER BY play_count DESC LIMIT 5`,
+      [track.genre, req.params.id]
+    ).catch(() => [])
+
+    res.json({ track, related })
+  } catch (err: any) {
+    console.error('[MUSIC] detail error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch track' })
+  }
+})
+
+// Record play start — creates a music_plays row
+router.post('/:id/play', async (req: any, res) => {
+  try {
+    await initDb()
+    const { session_id, platform } = req.body
+    const playId = uuidv4()
+    const userId = (req as any).user?.id || null
+    const sessionId = session_id || (req.headers['x-session-id'] as string) || null
+
+    await dbWriteSafe(
+      `INSERT INTO music_plays (id, track_id, user_id, session_id, platform, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [playId, req.params.id, userId, sessionId, platform || 'web', req.tenantId || null]
+    )
+    await dbWriteSafe(
+      `UPDATE music SET play_count = COALESCE(play_count, 0) + 1 WHERE id = $1`,
+      [req.params.id]
+    )
+    res.json({ playId })
+  } catch (err: any) {
+    console.error('[MUSIC] play error:', err.message)
+    res.status(500).json({ error: 'Failed to record play' })
+  }
+})
+
+// Update play session on pause/stop/switch — records duration played
+router.patch('/:id/play', async (req: any, res) => {
+  try {
+    await initDb()
+    const { playId, duration_played, completed } = req.body
+    if (!playId) { res.status(400).json({ error: 'playId required' }); return }
+
+    await dbWriteSafe(
+      `UPDATE music_plays SET duration_played = $1, completed = $2 WHERE id = $3`,
+      [parseInt(duration_played) || 0, !!completed, playId]
+    )
+    res.json({ ok: true })
+  } catch (err: any) {
+    console.error('[MUSIC] play update error:', err.message)
+    res.status(500).json({ error: 'Failed to update play session' })
+  }
+})
+
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
+  try {
+    await initDb()
+    const track = await db.get(`SELECT id, audio_url, cover_url FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    if (!track) { res.status(404).json({ error: 'Track not found' }); return }
+    for (const url of [track.audio_url, track.cover_url]) {
+      if (url) {
+        const key = extractKeyFromUrl(url)
+        if (key) await deleteFile(key).catch(() => {})
+      }
+    }
+    await dbWriteSafe(`DELETE FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[MUSIC] delete error:', err.message)
+    res.status(500).json({ error: 'Failed to delete track' })
   }
 })
 
