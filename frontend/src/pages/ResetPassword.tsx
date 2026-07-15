@@ -1,9 +1,55 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ArrowLeft, Lock, CheckCircle, Radio, Loader2, Eye, EyeOff } from 'lucide-react'
+
+type PasswordFieldProps = {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  visible: boolean
+  setVisible: (v: boolean) => void
+  autoComplete?: string
+}
+
+const PasswordField = ({ id, label, value, onChange, visible, setVisible, autoComplete }: PasswordFieldProps) => {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value), [onChange])
+  const toggleVisible = useCallback(() => setVisible(!visible), [setVisible, visible])
+
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium mb-2">{label}</label>
+      <div className="relative">
+        <input
+          id={id}
+          name={id}
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={handleChange}
+          autoComplete={autoComplete || 'new-password'}
+          inputMode="text"
+          className="w-full rounded-xl px-4 py-3 text-sm border pr-10"
+          style={{ background: 'var(--ink)', borderColor: 'var(--line)', color: 'var(--parchment)' }}
+          placeholder={label}
+          required
+          minLength={6}
+        />
+        <button
+          type="button"
+          onClick={toggleVisible}
+          tabIndex={-1}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-parchment"
+          style={{ color: 'var(--dim)' }}>
+          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function ResetPassword() {
   usePageTitle('Reset Password')
@@ -38,35 +84,10 @@ export default function ResetPassword() {
     }
   }
 
-  const PasswordField = ({ id, label, value, onChange, visible, setVisible }: {
-    id: string
-    label: string
-    value: string
-    onChange: (v: string) => void
-    visible: boolean
-    setVisible: (v: boolean) => void
-  }) => (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium mb-2">{label}</label>
-      <div className="relative">
-        <input id={id} type={visible ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-xl px-4 py-3 text-sm border pr-10"
-          style={{ background: 'var(--ink)', borderColor: 'var(--line)', color: 'var(--parchment)' }}
-          placeholder={label} required minLength={6} />
-        <button type="button" onClick={() => setVisible(!visible)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 p-1" style={{ color: 'var(--dim)' }}>
-          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  )
-
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--ink)', color: 'var(--parchment)' }}>
       <header className="max-w-6xl mx-auto w-full px-6 py-6">
-        <Link to="/login" className="inline-flex items-center gap-2 text-sm no-underline transition-colors" style={{ color: 'var(--dim)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--parchment)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--dim)')}>
+        <Link to="/login" className="inline-flex items-center gap-2 text-sm no-underline transition-colors hover:opacity-80" style={{ color: 'var(--dim)' }}>
           <ArrowLeft className="w-4 h-4" /> Back to login
         </Link>
       </header>
@@ -94,8 +115,8 @@ export default function ResetPassword() {
                     style={{ background: 'rgba(220,38,38,0.08)', color: '#fca5a5', borderColor: 'rgba(220,38,38,0.15)' }}>{error}</div>
                 )}
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <PasswordField id="password" label="New Password" value={password} onChange={setPassword} visible={showPassword} setVisible={setShowPassword} />
-                  <PasswordField id="confirm" label="Confirm Password" value={confirm} onChange={setConfirm} visible={showConfirm} setVisible={setShowConfirm} />
+                  <PasswordField id="password" label="New Password" value={password} onChange={setPassword} visible={showPassword} setVisible={setShowPassword} autoComplete="new-password" />
+                  <PasswordField id="confirm" label="Confirm Password" value={confirm} onChange={setConfirm} visible={showConfirm} setVisible={setShowConfirm} autoComplete="new-password" />
                   <p className="text-xs" style={{ color: 'var(--dim)' }}>Password must be at least 6 characters with letters and numbers.</p>
                   <button type="submit" disabled={loading || !token}
                     className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-medium transition-colors disabled:opacity-60"

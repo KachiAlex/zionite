@@ -31,9 +31,7 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--ink)', color: 'var(--parchment)' }}>
       <header className="max-w-6xl mx-auto w-full px-6 py-6">
-        <Link to="/login" className="inline-flex items-center gap-2 text-sm no-underline transition-colors" style={{ color: 'var(--dim)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--parchment)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--dim)')}>
+        <Link to="/login" className="inline-flex items-center gap-2 text-sm no-underline transition-colors hover:opacity-80" style={{ color: 'var(--dim)' }}>
           <ArrowLeft className="w-4 h-4" /> Back to login
         </Link>
       </header>
