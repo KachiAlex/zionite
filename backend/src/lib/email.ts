@@ -2,18 +2,21 @@ import nodemailer from 'nodemailer'
 
 const BREVO_SMTP_KEY = process.env.BREVO_SMTP_KEY || ''
 const BREVO_SMTP_LOGIN = process.env.BREVO_SMTP_LOGIN || ''
-const BREVO_SMTP_HOST = process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com'
-const BREVO_SMTP_PORT = parseInt(process.env.BREVO_SMTP_PORT || '587', 10)
+const SMTP_HOST = process.env.SMTP_HOST || process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com'
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || process.env.BREVO_SMTP_PORT || '587', 10)
+const SMTP_USER = process.env.SMTP_USER || BREVO_SMTP_LOGIN || ''
+const SMTP_PASS = process.env.SMTP_PASS || BREVO_SMTP_KEY || ''
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@zionite.online'
 const FROM_NAME = process.env.FROM_NAME || 'ZioniteFM'
 
 const transporter = nodemailer.createTransport({
-  host: BREVO_SMTP_HOST,
-  port: BREVO_SMTP_PORT,
-  secure: BREVO_SMTP_PORT === 465,
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_SECURE,
   auth: {
-    user: BREVO_SMTP_LOGIN,
-    pass: BREVO_SMTP_KEY,
+    user: SMTP_USER,
+    pass: SMTP_PASS,
   },
 })
 
@@ -71,8 +74,8 @@ export async function sendEmail({ to, toName, subject, htmlContent, textContent 
   htmlContent: string
   textContent?: string
 }) {
-  if (!BREVO_SMTP_KEY || !BREVO_SMTP_LOGIN) {
-    console.error('[EMAIL] Brevo SMTP credentials not configured')
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.error('[EMAIL] SMTP credentials not configured (set SMTP_USER/SMTP_PASS or BREVO_SMTP_LOGIN/BREVO_SMTP_KEY)')
     throw new Error('Email service not configured')
   }
 
