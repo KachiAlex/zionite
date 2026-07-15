@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { ArrowLeft, Mail, CheckCircle, Radio } from 'lucide-react'
+import { ArrowLeft, Mail, CheckCircle, Radio, Loader2 } from 'lucide-react'
 
 export default function ForgotPassword() {
   usePageTitle('Forgot Password')
@@ -15,13 +15,14 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!email.includes('@')) { setError('Please enter a valid email'); return }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) { setError('Please enter a valid email address'); return }
     setLoading(true)
     try {
       await axios.post(`${API_BASE}/api/auth/forgot-password`, { email }, { timeout: 15000 })
       setSent(true)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send reset email')
+      setError(err.response?.data?.error || 'Failed to send reset email. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -42,15 +43,16 @@ export default function ForgotPassword() {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--gold)' }}>
               <Radio className="w-8 h-8" style={{ color: '#1b1208' }} />
             </div>
-            <h1 className="text-2xl font-bold" style={{ fontFamily: 'Cormorant Garamond, Georgia, serif' }}>Reset Password</h1>
-            <p className="mt-2 text-sm" style={{ color: 'var(--dim)' }}>Enter your email and we'll send you a link</p>
+            <h1 className="text-2xl font-bold" style={{ fontFamily: 'Cormorant Garamond, Georgia, serif' }}>Forgot Password?</h1>
+            <p className="mt-2 text-sm" style={{ color: 'var(--dim)' }}>Enter your email and we'll send you a reset link</p>
           </div>
           <div className="p-4 sm:p-8 rounded-2xl" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}>
             {sent ? (
               <div className="text-center py-6">
                 <CheckCircle className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--gold)' }} />
-                <h3 className="text-lg font-semibold mb-2">Check your email</h3>
-                <p className="text-sm" style={{ color: 'var(--dim)' }}>If an account exists, a reset link has been sent.</p>
+                <h3 className="text-lg font-semibold mb-2">Check your inbox</h3>
+                <p className="text-sm" style={{ color: 'var(--dim)' }}>If an account exists for {email}, a reset link has been sent.</p>
+                <p className="text-xs mt-2" style={{ color: 'var(--dim)' }}>Don't see it? Check your spam folder.</p>
                 <Link to="/login" className="btn-gold w-full text-sm mt-6 inline-block text-center">Back to Login</Link>
               </div>
             ) : (
@@ -70,7 +72,7 @@ export default function ForgotPassword() {
                   <button type="submit" disabled={loading}
                     className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-medium transition-colors disabled:opacity-60"
                     style={{ background: 'var(--gold)', color: '#1b1208' }}>
-                    <Mail className="w-5 h-5" />
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
                     {loading ? 'Sending…' : 'Send Reset Link'}
                   </button>
                 </form>

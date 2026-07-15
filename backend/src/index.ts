@@ -215,6 +215,14 @@ app.get('/r2-files/*', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'public, max-age=86400')
     if (response.ContentType) res.setHeader('Content-Type', response.ContentType)
     if (response.ContentLength) res.setHeader('Content-Length', response.ContentLength.toString())
+
+    // Support forced download via ?download=filename query param
+    const downloadName = (req.query.download as string) || ''
+    if (downloadName) {
+      const safeName = downloadName.replace(/[^\w.\- ]/g, '').replace(/\s+/g, '_')
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
+    }
+
     if (response.Body instanceof Readable) {
       (response.Body as Readable).pipe(res)
     } else {

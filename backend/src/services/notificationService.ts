@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import webpush from 'web-push'
 import nodemailer from 'nodemailer'
 import { db, initDb, dbWriteSafe } from '../db.js'
+import { emailTemplate } from '../lib/email.js'
 
 let firebaseAdmin: any = null
 
@@ -245,18 +246,13 @@ async function sendEmail(subject: string, body: string, url: string | null | und
   }
 
   const from = process.env.FROM_EMAIL || process.env.SMTP_USER
-  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1b1208;">
-    <div style="background:#c9a227;padding:24px;text-align:center;">
-      <h1 style="margin:0;color:#1b1208;font-size:22px;">ZioniteFM</h1>
-    </div>
-    <div style="padding:24px;background:#fff;border:1px solid #e5e5e5;">
-      <h2 style="margin-top:0;">${subject}</h2>
-      <p>${body}</p>
-      ${url ? `<p><a href="${url}" style="display:inline-block;background:#c9a227;color:#1b1208;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">Open in ZioniteFM</a></p>` : ''}
-      <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;" />
-      <p style="font-size:12px;color:#666;">You received this because you are subscribed to ZioniteFM notifications. Manage preferences in your account settings.</p>
-    </div>
-  </div>`
+  const html = emailTemplate({
+    title: subject,
+    body: `<p>${body}</p>
+      <p style="font-size:12px;color:#8a8476;margin-top:16px;">You received this because you are subscribed to ZioniteFM notifications. Manage preferences in your account settings.</p>`,
+    ctaUrl: url || undefined,
+    ctaText: 'Open in ZioniteFM',
+  })
 
   let sent = 0, failed = 0
   for (const user of users) {
@@ -265,7 +261,7 @@ async function sendEmail(subject: string, body: string, url: string | null | und
         from,
         to: user.email,
         subject,
-        text: `${body}\n\n${url || ''}`,
+        text: `${subject}\n\n${body}\n\n${url || ''}`,
         html
       })
       sent++

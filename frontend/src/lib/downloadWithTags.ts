@@ -1,6 +1,4 @@
-﻿import * as ID3WriterNS from 'browser-id3-writer'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ID3Writer: any = (ID3WriterNS as any).default ?? ID3WriterNS
+﻿import { API_BASE } from './api'
 
 export interface TagOptions {
   title: string
@@ -14,64 +12,48 @@ export interface TagOptions {
   filename?: string
 }
 
-async function fetchBuffer(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Failed to fetch: ${url} (${res.status})`)
-  return res.arrayBuffer()
+function extractR2Key(url: string): string | null {
+  try {
+    const u = new URL(url)
+    // Backend proxy: https://zionite.fly.dev/r2-files/{key}
+    if (u.pathname.startsWith('/r2-files/')) {
+      return u.pathname.replace(/^\/r2-files\//, '')
+    }
+    // Direct R2 public URL: https://pub-xxx.r2.dev/{key} or custom domain
+    if (u.hostname.endsWith('.r2.dev') || u.hostname.endsWith('.cloudflarestorage.com')) {
+      return u.pathname.replace(/^\//, '')
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
-export async function downloadWithTags(opts: TagOptions): Promise<void> {
-  const { title, artist, album, genre, year, comment, coverUrl, audioUrl, filename } = opts
-
-  let songBuffer: ArrayBuffer
-  try {
-    songBuffer = await fetchBuffer(audioUrl)
-  } catch {
-    // If CORS blocks the fetch, fall back to plain anchor download
-    const a = document.createElement('a')
-    a.href = audioUrl
-    a.download = filename || `${title}.mp3`
-    a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    return
-  }
-
-  const writer = new ID3Writer(songBuffer) as any
-
-  writer.setFrame('TIT2', title)
-  if (artist) writer.setFrame('TPE1', [artist])
-  if (album) writer.setFrame('TALB', album)
-  if (genre) writer.setFrame('TCON', [genre])
-  if (year) writer.setFrame('TYER', year)
-  if (comment) writer.setFrame('COMM', { description: '', text: comment, language: 'eng' })
-
-  if (coverUrl) {
-    try {
-      const imgBuffer = await fetchBuffer(coverUrl)
-      const mime = coverUrl.match(/\.png(\?|$)/i) ? 'image/png' : 'image/jpeg'
-      writer.setFrame('APIC', {
-        type: 3,
-        data: imgBuffer,
-        description: 'Cover',
-        useUnicodeEncoding: false,
-        mimeType: mime
-      })
-    } catch {
-      // Cover fetch failed — embed tags without cover
-    }
-  }
-
-  writer.addTag()
-
-  const blob = writer.getBlob()
-  const objUrl = URL.createObjectURL(blob)
+function triggerDownload(url: string, filename: string) {
   const a = document.createElement('a')
-  a.href = objUrl
-  a.download = filename || `${title}.mp3`
+  a.href = url
+  a.download = filename
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
 }
+
+export async function downloadWithTags(opts: TagOptions): Promise<void> {
+  const { title, audioUrl, filename: rawFilename } = opts
+  const filename = rawFilename || `${title}.mp3`
+
+  // Extract R2 key from the audio URL and route through the backend proxy
+  // with ?download=filename to force Content-Disposition: attachment
+  const r2Key = extractR2Key(audioUrl)
+  if (r2Key) {
+    const downloadUrl = `${API_BASE}/r2-files/${r2Key}?download=${encodeURIComponent(filename)}`
+    triggerDownload(downloadUrl, filename)
+    return
+  }
+
+  // Fallback: try a direct anchor download (works for same-origin or CORS-enabled URLs)
+  triggerDownload(audioUrl, filename)
+}
+

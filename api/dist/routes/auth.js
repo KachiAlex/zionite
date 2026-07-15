@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { db, initDb, dbReady } from '../db.js';
 import { JWT_SECRET, authenticateToken, requireRole } from '../middleware/auth.js';
-import { sendEmail } from '../lib/email.js';
+import { sendEmail, emailTemplate } from '../lib/email.js';
 const router = Router();
 const registerSchema = z.object({
     email: z.string().email('Invalid email address').min(1, 'Email is required'),
@@ -152,11 +152,15 @@ router.post('/forgot-password', async (req, res) => {
             to: user.email,
             toName: user.name,
             subject: 'Reset your ZioniteFM password',
-            htmlContent: `<p>Hello ${user.name || 'there'},</p>
-        <p>You requested a password reset. Click the link below to set a new password (expires in 1 hour):</p>
-        <p><a href="${resetUrl}" style="padding:10px 20px;background:#c9a227;color:#1b1208;text-decoration:none;border-radius:6px;">Reset Password</a></p>
-        <p>Or copy this link: ${resetUrl}</p>
-        <p>If you didn't request this, ignore this email.</p>`,
+            htmlContent: emailTemplate({
+                title: 'Reset your password',
+                body: `<p>Hello ${user.name || 'there'},</p>
+          <p>We received a request to reset your ZioniteFM password. Click the button below to choose a new password. This link expires in 1 hour.</p>
+          <p style="font-size:13px;color:#8a8476;margin-top:16px;">If you didn't request this, you can safely ignore this email.</p>`,
+                ctaUrl: resetUrl,
+                ctaText: 'Reset Password',
+            }),
+            textContent: `Reset your ZioniteFM password: ${resetUrl}\n\nThis link expires in 1 hour.`,
         });
         res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
     }
@@ -178,13 +182,27 @@ router.post('/reset-password', async (req, res) => {
             return;
         }
         const { token, password } = parsed.data;
-        const user = await db.get('SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW() AND tenant_id = $2', [token, req.tenantId]);
+        const user = await db.get('SELECT id, email, name FROM users WHERE reset_token = $1 AND reset_token_expires > NOW() AND tenant_id = $2', [token, req.tenantId]);
         if (!user) {
             res.status(400).json({ error: 'Invalid or expired token' });
             return;
         }
         const hash = await bcrypt.hash(password, 10);
         await db.run('UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2', [hash, user.id]);
+        await sendEmail({
+            to: user.email,
+            toName: user.name,
+            subject: 'Your ZioniteFM password was changed',
+            htmlContent: emailTemplate({
+                title: 'Password updated',
+                body: `<p>Hello ${user.name || 'there'},</p>
+          <p>Your ZioniteFM password was successfully changed. If you made this change, you can ignore this email.</p>
+          <p style="font-size:13px;color:#8a8476;margin-top:16px;">If you did not change your password, please contact support immediately.</p>`,
+                ctaUrl: `${process.env.FRONTEND_URL || 'https://www.zionite.online'}/login`,
+                ctaText: 'Sign In',
+            }),
+            textContent: 'Your ZioniteFM password was successfully changed. If you did not make this change, please contact support.',
+        }).catch(() => { });
         res.json({ success: true, message: 'Password updated successfully' });
     }
     catch (err) {
