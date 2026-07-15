@@ -228,6 +228,12 @@ app.get('/r2-files/*', async (req, res) => {
             res.setHeader('Content-Type', response.ContentType);
         if (response.ContentLength)
             res.setHeader('Content-Length', response.ContentLength.toString());
+        // Support forced download via ?download=filename query param
+        const downloadName = req.query.download || '';
+        if (downloadName) {
+            const safeName = downloadName.replace(/[^\w.\- ]/g, '').replace(/\s+/g, '_');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+        }
         if (response.Body instanceof Readable) {
             response.Body.pipe(res);
         }
@@ -238,6 +244,53 @@ app.get('/r2-files/*', async (req, res) => {
     catch (err) {
         console.error('[R2] file proxy error:', err.message);
         res.status(404).json({ error: 'File not found' });
+    }
+});
+// Generic download proxy: accepts any audio URL and serves it with Content-Disposition: attachment.
+// This avoids fragile client-side key extraction and works for R2 public URLs, custom domains, and legacy URLs.
+app.get('/download', async (req, res) => {
+    const url = req.query.url;
+    const filename = req.query.filename || '';
+    if (!url) {
+        res.status(400).json({ error: 'URL required' });
+        return;
+    }
+    try {
+        const u = new URL(url);
+        // Only allow known storage domains to prevent abuse
+        const allowedHosts = [
+            'zionite.fly.dev',
+            'localhost',
+            'r2.dev',
+            'cloudflarestorage.com',
+            'res.cloudinary.com',
+            'cloudinary.com',
+        ];
+        const isAllowed = allowedHosts.some(host => u.hostname === host || u.hostname.endsWith(`.${host}`));
+        if (!isAllowed) {
+            res.status(400).json({ error: 'Invalid download URL' });
+            return;
+        }
+        const response = await fetch(url, { headers: { 'Accept': '*/*' } });
+        if (!response.ok)
+            throw new Error(`Upstream returned ${response.status}`);
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const safeName = filename.replace(/[^\w.\- ]/g, '').replace(/\s+/g, '_') || 'download';
+        res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+        const reader = response.body;
+        if (reader?.pipe) {
+            reader.pipe(res);
+        }
+        else {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            res.send(buffer);
+        }
+    }
+    catch (err) {
+        console.error('[DOWNLOAD] proxy error:', err.message, url);
+        res.status(502).json({ error: 'Failed to download file' });
     }
 });
 // 404

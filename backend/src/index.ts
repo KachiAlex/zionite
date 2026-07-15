@@ -234,6 +234,53 @@ app.get('/r2-files/*', async (req: Request, res: Response) => {
   }
 })
 
+// Generic download proxy: accepts any audio URL and serves it with Content-Disposition: attachment.
+// This avoids fragile client-side key extraction and works for R2 public URLs, custom domains, and legacy URLs.
+app.get('/download', async (req: Request, res: Response) => {
+  const url = req.query.url as string
+  const filename = (req.query.filename as string) || ''
+  if (!url) { res.status(400).json({ error: 'URL required' }); return }
+
+  try {
+    const u = new URL(url)
+    // Only allow known storage domains to prevent abuse
+    const allowedHosts = [
+      'zionite.fly.dev',
+      'localhost',
+      'r2.dev',
+      'cloudflarestorage.com',
+      'res.cloudinary.com',
+      'cloudinary.com',
+    ]
+    const isAllowed = allowedHosts.some(host => u.hostname === host || u.hostname.endsWith(`.${host}`))
+    if (!isAllowed) {
+      res.status(400).json({ error: 'Invalid download URL' })
+      return
+    }
+
+    const response = await fetch(url, { headers: { 'Accept': '*/*' } })
+    if (!response.ok) throw new Error(`Upstream returned ${response.status}`)
+
+    const contentType = response.headers.get('content-type') || 'application/octet-stream'
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+
+    const safeName = filename.replace(/[^\w.\- ]/g, '').replace(/\s+/g, '_') || 'download'
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
+
+    const reader = response.body as any
+    if (reader?.pipe) {
+      reader.pipe(res)
+    } else {
+      const buffer = Buffer.from(await response.arrayBuffer())
+      res.send(buffer)
+    }
+  } catch (err: any) {
+    console.error('[DOWNLOAD] proxy error:', err.message, url)
+    res.status(502).json({ error: 'Failed to download file' })
+  }
+})
+
 // 404
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
