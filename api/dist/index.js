@@ -5,6 +5,9 @@ import rateLimit from 'express-rate-limit';
 import * as Sentry from '@sentry/node';
 import path from 'path';
 import fs from 'fs';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { r2Configured, getClient } from './lib/r2.js';
+import { Readable } from 'stream';
 import authRoutes from './routes/auth.js';
 import broadcastRoutes from './routes/broadcasts.js';
 import sermonRoutes from './routes/sermons.js';
@@ -29,8 +32,10 @@ import musicRoutes from './routes/music.js';
 import tenantRoutes from './routes/tenants.js';
 import licensePlanRoutes from './routes/license-plans.js';
 import { cacheMiddleware } from './middleware/cache.js';
-import { resolveTenant, JWT_SECRET } from './middleware/auth.js';
+import { resolveTenant, JWT_SECRET, authenticateToken, requireRole } from './middleware/auth.js';
+import { optimizeImage } from './middleware/optimizeImage.js';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 // Sentry init
 if (process.env.SENTRY_DSN) {
     Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
@@ -40,6 +45,7 @@ const ALLOWED_ORIGINS = [
     'https://www.zionite.online',
     'https://zionite.online',
     'https://zionite.fly.dev',
+    'https://zionite.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000',
     'https://localhost',
@@ -125,8 +131,31 @@ app.get('/debug', (_req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+const uploadImage = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        cb(null, allowed.includes(file.mimetype));
+    }
+});
 // API routes
 app.use('/auth', authRoutes);
+app.post('/uploads/image', authenticateToken, requireRole('broadcaster', 'admin'), uploadImage.single('image'), optimizeImage, async (req, res) => {
+    try {
+        if (!req.file) {
+            res.status(400).json({ error: 'Image file required' });
+            return;
+        }
+        const base64 = req.file.buffer.toString('base64');
+        const image_url = `data:${req.file.mimetype};base64,${base64}`;
+        res.json({ image_url });
+    }
+    catch (err) {
+        console.error('[UPLOADS] image upload error:', err.message);
+        res.status(500).json({ error: 'Failed to upload image' });
+    }
+});
 app.use('/broadcasts', cacheMiddleware(30000), broadcastRoutes);
 app.use('/sermons', cacheMiddleware(60000), sermonRoutes);
 app.use('/schedule', scheduleRoutes);
@@ -180,6 +209,37 @@ app.use('/live', (req, res, next) => {
 if (process.env.SENTRY_DSN) {
     app.use(Sentry.expressErrorHandler());
 }
+// R2 file proxy (serves files from R2 when no public CDN URL is configured)
+app.get('/r2-files/*', async (req, res) => {
+    if (!r2Configured) {
+        res.status(404).json({ error: 'R2 not configured' });
+        return;
+    }
+    const key = req.path.replace(/^\/r2-files\//, '');
+    if (!key) {
+        res.status(400).end();
+        return;
+    }
+    try {
+        const response = await getClient().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET || 'zionite', Key: key }));
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        if (response.ContentType)
+            res.setHeader('Content-Type', response.ContentType);
+        if (response.ContentLength)
+            res.setHeader('Content-Length', response.ContentLength.toString());
+        if (response.Body instanceof Readable) {
+            response.Body.pipe(res);
+        }
+        else {
+            res.end();
+        }
+    }
+    catch (err) {
+        console.error('[R2] file proxy error:', err.message);
+        res.status(404).json({ error: 'File not found' });
+    }
+});
 // 404
 app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
