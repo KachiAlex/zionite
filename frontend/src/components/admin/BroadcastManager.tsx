@@ -106,6 +106,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [statusFilter, setStatusFilter] = useState<'all' | Broadcast['status']>('all')
   const [broadcastToDelete, setBroadcastToDelete] = useState<Broadcast | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   async function openBroadcastDetail(b: Broadcast) {
@@ -132,20 +133,23 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
       alert('Cannot delete a live broadcast. End it first.')
       return
     }
+    setDeleteError('')
     setBroadcastToDelete(b)
   }
 
   async function confirmDelete() {
     if (!broadcastToDelete) return
     setDeleteLoading(true)
+    setDeleteError('')
     try {
       await axios.delete(`${API_BASE}/api/broadcasts/${broadcastToDelete.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 15000
       })
       setBroadcastToDelete(null)
       onRefresh()
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete broadcast')
+      setDeleteError(err.response?.data?.error || 'Failed to delete broadcast. Please try again.')
     } finally {
       setDeleteLoading(false)
     }
@@ -786,15 +790,20 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
               <p className="text-xs text-[#9c958a] mb-4">
                 This will permanently remove <span className="text-white">{broadcastToDelete.title}</span> and all its chat, stream chunks, and recording.
               </p>
+              {deleteError && (
+                <div className="mb-4 p-3 rounded-lg text-xs text-red-300 bg-red-500/10 border border-red-500/20">
+                  {deleteError}
+                </div>
+              )}
               <div className="flex gap-3">
-                <button onClick={() => setBroadcastToDelete(null)}
+                <button onClick={() => { setBroadcastToDelete(null); setDeleteError('') }}
                   className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[rgba(243,238,228,0.08)] hover:bg-[rgba(243,238,228,0.12)] transition-colors">
                   Cancel
                 </button>
                 <button onClick={confirmDelete} disabled={deleteLoading}
                   className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-red-500/80 hover:bg-red-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
-                  {deleteLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                  Delete
+                  {deleteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {deleteLoading ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
             </div>
