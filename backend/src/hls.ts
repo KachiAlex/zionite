@@ -117,6 +117,10 @@ function makeStreamingInit(buf: Buffer): Buffer | null {
 
 // Same transform as makeStreamingInit, but operates on an already-extracted init buffer
 function makeStreamingInitFromBuffer(init: Buffer): Buffer | null {
+  if (!hasEbmlHeader(init)) {
+    console.warn(`[HLS] makeStreamingInitFromBuffer: no EBML header in init (${init.length} bytes), first4=${init.subarray(0, 4).toString('hex')}`)
+    return null
+  }
   for (let i = 0; i <= init.length - 4; i++) {
     if (init[i] === SEGMENT_ID[0] && init[i+1] === SEGMENT_ID[1] &&
         init[i+2] === SEGMENT_ID[2] && init[i+3] === SEGMENT_ID[3]) {
@@ -127,10 +131,13 @@ function makeStreamingInitFromBuffer(init: Buffer): Buffer | null {
       if (!unk) break
       const before = init.subarray(0, sizeStart)
       const after = init.subarray(sizeStart + width)
-      return Buffer.concat([before, unk, after])
+      const result = Buffer.concat([before, unk, after])
+      console.log(`[HLS] makeStreamingInitFromBuffer: Segment at ${i}, width=${width}, result=${result.length} bytes`)
+      return result
     }
   }
-  return init // fallback
+  console.warn(`[HLS] makeStreamingInitFromBuffer: no Segment ID found in ${init.length} bytes, returning null`)
+  return null
 }
 
 // Modify the Segment size inside a full chunk, preserving the rest of the chunk.
@@ -397,14 +404,77 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
           data = buf
         }
       } else if (hls.pendingInit) {
-        // Server restarted mid-broadcast: use persisted init + raw continuation
+        // Server restarted mid-broadcast: try to use persisted init
         const streamingInit = makeStreamingInitFromBuffer(hls.pendingInit)
-        data = Buffer.concat([streamingInit || hls.pendingInit, buf])
-        isInitChunk = true
-        console.log(`[HLS] ${broadcastId} recovery chunk ${chunkIndex}: persisted init (${hls.pendingInit.length} bytes) + raw ${buf.length} bytes`)
+        if (!streamingInit) {
+          // pendingInit is invalid — try fetching chunk 0 from DB instead
+          console.warn(`[HLS] ${broadcastId} pendingInit invalid, trying chunk 0 from DB`)
+          try {
+            const chunk0Row = await db.get<{ chunk_data: string }>(
+              `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+              [broadcastId]
+            )
+            if (chunk0Row) {
+              const chunk0Buf = Buffer.from(chunk0Row.chunk_data, 'base64')
+              if (hasEbmlHeader(chunk0Buf)) {
+                const streamingChunk0 = makeStreamingChunk(chunk0Buf)
+                if (streamingChunk0) {
+                  data = Buffer.concat([streamingChunk0, buf])
+                  isInitChunk = true
+                  console.log(`[HLS] ${broadcastId} recovery chunk ${chunkIndex}: using chunk 0 from DB (${streamingChunk0.length} bytes) + raw ${buf.length} bytes`)
+                } else {
+                  console.warn(`[HLS] ${broadcastId} chunk 0 from DB has no Segment ID — skipping`)
+                  return
+                }
+              } else {
+                console.warn(`[HLS] ${broadcastId} chunk 0 from DB has no EBML header — skipping`)
+                return
+              }
+            } else {
+              console.warn(`[HLS] ${broadcastId} chunk 0 not in DB — skipping (broadcaster may need to refresh)`)
+              return
+            }
+          } catch (dbErr: any) {
+            console.warn(`[HLS] ${broadcastId} DB fetch for chunk 0 failed:`, dbErr.message)
+            return
+          }
+        } else {
+          data = Buffer.concat([streamingInit, buf])
+          isInitChunk = true
+          console.log(`[HLS] ${broadcastId} recovery chunk ${chunkIndex}: persisted init (${hls.pendingInit.length} bytes) + raw ${buf.length} bytes`)
+        }
       } else {
-        console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has no valid EBML header and no persisted init — skipping (broadcaster may need to refresh)`)
-        return
+        // No pendingInit — try fetching chunk 0 from DB as last resort
+        console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has no EBML header and no pendingInit, trying chunk 0 from DB`)
+        try {
+          const chunk0Row = await db.get<{ chunk_data: string }>(
+            `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+            [broadcastId]
+          )
+          if (chunk0Row) {
+            const chunk0Buf = Buffer.from(chunk0Row.chunk_data, 'base64')
+            if (hasEbmlHeader(chunk0Buf)) {
+              const streamingChunk0 = makeStreamingChunk(chunk0Buf)
+              if (streamingChunk0) {
+                data = Buffer.concat([streamingChunk0, buf])
+                isInitChunk = true
+                console.log(`[HLS] ${broadcastId} recovery chunk ${chunkIndex}: chunk 0 from DB (${streamingChunk0.length} bytes) + raw ${buf.length} bytes`)
+              } else {
+                console.warn(`[HLS] ${broadcastId} chunk 0 from DB has no Segment ID — skipping`)
+                return
+              }
+            } else {
+              console.warn(`[HLS] ${broadcastId} chunk 0 from DB has no EBML header — skipping`)
+              return
+            }
+          } else {
+            console.warn(`[HLS] ${broadcastId} chunk 0 not in DB — skipping (broadcaster may need to refresh)`)
+            return
+          }
+        } catch (dbErr: any) {
+          console.warn(`[HLS] ${broadcastId} DB fetch for chunk 0 failed:`, dbErr.message)
+          return
+        }
       }
     } else {
       data = buf
