@@ -128,14 +128,14 @@ router.get('/:id/concat', async (req: any, res: Response) => {
 
     // Fetch requested data chunks (chunk_index >= fromIndex, skip chunk 0)
     let rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 AND chunk_index > 0 AND tenant_id=$3 ORDER BY chunk_index ASC LIMIT 20`,
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 AND chunk_index > 0 AND tenant_id=$3 ORDER BY chunk_index ASC LIMIT 3`,
       [id, Math.max(fromIndex, 1), req.tenantId]
     )
 
-    // If no new chunks, fall back to latest 5 data chunks
+    // If no new chunks, fall back to latest 3 data chunks
     if (!rows.length) {
       rows = await db.all(
-        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 AND tenant_id=$2 ORDER BY chunk_index DESC LIMIT 5`,
+        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 AND tenant_id=$2 ORDER BY chunk_index DESC LIMIT 3`,
         [id, req.tenantId]
       )
       if (!rows.length) {

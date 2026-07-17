@@ -88,6 +88,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const webmPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const webmAudioCtxRef = useRef<AudioContext | null>(null)
   const webmSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const webmStopRef = useRef<(() => void) | null>(null)
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastTimeRef = useRef<number>(0)
@@ -122,6 +123,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
     if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
     if (webmPollRef.current) { clearInterval(webmPollRef.current); webmPollRef.current = null }
+    if (webmStopRef.current) { webmStopRef.current(); webmStopRef.current = null }
     if (webmSourceRef.current) { try { webmSourceRef.current.stop() } catch {} webmSourceRef.current = null }
     if (webmAudioCtxRef.current) { try { webmAudioCtxRef.current.close() } catch {} webmAudioCtxRef.current = null }
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
@@ -131,35 +133,46 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     } catch {}
   }
 
-  async function startWebmFallback(audio: HTMLAudioElement) {
+  async function startWebmFallback(_audio: HTMLAudioElement) {
     console.warn('[WebM] Starting WebM concat fallback')
     usingFallbackRef.current = true
     if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
 
     let lastPlayedChunk = 0
-    let isFetching = false
+    let stopped = false
+
+    webmStopRef.current = () => { stopped = true }
 
     async function fetchAndPlay() {
-      if (isFetching) return
-      isFetching = true
+      if (stopped) return
       try {
         const res = await fetch(`${concatUrl}?from=${lastPlayedChunk + 1}`, {
           headers: { 'Accept': 'audio/webm' }
         })
         if (!res.ok) {
           console.warn('[WebM] concat fetch failed:', res.status)
+          if (res.status === 404) {
+            setStatusText('Waiting for broadcaster…')
+            if (!stopped) setTimeout(fetchAndPlay, 3000)
+            return
+          }
+          if (!stopped) setTimeout(fetchAndPlay, 2000)
           return
         }
         const latestHeader = res.headers.get('X-Latest-Chunk')
         if (latestHeader) {
           const newIdx = parseInt(latestHeader, 10)
           if (newIdx <= lastPlayedChunk) {
-            console.log('[WebM] No new chunks since', lastPlayedChunk, '- skipping')
+            console.log('[WebM] No new chunks since', lastPlayedChunk, '- retrying in 2s')
+            if (!stopped) setTimeout(fetchAndPlay, 2000)
             return
           }
         }
         const blob = await res.blob()
-        if (blob.size < 100) return
+        if (blob.size < 100) {
+          if (!stopped) setTimeout(fetchAndPlay, 2000)
+          return
+        }
 
         const arrayBuffer = await blob.arrayBuffer()
         const audioCtx = webmAudioCtxRef.current || new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -178,28 +191,29 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         source.connect(audioCtx.destination)
         webmSourceRef.current = source
 
-        source.onended = () => {
-          if (webmSourceRef.current === source) webmSourceRef.current = null
-        }
-
-        source.start()
         if (latestHeader) lastPlayedChunk = parseInt(latestHeader, 10)
-        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'latest chunk:', lastPlayedChunk)
+        const duration = audioBuffer.duration
+        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'duration:', duration.toFixed(1) + 's', 'latest chunk:', lastPlayedChunk)
 
         if (!isPlaying) {
           setIsPlaying(true)
           setStatusText('Live')
           updateMediaSession(true)
         }
+
+        source.onended = () => {
+          if (webmSourceRef.current === source) webmSourceRef.current = null
+          if (!stopped) fetchAndPlay()
+        }
+
+        source.start()
       } catch (err: any) {
         console.error('[WebM] fetch/decode error:', err.message)
-      } finally {
-        isFetching = false
+        if (!stopped) setTimeout(fetchAndPlay, 2000)
       }
     }
 
     await fetchAndPlay()
-    webmPollRef.current = setInterval(fetchAndPlay, 2000)
   }
 
   async function handleStart() {
