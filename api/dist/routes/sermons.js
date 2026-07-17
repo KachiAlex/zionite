@@ -19,9 +19,9 @@ router.get('/', async (req, res) => {
         await initDb();
         const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
         const query = limit
-            ? 'SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT $2'
-            : 'SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC';
-        const sermons = limit ? await db.all(query, [req.tenantId, limit]) : await db.all(query, [req.tenantId]);
+            ? 'SELECT * FROM sermons ORDER BY date DESC LIMIT $1'
+            : 'SELECT * FROM sermons ORDER BY date DESC';
+        const sermons = limit ? await db.all(query, [limit]) : await db.all(query);
         res.json({ sermons });
     }
     catch (err) {
@@ -43,9 +43,9 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
         const thumbnailFile = files?.thumbnail?.[0];
         const audioUrl = audioFile ? `/uploads/${audioFile.filename}` : (req.body.audio_url || '');
         const thumbnailUrl = thumbnailFile ? `/uploads/${thumbnailFile.filename}` : (thumbnail_url || '');
-        await db.run(`INSERT INTO sermons (id, title, description, scripture_reference, speaker, series, audio_url, video_url, thumbnail_url, date, duration, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [id, title, description || null, scripture_reference || null, speaker || null, series || null,
-            audioUrl || null, video_url || null, thumbnailUrl || null, date || new Date().toISOString().split('T')[0], duration ? parseInt(duration, 10) : null, req.tenantId]);
+        await db.run(`INSERT INTO sermons (id, title, description, scripture_reference, speaker, series, audio_url, video_url, thumbnail_url, date, duration)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [id, title, description || null, scripture_reference || null, speaker || null, series || null,
+            audioUrl || null, video_url || null, thumbnailUrl || null, date || new Date().toISOString().split('T')[0], duration ? parseInt(duration, 10) : null]);
         res.json({ sermon: { id, title, description, scripture_reference, speaker, series, audio_url: audioUrl, video_url, thumbnail_url: thumbnailUrl, date, duration } });
     }
     catch (err) {
@@ -57,9 +57,9 @@ router.post('/', authenticateToken, requireRole('admin'), upload.fields([{ name:
 router.get('/featured', async (req, res) => {
     try {
         await initDb();
-        let rows = await db.all(`SELECT * FROM sermons WHERE tenant_id=$1 AND is_featured = TRUE ORDER BY date DESC`, [req.tenantId]);
+        let rows = await db.all(`SELECT * FROM sermons WHERE is_featured = TRUE ORDER BY date DESC`);
         if (!rows || rows.length === 0) {
-            rows = await db.all(`SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT 4`, [req.tenantId]);
+            rows = await db.all(`SELECT * FROM sermons ORDER BY date DESC LIMIT 4`);
         }
         res.json({ sermons: rows });
     }
@@ -74,8 +74,8 @@ router.post('/featured', authenticateToken, requireRole('admin'), async (req, re
         if (!sermon_id)
             return res.status(400).json({ error: 'sermon_id required' });
         const id = uuidv4();
-        await db.run(`INSERT INTO featured_sermons (id, sermon_id, display_order, tenant_id) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (sermon_id) DO UPDATE SET display_order = EXCLUDED.display_order`, [id, sermon_id, display_order || 0, req.tenantId]);
+        await db.run(`INSERT INTO featured_sermons (id, sermon_id, display_order) VALUES ($1, $2, $3)
+       ON CONFLICT (sermon_id) DO UPDATE SET display_order = EXCLUDED.display_order`, [id, sermon_id, display_order || 0]);
         res.json({ ok: true });
     }
     catch (err) {
@@ -149,10 +149,9 @@ router.get('/radio/current', async (req, res) => {
        FROM radio_schedules rs
        JOIN playlists p ON p.id = rs.playlist_id
        WHERE rs.is_active = TRUE AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
-         AND p.tenant_id = $2
-       ORDER BY rs.start_time DESC LIMIT 1`, [now.toISOString(), req.tenantId]);
+       ORDER BY rs.start_time DESC LIMIT 1`, [now.toISOString()]);
         if (!schedule) {
-            const latest = await db.get('SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT 1', [req.tenantId]);
+            const latest = await db.get('SELECT * FROM sermons ORDER BY date DESC LIMIT 1');
             res.json({
                 current: latest ? { title: latest.title, speaker: latest.speaker, audioUrl: latest.audio_url, thumbnailUrl: latest.thumbnail_url, scriptureReference: latest.scripture_reference, offsetSeconds: 0 } : null,
                 playlist: null,

@@ -10,8 +10,7 @@ router.get('/', async (req: any, res) => {
   try {
     await initDb()
     const rows = await db.all(
-      'SELECT * FROM events WHERE is_active = TRUE AND tenant_id=$1 ORDER BY date ASC, time ASC',
-      [req.tenantId]
+      'SELECT * FROM events WHERE is_active = TRUE ORDER BY date ASC, time ASC'
     )
     res.json({ events: rows })
   } catch (err: any) {
@@ -23,7 +22,7 @@ router.get('/', async (req: any, res) => {
 router.get('/:id', async (req: any, res) => {
   try {
     await initDb()
-    const row = await db.get('SELECT * FROM events WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    const row = await db.get('SELECT * FROM events WHERE id = $1', [req.params.id])
     if (!row) return res.status(404).json({ error: 'Not found' })
     res.json({ event: row })
   } catch (err: any) {
@@ -41,9 +40,9 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     if (!title) return res.status(400).json({ error: 'Title is required' })
     const id = uuidv4()
     await db.run(
-      `INSERT INTO events (id, title, description, date, time, location, image_url, is_active, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, title, description || '', date || '', time || '', location || '', image_url || '', is_active !== false, req.tenantId]
+      `INSERT INTO events (id, title, description, date, time, location, image_url, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, title, description || '', date || '', time || '', location || '', image_url || '', is_active !== false]
     )
     const row = await db.get('SELECT * FROM events WHERE id = $1', [id])
     res.status(201).json({ event: row })
@@ -59,13 +58,13 @@ router.patch('/:id', authenticateToken, async (req: any, res) => {
     const user = (req as any).user
     if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
     const { title, description, date, time, location, image_url, is_active } = req.body
-    const existing = await db.get('SELECT * FROM events WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    const existing = await db.get('SELECT * FROM events WHERE id = $1', [req.params.id])
     if (!existing) return res.status(404).json({ error: 'Not found' })
     await db.run(
-      `UPDATE events SET title = $1, description = $2, date = $3, time = $4, location = $5, image_url = $6, is_active = $7 WHERE id = $8 AND tenant_id=$9`,
+      `UPDATE events SET title = $1, description = $2, date = $3, time = $4, location = $5, image_url = $6, is_active = $7 WHERE id = $8`,
       [title ?? existing.title, description ?? existing.description, date ?? existing.date,
        time ?? existing.time, location ?? existing.location, image_url ?? existing.image_url,
-       is_active ?? existing.is_active, req.params.id, req.tenantId]
+       is_active ?? existing.is_active, req.params.id]
     )
     const row = await db.get('SELECT * FROM events WHERE id = $1', [req.params.id])
     res.json({ event: row })
@@ -80,7 +79,7 @@ router.delete('/:id', authenticateToken, async (req: any, res) => {
     await initDb()
     const user = (req as any).user
     if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
-    await db.run('DELETE FROM events WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    await db.run('DELETE FROM events WHERE id = $1', [req.params.id])
     res.json({ ok: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })

@@ -98,8 +98,8 @@ app.use((req, res, next) => {
   next()
 })
 
-// Resolve tenant from subdomain on every request
-app.use(resolveTenant)
+// Resolve tenant from subdomain on every request (disabled — single-tenant)
+// app.use(resolveTenant)
 
 // ── Database ───────────────────────────────────────────────────
 const dbUrl = process.env.DATABASE_URL || ''
@@ -212,7 +212,7 @@ async function _doInitDb() {
   // Add tenant home config column if missing
   try { await dbQuery(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS home_config TEXT`) } catch {}
 
-  // ── Multi-tenant: tenants table ─────────────────────────────
+  // ── Multi-tenant schema (kept for compatibility, not actively used) ──
   await dbQuery(`CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
     slug TEXT UNIQUE NOT NULL,
@@ -227,7 +227,7 @@ async function _doInitDb() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // ── Multi-tenant: add tenant_id to all content tables ─────────
+  // ── Add tenant_id columns (kept for schema compatibility) ──
   const tablesNeedingTenant = [
     'users','broadcasts','sermons','chat_messages','schedule','music',
     'stream_chunks','stream_listeners','featured_sermons','transcripts',
@@ -292,7 +292,7 @@ async function _doInitDb() {
     }
   }
 
-  // ── License table: one active license per tenant ───────────
+  // ── License table (kept for compatibility) ───────────
   await dbQuery(`CREATE TABLE IF NOT EXISTS tenant_licenses (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
@@ -485,26 +485,26 @@ async function _doInitDb() {
   try { await dbQuery(`ALTER TABLE prayer_requests ADD COLUMN IF NOT EXISTS is_answered BOOLEAN DEFAULT FALSE`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS user_id TEXT`) } catch {}
   try { await dbQuery(`ALTER TABLE testimonies ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`) } catch {}
-  const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
+    const sched = await dbGet('SELECT * FROM schedule LIMIT 1')
   if (!sched) {
-    await dbQuery(`INSERT INTO schedule (id, title, day_of_week, time, type, tenant_id) VALUES ($1,$2,$3,$4,$5,$6),($7,$8,$9,$10,$11,$12),($13,$14,$15,$16,$17,$18)`,
-      [uuidv4(), 'Sunday Gathering', 0, '10:00', 'service', defaultTenantId,
-       uuidv4(), 'Midweek Study', 3, '19:00', 'study', defaultTenantId,
-       uuidv4(), 'Prayer Meeting', 5, '18:00', 'prayer', defaultTenantId])
+    await dbQuery(`INSERT INTO schedule (id, title, day_of_week, time, type) VALUES ($1,$2,$3,$4,$5),($6,$7,$8,$9,$10),($11,$12,$13,$14,$15)`,
+      [uuidv4(), 'Sunday Gathering', 0, '10:00', 'service',
+       uuidv4(), 'Midweek Study', 3, '19:00', 'study',
+       uuidv4(), 'Prayer Meeting', 5, '18:00', 'prayer'])
   }
 
   const admin = await dbGet('SELECT * FROM users WHERE role=$1', ['super_admin'])
   if (!admin) {
     const hash = await bcrypt.hash('admin123', 10)
-    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-      ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId])
+    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1,$2,$3,$4,$5)`,
+      ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin'])
   }
 
   const requestedSuperadmin = await dbGet('SELECT * FROM users WHERE email=$1', ['superadmin@zionite.online'])
   if (!requestedSuperadmin) {
     const hash = await bcrypt.hash('superadmin123', 10)
-    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-      ['superadmin-1', 'superadmin@zionite.online', hash, 'Super Admin', 'super_admin', defaultTenantId])
+    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1,$2,$3,$4,$5)`,
+      ['superadmin-1', 'superadmin@zionite.online', hash, 'Super Admin', 'super_admin'])
   }
 }
 
@@ -561,27 +561,13 @@ function parseTenantHomeConfig(tenant: any) {
   return tenant
 }
 
-// ── Tenant resolution ────────────────────────────────────────
-// Extracts tenant from subdomain (e.g. firstbaptist.zionite.online)
-// Falls back to 'zionite' if no match
+// ── Tenant resolution (disabled — single-tenant) ────────────────
+// Always returns the 'zionite' tenant
 async function resolveTenant(req: AuthReq, res: Response, next: NextFunction) {
   await initDb()
-  const host = req.headers.host || ''
-  const parts = host.split(':')[0].split('.')
-  let slug = 'zionite'
-  if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'app') {
-    slug = parts[0]
-  } else if (parts.length === 2 && parts[0] !== 'zionite' && parts[0] !== 'www' && parts[0] !== 'app') {
-    // custom domain mode: treat first part as tenant if not root domain
-    slug = parts[0]
-  }
   try {
-    const tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', [slug])
-    if (tenant) {
-      req.tenant = parseTenantHomeConfig(tenant)
-    } else {
-      req.tenant = parseTenantHomeConfig(await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', ['zionite']))
-    }
+    const tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', ['zionite'])
+    req.tenant = parseTenantHomeConfig(tenant)
   } catch {
     req.tenant = null
   }
@@ -597,16 +583,6 @@ function requireTenantRole(...roles: string[]) {
     if (!roles.includes(req.user.role)) { res.status(403).json({ error: 'Forbidden' }); return }
     next()
   }
-}
-
-// Middleware that injects tenant_id into req for route handlers
-function withTenant(req: TenantReq, res: Response, next: NextFunction) {
-  if (!req.tenant) {
-    res.status(404).json({ error: 'Tenant not found' })
-    return
-  }
-  req.tenantId = req.tenant.id
-  next()
 }
 
 // Make tenant available on req type
@@ -726,24 +702,29 @@ async function broadcastNotification(type: string, title: string, body: string, 
 }
 
 // ── Tenant lookup ────────────────────────────────────────────
-app.get('/tenant', (req, res) => {
-  if (!req.tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
-  res.json({ tenant: req.tenant })
-})
-
-app.patch('/tenant/home-config', auth, requireTenantRole('admin', 'super_admin'), async (req: TenantReq, res) => {
+app.get('/tenant', async (_req, res) => {
   try {
     await initDb()
-    if (!req.tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
+    const tenant = await dbGet('SELECT id, slug, name, description, logo_url, primary_color, custom_domain, plan, status, home_config FROM tenants WHERE slug=$1', ['zionite'])
+    if (!tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
+    res.json({ tenant: parseTenantHomeConfig(tenant) })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/tenant/home-config', auth, requireTenantRole('admin', 'super_admin'), async (req: AuthReq, res) => {
+  try {
+    await initDb()
+    const tenant = await dbGet('SELECT * FROM tenants WHERE slug=$1', ['zionite'])
+    if (!tenant) { res.status(404).json({ error: 'Tenant not found' }); return }
     const { home_config } = req.body
-    await dbQuery('UPDATE tenants SET home_config=$1 WHERE id=$2', [JSON.stringify(home_config || {}), req.tenant.id])
-    const updated = await dbGet('SELECT * FROM tenants WHERE id=$1', [req.tenant.id])
+    await dbQuery('UPDATE tenants SET home_config=$1 WHERE id=$2', [JSON.stringify(home_config || {}), tenant.id])
+    const updated = await dbGet('SELECT * FROM tenants WHERE id=$1', [tenant.id])
     res.json({ tenant: parseTenantHomeConfig(updated) })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Auth routes ────────────────────────────────────────────────
-app.post('/auth/register', async (req: TenantReq, res) => {
+app.post('/auth/register', async (req: AuthReq, res) => {
   try {
     await initDb()
     const { email, password, name } = req.body
@@ -752,15 +733,14 @@ app.post('/auth/register', async (req: TenantReq, res) => {
     if (existing) { res.status(409).json({ error: 'Email taken' }); return }
     const hash = await bcrypt.hash(password, 10)
     const id = uuidv4()
-    const tenantId = req.tenantId || 'zionite-default'
-    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [id, email, hash, name, 'listener', tenantId])
-    const token = jwt.sign({ id, email, name, role: 'listener', tenantId }, process.env.JWT_SECRET || 'dev', { expiresIn: '7d' })
-    res.json({ token, user: { id, email, name, role: 'listener', tenantId } })
+    await dbQuery(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1,$2,$3,$4,$5)`,
+      [id, email, hash, name, 'listener'])
+    const token = jwt.sign({ id, email, name, role: 'listener' }, process.env.JWT_SECRET || 'dev', { expiresIn: '7d' })
+    res.json({ token, user: { id, email, name, role: 'listener' } })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.post('/auth/login', async (req: TenantReq, res) => {
+app.post('/auth/login', async (req: AuthReq, res) => {
   try {
     await initDb()
     const { email, password } = req.body
@@ -769,9 +749,9 @@ app.post('/auth/login', async (req: TenantReq, res) => {
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       res.status(401).json({ error: 'Invalid credentials' }); return
     }
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id },
+    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role },
       process.env.JWT_SECRET || 'dev', { expiresIn: '7d' })
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenant_id } })
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
@@ -779,14 +759,14 @@ app.get('/auth/verify', auth, (req: AuthReq, res) => {
   res.json({ user: req.user })
 })
 
-app.get('/auth/users', auth, requireRole('admin', 'super_admin'), async (req: TenantReq, res) => {
+app.get('/auth/users', auth, requireRole('admin', 'super_admin'), async (req: AuthReq, res) => {
   try {
     await initDb()
     if (req.user?.role === 'super_admin') {
-      const rows = await dbQuery('SELECT id, email, name, role, tenant_id, created_at FROM users ORDER BY created_at DESC')
+      const rows = await dbQuery('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC')
       res.json({ users: rows })
     } else {
-      const rows = await dbQuery('SELECT id, email, name, role, tenant_id, created_at FROM users WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId])
+      const rows = await dbQuery('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC')
       res.json({ users: rows })
     }
   } catch (e: any) { res.status(500).json({ error: e.message }) }
@@ -817,15 +797,15 @@ app.post('/auth/change-password', auth, async (req: AuthReq, res) => {
 })
 
 // ── Broadcast routes ─────────────────────────────────────────
-app.get('/broadcasts', async (req: TenantReq, res) => {
+app.get('/broadcasts', async (req: AuthReq, res) => {
   try {
     await initDb()
     const { date, status } = req.query
-    const params: any[] = [req.tenantId]
-    let where = ' WHERE tenant_id=$1'
+    let where = ' WHERE 1=1'
+    const params: any[] = []
 
     if (date && typeof date === 'string') {
-      where += " AND DATE(COALESCE(started_at, created_at)) = DATE($2)"
+      where += " AND DATE(COALESCE(started_at, created_at)) = DATE($1)"
       params.push(date)
     }
     if (status && typeof status === 'string') {
@@ -839,13 +819,13 @@ app.get('/broadcasts', async (req: TenantReq, res) => {
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.get('/broadcasts/active', async (req: TenantReq, res) => {
-  try { await initDb(); const row = await dbGet("SELECT * FROM broadcasts WHERE tenant_id=$1 AND status='live' ORDER BY started_at DESC LIMIT 1", [req.tenantId]); res.json({ broadcast: row }) }
+app.get('/broadcasts/active', async (_req, res) => {
+  try { await initDb(); const row = await dbGet("SELECT * FROM broadcasts WHERE status='live' ORDER BY started_at DESC LIMIT 1"); res.json({ broadcast: row }) }
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.get('/broadcasts/:id', async (req: TenantReq, res) => {
-  try { await initDb(); const row = await dbGet('SELECT * FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId]); res.json({ broadcast: row }) }
+app.get('/broadcasts/:id', async (req: AuthReq, res) => {
+  try { await initDb(); const row = await dbGet('SELECT * FROM broadcasts WHERE id=$1', [req.params.id]); res.json({ broadcast: row }) }
   catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
@@ -855,8 +835,8 @@ app.post('/broadcasts', auth, requireRole('admin', 'broadcaster'), async (req: A
     const { title, description, scripture_reference, rtmp_url, stream_key, thumbnail_url, speaker } = req.body
     if (!title) { res.status(400).json({ error: 'Title is required' }); return }
     const id = uuidv4()
-    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url, rtmp_url, stream_key, thumbnail_url, speaker, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null, rtmp_url || null, stream_key || null, thumbnail_url || null, speaker || null, req.tenantId])
+    await dbQuery(`INSERT INTO broadcasts (id, title, description, scripture_reference, status, broadcaster_id, church_online_url, rtmp_url, stream_key, thumbnail_url, speaker) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, title, description || '', scripture_reference || '', 'scheduled', req.user.id, req.body.church_online_url || null, rtmp_url || null, stream_key || null, thumbnail_url || null, speaker || null])
     res.status(201).json({ id, title, status: 'scheduled', thumbnail_url, speaker })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -864,7 +844,7 @@ app.post('/broadcasts', auth, requireRole('admin', 'broadcaster'), async (req: A
 app.patch('/broadcasts/:id/end', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
+    await dbQuery("UPDATE broadcasts SET status='ended', ended_at=NOW() WHERE id=$1", [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -872,9 +852,9 @@ app.patch('/broadcasts/:id/end', auth, requireRole('admin', 'broadcaster'), asyn
 app.patch('/broadcasts/:id/start', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    const broadcast = await dbGet('SELECT title FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    const broadcast = await dbGet('SELECT title FROM broadcasts WHERE id=$1', [req.params.id])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
-    await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
+    await dbQuery("UPDATE broadcasts SET status='live', started_at=NOW() WHERE id=$1", [req.params.id])
     res.json({ success: true })
     // Notify subscribers asynchronously
     broadcastNotification('broadcast_live', broadcast?.title || 'Live Broadcast', 'A broadcast is now live on ZioniteFM', `/live/${req.params.id}`).catch(() => {})
@@ -884,7 +864,7 @@ app.patch('/broadcasts/:id/start', auth, requireRole('admin', 'broadcaster'), as
 app.patch('/broadcasts/:id/pause', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='paused' WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
+    await dbQuery("UPDATE broadcasts SET status='paused' WHERE id=$1", [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -892,7 +872,7 @@ app.patch('/broadcasts/:id/pause', auth, requireRole('admin', 'broadcaster'), as
 app.patch('/broadcasts/:id/resume', auth, requireRole('admin', 'broadcaster'), async (req: AuthReq, res) => {
   try {
     await initDb()
-    await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1 AND tenant_id=$2", [req.params.id, req.tenantId])
+    await dbQuery("UPDATE broadcasts SET status='live' WHERE id=$1", [req.params.id])
     res.json({ success: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -929,22 +909,22 @@ app.get('/broadcasts/stats/overview', async (_req, res) => {
 })
 
 // ── Sermon routes ──────────────────────────────────────────────
-app.get('/sermons/featured', async (req: TenantReq, res) => {
+app.get('/sermons/featured', async (_req, res) => {
   try {
     await initDb()
-    let rows = await dbQuery(`SELECT * FROM sermons WHERE tenant_id=$1 AND is_featured=TRUE ORDER BY date DESC`, [req.tenantId])
+    let rows = await dbQuery(`SELECT * FROM sermons WHERE is_featured=TRUE ORDER BY date DESC`)
     if (!rows || rows.length === 0) {
-      rows = await dbQuery(`SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT 4`, [req.tenantId])
+      rows = await dbQuery(`SELECT * FROM sermons ORDER BY date DESC LIMIT 4`)
     }
     res.json({ sermons: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.get('/sermons', async (req: TenantReq, res) => {
+app.get('/sermons', async (req: AuthReq, res) => {
   try {
     await initDb()
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50
-    const rows = await dbQuery('SELECT * FROM sermons WHERE tenant_id=$1 ORDER BY date DESC LIMIT $2', [req.tenantId, limit])
+    const rows = await dbQuery('SELECT * FROM sermons ORDER BY date DESC LIMIT $1', [limit])
     res.json({ sermons: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -1026,10 +1006,10 @@ app.post('/sermons', auth, requireRole('admin'), async (req: AuthReq, res) => {
 })
 
 // ── Schedule routes ────────────────────────────────────────────
-app.get('/schedule', async (req: TenantReq, res) => {
+app.get('/schedule', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT * FROM schedule WHERE tenant_id=$1 ORDER BY day_of_week, time', [req.tenantId])
+    const rows = await dbQuery('SELECT * FROM schedule ORDER BY day_of_week, time')
     const today = new Date().getDay()
     const result = rows.map((s: any) => {
       const daysUntil = (s.day_of_week - today + 7) % 7
@@ -1128,10 +1108,10 @@ app.delete('/chat/:id', auth, requireRole('admin'), async (req, res) => {
 })
 
 // ── Music routes ─────────────────────────────────────────────
-app.get('/music', async (req: TenantReq, res) => {
+app.get('/music', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size, play_count, created_at FROM music WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId])
+    const rows = await dbQuery('SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size, play_count, created_at FROM music ORDER BY created_at DESC')
     res.json({ music: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -1544,10 +1524,10 @@ app.get('/status', async (_req, res) => {
 })
 
 // ── Guest Speakers ─────────────────────────────────────────────
-app.get('/guest-speakers', async (req: TenantReq, res) => {
+app.get('/guest-speakers', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT * FROM guest_speakers WHERE tenant_id=$1 AND is_active = TRUE ORDER BY date DESC, created_at DESC', [req.tenantId])
+    const rows = await dbQuery('SELECT * FROM guest_speakers WHERE is_active = TRUE ORDER BY date DESC, created_at DESC')
     res.json({ speakers: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -1581,10 +1561,10 @@ app.delete('/guest-speakers/:id', auth, requireRole('admin'), async (req, res) =
 })
 
 // ── Events ─────────────────────────────────────────────────────
-app.get('/events', async (req: TenantReq, res) => {
+app.get('/events', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT * FROM events WHERE tenant_id=$1 AND is_active = TRUE ORDER BY date ASC, time ASC', [req.tenantId])
+    const rows = await dbQuery('SELECT * FROM events WHERE is_active = TRUE ORDER BY date ASC, time ASC')
     res.json({ events: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -1655,16 +1635,15 @@ app.get('/events/:id/rsvps', auth, requireRole('admin'), async (req, res) => {
 })
 
 // ── Prayer Wall ────────────────────────────────────────────────
-app.get('/prayer', optionalAuth, async (req: TenantReq, res) => {
+app.get('/prayer', optionalAuth, async (req: AuthReq, res) => {
   try {
     await initDb()
     const rows = await dbQuery(`
       SELECT p.id, p.user_id, p.name, p.request, p.is_anonymous, p.is_answered, p.created_at,
         (SELECT COUNT(*) FROM prayer_interactions WHERE prayer_id = p.id) as prayers_count
       FROM prayer_requests p
-      WHERE p.tenant_id=$1
       ORDER BY p.created_at DESC
-    `, [req.tenantId])
+    `)
     let prayers = rows
     if (req.user?.id) {
       const userId = req.user.id
@@ -1767,10 +1746,10 @@ app.get('/donations/admin/all', auth, requireRole('admin'), async (_req, res) =>
 })
 
 // ── Testimonies ──────────────────────────────────────────────
-app.get('/testimonies', async (req: TenantReq, res) => {
+app.get('/testimonies', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery(`SELECT id, user_id, name, content, is_anonymous, status, is_featured, created_at FROM testimonies WHERE tenant_id=$1 AND status='approved' ORDER BY created_at DESC LIMIT 50`, [req.tenantId])
+    const rows = await dbQuery(`SELECT id, user_id, name, content, is_anonymous, status, is_featured, created_at FROM testimonies WHERE status='approved' ORDER BY created_at DESC LIMIT 50`)
     const testimonies = rows.map((t: any) => ({ ...t, name: t.is_anonymous ? 'Anonymous' : t.name }))
     res.json({ testimonies })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
@@ -1818,10 +1797,10 @@ app.delete('/testimonies/:id', auth, requireRole('admin'), async (req, res) => {
 })
 
 // ── Campaigns ────────────────────────────────────────────────
-app.get('/campaigns', async (req: TenantReq, res) => {
+app.get('/campaigns', async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery(`SELECT id, title, description, goal_amount, current_amount, end_date, is_active, created_at FROM campaigns WHERE tenant_id=$1 AND is_active=TRUE ORDER BY created_at DESC`, [req.tenantId])
+    const rows = await dbQuery(`SELECT id, title, description, goal_amount, current_amount, end_date, is_active, created_at FROM campaigns WHERE is_active=TRUE ORDER BY created_at DESC`)
     res.json({ campaigns: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -2066,10 +2045,10 @@ async function proxyRadio(method: string, path: string, body?: any, token?: stri
   return { status: res.status, text }
 }
 
-app.get('/playlists', auth, requireRole('admin'), async (req: TenantReq, res) => {
+app.get('/playlists', auth, requireRole('admin'), async (_req, res) => {
   try {
     await initDb()
-    const rows = await dbQuery('SELECT * FROM playlists WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId])
+    const rows = await dbQuery('SELECT * FROM playlists ORDER BY created_at DESC')
     res.json({ playlists: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -2143,13 +2122,12 @@ app.delete('/playlists/:id', auth, requireRole('admin'), async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-app.get('/radio-schedules', auth, requireRole('admin'), async (req: TenantReq, res) => {
+app.get('/radio-schedules', auth, requireRole('admin'), async (_req, res) => {
   try {
     await initDb()
     const rows = await dbQuery(
       `SELECT rs.*, p.title as playlist_title FROM radio_schedules rs
-       JOIN playlists p ON p.id = rs.playlist_id WHERE p.tenant_id=$1 ORDER BY rs.start_time DESC`,
-      [req.tenantId]
+       JOIN playlists p ON p.id = rs.playlist_id ORDER BY rs.start_time DESC`
     )
     res.json({ schedules: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }

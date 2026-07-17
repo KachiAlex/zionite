@@ -22,7 +22,7 @@ let schedulerTimer: ReturnType<typeof setInterval> | null = null
 let broadcastPaused = false
 let preBroadcastState: { playlistId: string; itemIndex: number; offsetSeconds: number } | null = null
 
-async function getPlaylistItems(playlistId: string, tenantId?: string) {
+async function getPlaylistItems(playlistId: string) {
   await initDb()
   const rows = await db.all(
     `SELECT pi.id, pi.content_type, pi.content_id, pi.order_index, pi.duration_minutes,
@@ -176,7 +176,7 @@ async function startSermonItem(item: ActiveSermonStream['playlistItems'][0], off
   })
 }
 
-async function findActiveSchedule(tenantId?: string) {
+async function findActiveSchedule() {
   await initDb()
   const now = new Date().toISOString()
   const row = await db.get(
@@ -186,10 +186,9 @@ async function findActiveSchedule(tenantId?: string) {
      WHERE rs.is_active = true
        AND rs.start_time IS NOT NULL
        AND rs.start_time <= $1 AND (rs.end_time IS NULL OR rs.end_time >= $1)
-       ${tenantId ? 'AND p.tenant_id = $2' : ''}
      ORDER BY rs.start_time ASC
      LIMIT 1`,
-    tenantId ? [now, tenantId] : [now]
+    [now]
   )
   return row || null
 }
@@ -369,9 +368,7 @@ async function tick() {
     await resumeRadioAfterBroadcast()
   }
 
-  // Note: The radio scheduler is currently global and doesn't support multi-tenant scoping.
-  // For now, it will pick up schedules from any tenant. This should be refactored to be tenant-aware
-  // if multiple tenants need independent radio schedules.
+  // Note: The radio scheduler is global (single-tenant).
   const schedule = await findActiveSchedule()
   if (schedule) {
     const state = await db.get('SELECT manual_stop, paused FROM radio_state WHERE id = \'singleton\'')

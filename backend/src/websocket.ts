@@ -19,7 +19,6 @@ export function initWebSocket(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     let userId: string | null = null
     let userName: string | null = null
-    let tenantId: string | null = null
     let currentRoom: string | null = null
 
     const token = socket.handshake.auth?.token as string | undefined
@@ -28,17 +27,15 @@ export function initWebSocket(httpServer: HttpServer) {
         const decoded = jwt.verify(token, JWT_SECRET) as any
         userId = decoded?.id || null
         userName = decoded?.name || null
-        tenantId = decoded?.tenantId || null
       } catch {}
     }
 
     socket.on('join_broadcast', async (broadcastId: string) => {
       try {
         await initDb()
-        // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [broadcastId, tenantId])
+        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          socket.emit('error', { message: 'Broadcast not found' })
           return
         }
         if (currentRoom) socket.leave(currentRoom)
@@ -61,18 +58,18 @@ export function initWebSocket(httpServer: HttpServer) {
         const trimmed = message.trim()
         if (!trimmed) return
 
-        // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [broadcastId, tenantId])
+        // Verify broadcast exists
+        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          socket.emit('error', { message: 'Broadcast not found' })
           return
         }
 
         const isPrivate = !!recipientId
         const id = crypto.randomUUID()
         await db.run(
-          `INSERT INTO chat_messages (id, broadcast_id, user_id, user_name, recipient_id, message, is_private, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [id, broadcastId, userId, userName, recipientId || null, trimmed, isPrivate, tenantId]
+          `INSERT INTO chat_messages (id, broadcast_id, user_id, user_name, recipient_id, message, is_private) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [id, broadcastId, userId, userName, recipientId || null, trimmed, isPrivate]
         )
 
         const msg = { id, broadcast_id: broadcastId, user_id: userId, user_name: userName, recipient_id: recipientId || null, message: trimmed, is_private: isPrivate, created_at: new Date().toISOString() }
@@ -95,12 +92,10 @@ export function initWebSocket(httpServer: HttpServer) {
         const gName = (guestName || 'Guest').trim()
         if (!trimmed) return
 
-        // Verify broadcast belongs to tenant (guests don't have tenantId, so we skip this check for now)
-        // In a real multi-tenant setup, guest access should also be tenant-scoped
         const id = crypto.randomUUID()
         await db.run(
-          `INSERT INTO chat_messages (id, broadcast_id, guest_name, message, is_private, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [id, broadcastId, gName, trimmed, false, tenantId]
+          `INSERT INTO chat_messages (id, broadcast_id, guest_name, message, is_private) VALUES ($1, $2, $3, $4, $5)`,
+          [id, broadcastId, gName, trimmed, false]
         )
 
         const msg = { id, broadcast_id: broadcastId, guest_name: gName, message: trimmed, is_private: false, created_at: new Date().toISOString() }
@@ -114,17 +109,11 @@ export function initWebSocket(httpServer: HttpServer) {
       const { broadcastId, chunkIndex, chunkData } = payload
       try {
         await initDb()
-        console.log(`[WS] broadcast_chunk ${broadcastId} idx=${chunkIndex} userId=${userId} tenantId=${tenantId}`)
-        // Verify broadcast belongs to tenant
-        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
+        console.log(`[WS] broadcast_chunk ${broadcastId} idx=${chunkIndex} userId=${userId}`)
+        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
           console.warn(`[WS] broadcast_chunk ${broadcastId}: not found`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
-          return
-        }
-        if (broadcast.tenant_id !== tenantId) {
-          console.warn(`[WS] broadcast_chunk ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          socket.emit('error', { message: 'Broadcast not found' })
           return
         }
 
@@ -141,9 +130,9 @@ export function initWebSocket(httpServer: HttpServer) {
 
         // Persist for replay / late joiners — fire-and-forget, never block streaming
         dbWriteSafe(
-          `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data, tenant_id) VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1, $2, $3, $4)
            ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
-          [crypto.randomUUID(), broadcastId, chunkIndex, chunkData, tenantId]
+          [crypto.randomUUID(), broadcastId, chunkIndex, chunkData]
         )
       } catch (err: any) {
         console.error('[WS] broadcast_chunk error:', err.message)
@@ -153,16 +142,11 @@ export function initWebSocket(httpServer: HttpServer) {
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       try {
         await initDb()
-        console.log(`[WS] start_broadcast_hls ${broadcastId} userId=${userId} tenantId=${tenantId}`)
-        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
+        console.log(`[WS] start_broadcast_hls ${broadcastId} userId=${userId}`)
+        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
           console.warn(`[WS] start_broadcast_hls ${broadcastId}: not found`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
-          return
-        }
-        if (broadcast.tenant_id !== tenantId) {
-          console.warn(`[WS] start_broadcast_hls ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          socket.emit('error', { message: 'Broadcast not found' })
           return
         }
         await pauseRadioForBroadcast()
@@ -179,16 +163,11 @@ export function initWebSocket(httpServer: HttpServer) {
     socket.on('end_broadcast_hls', async (broadcastId: string) => {
       try {
         await initDb()
-        console.log(`[WS] end_broadcast_hls ${broadcastId} userId=${userId} tenantId=${tenantId}`)
-        const broadcast = await db.get('SELECT id, tenant_id FROM broadcasts WHERE id=$1', [broadcastId])
+        console.log(`[WS] end_broadcast_hls ${broadcastId} userId=${userId}`)
+        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
         if (!broadcast) {
           console.warn(`[WS] end_broadcast_hls ${broadcastId}: not found`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
-          return
-        }
-        if (broadcast.tenant_id !== tenantId) {
-          console.warn(`[WS] end_broadcast_hls ${broadcastId}: tenant mismatch (broadcast=${broadcast.tenant_id}, socket=${tenantId})`)
-          socket.emit('error', { message: 'Broadcast not found or access denied' })
+          socket.emit('error', { message: 'Broadcast not found' })
           return
         }
         stopHlsBroadcast(broadcastId)

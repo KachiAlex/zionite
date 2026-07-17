@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useTenant } from '../lib/api'
 import axios from 'axios'
 import { API_BASE } from '../lib/api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -111,7 +110,6 @@ export default function SuperAdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { data: currentTenant } = useTenant()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<TenantForm>({ slug: '', name: '', description: '', primary_color: '#c9a227', custom_domain: '', plan: 'free' })
   const [saving, setSaving] = useState(false)
@@ -355,7 +353,7 @@ export default function SuperAdminDashboard() {
               <Globe className="w-5 h-5 text-[#c9a227]" />
               <span className="text-sm text-[#9c958a]">Current Tenant</span>
             </div>
-            <div className="text-lg font-bold truncate">{currentTenant?.name || 'Zionite'}</div>
+            <div className="text-lg font-bold truncate">Zionite</div>
           </div>
         </div>
 

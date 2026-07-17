@@ -8,7 +8,7 @@ const router = Router()
 router.get('/', async (req: any, res) => {
   try {
     await initDb()
-    const rows = await db.all('SELECT * FROM playlists WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId])
+    const rows = await db.all('SELECT * FROM playlists ORDER BY created_at DESC')
     res.json({ playlists: rows })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
@@ -20,8 +20,8 @@ router.post('/', authenticateToken, requireRole('admin'), async (req: Authentica
     if (!title) { res.status(400).json({ error: 'Title required' }); return }
     const id = uuidv4()
     await db.run(
-      `INSERT INTO playlists (id, title, description, repeat_mode, shuffle, tenant_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [id, title, description || null, repeat_mode || 'none', !!shuffle, req.tenantId]
+      `INSERT INTO playlists (id, title, description, repeat_mode, shuffle) VALUES ($1,$2,$3,$4,$5)`,
+      [id, title, description || null, repeat_mode || 'none', !!shuffle]
     )
     res.status(201).json({ id, title })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
@@ -30,7 +30,7 @@ router.post('/', authenticateToken, requireRole('admin'), async (req: Authentica
 router.get('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    const playlist = await db.get('SELECT * FROM playlists WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    const playlist = await db.get('SELECT * FROM playlists WHERE id = $1', [req.params.id])
     if (!playlist) { res.status(404).json({ error: 'Playlist not found' }); return }
     const items = await db.all(
       `SELECT pi.*, COALESCE(s.title, m.title) as content_title, COALESCE(s.speaker, m.artist) as content_speaker
@@ -82,7 +82,7 @@ router.delete('/:playlistId/items/:itemId', authenticateToken, requireRole('admi
 router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    await db.run('DELETE FROM playlists WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    await db.run('DELETE FROM playlists WHERE id = $1', [req.params.id])
     res.json({ ok: true })
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })

@@ -10,8 +10,7 @@ router.get('/', async (req: any, res) => {
   try {
     await initDb()
     const rows = await db.all(
-      `SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size, play_count, created_at FROM music WHERE tenant_id=$1 ORDER BY created_at DESC`,
-      [req.tenantId]
+      `SELECT id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, file_format, file_size, play_count, created_at FROM music ORDER BY created_at DESC`
     )
     res.json({ music: rows })
   } catch (err: any) {
@@ -64,8 +63,8 @@ router.post('/', authenticateToken, requireRole('admin'), async (req: any, res) 
 
     const id = uuidv4()
     await dbWriteSafe(
-      `INSERT INTO music (id, title, artist, album, genre, audio_url, cover_url, duration, lyrics, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, title, artist || '', album || '', genre || '', audio_url, cover_url || '', parseInt(duration) || 0, lyrics || '', req.tenantId]
+      `INSERT INTO music (id, title, artist, album, genre, audio_url, cover_url, duration, lyrics) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id, title, artist || '', album || '', genre || '', audio_url, cover_url || '', parseInt(duration) || 0, lyrics || '']
     )
     res.status(201).json({ id, title })
   } catch (err: any) {
@@ -82,22 +81,22 @@ router.get('/analytics/overview', authenticateToken, requireRole('admin'), async
     await initDb()
 
     const totalPlays = await db.get(
-      `SELECT COUNT(*) as count FROM music_plays WHERE tenant_id=$1`, [req.tenantId]
+      `SELECT COUNT(*) as count FROM music_plays`
     )
     const uniqueListeners = await db.get(
-      `SELECT COUNT(DISTINCT COALESCE(user_id, session_id)) as count FROM music_plays WHERE tenant_id=$1`, [req.tenantId]
+      `SELECT COUNT(DISTINCT COALESCE(user_id, session_id)) as count FROM music_plays`
     )
     const totalPlaytime = await db.get(
-      `SELECT COALESCE(SUM(duration_played), 0) as total FROM music_plays WHERE tenant_id=$1`, [req.tenantId]
+      `SELECT COALESCE(SUM(duration_played), 0) as total FROM music_plays`
     )
     const completedPlays = await db.get(
-      `SELECT COUNT(*) as count FROM music_plays WHERE completed = TRUE AND tenant_id=$1`, [req.tenantId]
+      `SELECT COUNT(*) as count FROM music_plays WHERE completed = TRUE`
     )
     const shareClicks = await db.get(
-      `SELECT COUNT(*) as count FROM music_share_clicks WHERE tenant_id=$1`, [req.tenantId]
+      `SELECT COUNT(*) as count FROM music_share_clicks`
     )
     const totalTracks = await db.get(
-      `SELECT COUNT(*) as count FROM music WHERE tenant_id=$1`, [req.tenantId]
+      `SELECT COUNT(*) as count FROM music`
     )
 
     // Top tracks
@@ -107,30 +106,26 @@ router.get('/analytics/overview', authenticateToken, requireRole('admin'), async
               COALESCE(AVG(mp.duration_played), 0) as avg_playtime,
               COUNT(CASE WHEN mp.completed = TRUE THEN 1 END) as completed_count
        FROM music m
-       LEFT JOIN music_plays mp ON mp.track_id = m.id AND mp.tenant_id = $1
-       WHERE m.tenant_id = $1
+       LEFT JOIN music_plays mp ON mp.track_id = m.id
        GROUP BY m.id, m.title, m.artist, m.cover_url, m.duration
        ORDER BY plays DESC
-       LIMIT 10`,
-      [req.tenantId]
+       LIMIT 10`
     )
 
     // Plays over last 30 days (daily)
     const playsOverTime = await db.all(
       `SELECT DATE(played_at) as date, COUNT(*) as plays
        FROM music_plays
-       WHERE tenant_id = $1 AND played_at > NOW() - INTERVAL '30 days'
-       GROUP BY DATE(played_at) ORDER BY DATE(played_at) ASC`,
-      [req.tenantId]
+       WHERE played_at > NOW() - INTERVAL '30 days'
+       GROUP BY DATE(played_at) ORDER BY DATE(played_at) ASC`
     )
 
     // Share clicks over last 30 days
     const shareClicksOverTime = await db.all(
       `SELECT DATE(opened_at) as date, COUNT(*) as clicks
        FROM music_share_clicks
-       WHERE tenant_id = $1 AND opened_at > NOW() - INTERVAL '30 days'
-       GROUP BY DATE(opened_at) ORDER BY DATE(opened_at) ASC`,
-      [req.tenantId]
+       WHERE opened_at > NOW() - INTERVAL '30 days'
+       GROUP BY DATE(opened_at) ORDER BY DATE(opened_at) ASC`
     )
 
     res.json({
@@ -168,21 +163,21 @@ router.get('/:id/analytics', authenticateToken, requireRole('admin'), async (req
               COUNT(DISTINCT COALESCE(user_id, session_id)) as unique_listeners,
               COALESCE(SUM(duration_played), 0) as total_playtime,
               COUNT(CASE WHEN completed = TRUE THEN 1 END) as completed_count
-       FROM music_plays WHERE track_id = $1 AND tenant_id = $2`,
-      [trackId, req.tenantId]
+       FROM music_plays WHERE track_id = $1`,
+      [trackId]
     )
 
     const shareClicks = await db.get(
-      `SELECT COUNT(*) as count FROM music_share_clicks WHERE track_id = $1 AND tenant_id = $2`,
-      [trackId, req.tenantId]
+      `SELECT COUNT(*) as count FROM music_share_clicks WHERE track_id = $1`,
+      [trackId]
     )
 
     const dailyPlays = await db.all(
       `SELECT DATE(played_at) as date, COUNT(*) as plays
        FROM music_plays
-       WHERE track_id = $1 AND tenant_id = $2 AND played_at > NOW() - INTERVAL '30 days'
+       WHERE track_id = $1 AND played_at > NOW() - INTERVAL '30 days'
        GROUP BY DATE(played_at) ORDER BY DATE(played_at) ASC`,
-      [trackId, req.tenantId]
+      [trackId]
     )
 
     res.json({
@@ -214,8 +209,8 @@ router.get('/:id', async (req: any, res) => {
     // Record share click
     const referrer = req.headers.referer || req.headers.referrer || null
     await dbWriteSafe(
-      `INSERT INTO music_share_clicks (id, track_id, referrer, tenant_id) VALUES ($1, $2, $3, $4)`,
-      [uuidv4(), req.params.id, referrer as any, req.tenantId || null]
+      `INSERT INTO music_share_clicks (id, track_id, referrer) VALUES ($1, $2, $3)`,
+      [uuidv4(), req.params.id, referrer as any]
     ).catch(() => {})
 
     // Get related tracks (same genre, exclude current)
@@ -241,8 +236,8 @@ router.post('/:id/play', async (req: any, res) => {
     const sessionId = session_id || (req.headers['x-session-id'] as string) || null
 
     await dbWriteSafe(
-      `INSERT INTO music_plays (id, track_id, user_id, session_id, platform, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [playId, req.params.id, userId, sessionId, platform || 'web', req.tenantId || null]
+      `INSERT INTO music_plays (id, track_id, user_id, session_id, platform) VALUES ($1, $2, $3, $4, $5)`,
+      [playId, req.params.id, userId, sessionId, platform || 'web']
     )
     await dbWriteSafe(
       `UPDATE music SET play_count = COALESCE(play_count, 0) + 1 WHERE id = $1`,
@@ -276,7 +271,7 @@ router.patch('/:id/play', async (req: any, res) => {
 router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
     await initDb()
-    const track = await db.get(`SELECT id, audio_url, cover_url FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    const track = await db.get(`SELECT id, audio_url, cover_url FROM music WHERE id=$1`, [req.params.id])
     if (!track) { res.status(404).json({ error: 'Track not found' }); return }
     for (const url of [track.audio_url, track.cover_url]) {
       if (url) {
@@ -284,7 +279,7 @@ router.delete('/:id', authenticateToken, requireRole('admin'), async (req: any, 
         if (key) await deleteFile(key).catch(() => {})
       }
     }
-    await dbWriteSafe(`DELETE FROM music WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    await dbWriteSafe(`DELETE FROM music WHERE id=$1`, [req.params.id])
     res.json({ success: true })
   } catch (err: any) {
     console.error('[MUSIC] delete error:', err.message)

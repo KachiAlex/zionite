@@ -7,7 +7,6 @@ import { usePageTitle } from "../hooks/usePageTitle"
 import { useAudioPlayer } from "../contexts/AudioPlayerContext"
 import { useActiveBroadcast, useFeaturedSermons, useMusic, useGuestSpeakers, useEvents, useRadioCurrent, useStopRadio, API_BASE } from "../lib/api"
 import type { Sermon, MusicTrack, EventItem } from "../lib/api"
-import { useTenantContext } from "../contexts/TenantContext"
 import StructuredData from "../components/StructuredData"
 import {
   Play, Pause, Search, Heart,
@@ -144,7 +143,6 @@ export default function Home() {
   const { data: guestSpeakers = [] } = useGuestSpeakers()
   const { data: events = [] } = useEvents()
   const { user } = useAuth()
-  const { tenant } = useTenantContext()
   const isLive = broadcast?.status === 'live'
   const { data: radioCurrent } = useRadioCurrent(!isLive)
   const isRadioOn = radioCurrent?.current && !isLive
@@ -239,10 +237,10 @@ export default function Home() {
           <div className="max-w-3xl mx-auto text-center">
             <p className="font-cursive text-2xl md:text-3xl text-[#c9a227] mb-2 font-bold">Welcome to</p>
             <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5">
-              {tenant?.name || 'ZioniteFM'} –<br />The Voice of Redemption
+              ZioniteFM –<br />The Voice of Redemption
             </h1>
             <p className="text-base text-[#9c958a] max-w-xl mx-auto leading-relaxed mb-8 font-semibold">
-              The official digital radio ministry of {tenant?.name || 'The Redemption Project'}. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
+              The official digital radio ministry of The Redemption Project. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link to={user ? (user.role==='super_admin' ? '/super-admin' : (user.role==='admin' || user.role==='broadcaster' ? '/admin' : '/dashboard')) : (isLive?`/live/${broadcast.id}`:"/live")} className="btn-gold text-sm">
@@ -586,7 +584,7 @@ export default function Home() {
                   <Mic2 className="w-3.5 h-3.5 text-[#c9a227]" />
                 </div>
                 <div className="leading-tight">
-                  <div className="text-sm font-medium text-white tracking-wide">{(tenant?.name || 'ZIONITEFM').toUpperCase()}</div>
+                  <div className="text-sm font-medium text-white tracking-wide">ZIONITEFM</div>
                   <div className="text-[9px] text-[#9c958a] tracking-widest uppercase">The Voice of Redemption</div>
                 </div>
               </div>
@@ -646,7 +644,7 @@ export default function Home() {
           </div>
 
           <div className="border-t border-[rgba(243,238,228,0.06)] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-[10px] text-[#9c958a]">© 2025 {tenant?.name || 'ZioniteFM'}. All Rights Reserved.</p>
+            <p className="text-[10px] text-[#9c958a]">© 2025 ZioniteFM. All Rights Reserved.</p>
             <div className="flex items-center gap-4">
               <Link to="/privacy" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="text-[10px] text-[#9c958a] hover:text-[#c9a227] transition-colors">Terms of Use</Link>

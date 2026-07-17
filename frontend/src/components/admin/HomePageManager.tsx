@@ -1,14 +1,12 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
 import { API_BASE, type HomeConfig } from '../../lib/api'
-import { useTenantContext } from '../../contexts/TenantContext'
 import { Save, Loader2, Image, Layout, Type, Link, Eye, EyeOff, Mail, MapPin, Church } from 'lucide-react'
 
 const defaultConfig: HomeConfig = {
   hero: {
-    title: '{tenant} – The Voice of Redemption',
+    title: 'ZioniteFM – The Voice of Redemption',
     subtitle: 'Welcome to',
-    description: 'The official digital radio ministry of {tenant}. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.',
+    description: 'The official digital radio ministry of The Redemption Project. Broadcasting the Gospel of Jesus Christ to the nations through powerful sermons, worship, prayer, and life-transforming conversations.',
     backgroundImage: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=2000&q=80',
     primaryCta: { text: 'Listen Live', link: '/live' },
     secondaryCta: { text: 'Browse Sermons', link: '/archive' },
@@ -31,26 +29,21 @@ const defaultConfig: HomeConfig = {
   }
 }
 
-function mergeConfig(tenantConfig?: HomeConfig): HomeConfig {
+function mergeConfig(savedConfig?: HomeConfig): HomeConfig {
   return {
-    hero: { ...defaultConfig.hero, ...tenantConfig?.hero },
-    brand: { ...defaultConfig.brand, ...tenantConfig?.brand },
-    footer: { ...defaultConfig.footer, ...tenantConfig?.footer },
-    sections: { ...defaultConfig.sections, ...tenantConfig?.sections }
+    hero: { ...defaultConfig.hero, ...savedConfig?.hero },
+    brand: { ...defaultConfig.brand, ...savedConfig?.brand },
+    footer: { ...defaultConfig.footer, ...savedConfig?.footer },
+    sections: { ...defaultConfig.sections, ...savedConfig?.sections }
   }
 }
 
 export default function HomePageManager() {
-  const { tenant } = useTenantContext()
   const token = localStorage.getItem('token')
-  const [config, setConfig] = useState<HomeConfig>(mergeConfig(tenant?.home_config))
+  const [config, setConfig] = useState<HomeConfig>(mergeConfig())
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    setConfig(mergeConfig(tenant?.home_config))
-  }, [tenant?.home_config])
 
   function updateHero(patch: Partial<HomeConfig['hero']>) {
     setConfig(prev => ({ ...prev, hero: { ...prev.hero, ...patch } }))
@@ -74,7 +67,11 @@ export default function HomePageManager() {
     setSaved(false)
     setError('')
     try {
-      await axios.patch(`${API_BASE}/api/tenant/home-config`, { home_config: config }, { headers: { Authorization: `Bearer ${token}` } })
+      await fetch(`${API_BASE}/api/tenant/home-config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ home_config: config })
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
@@ -89,7 +86,7 @@ export default function HomePageManager() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-white flex items-center gap-2"><Layout className="w-4 h-4 text-[#c9a227]" /> Home Page Configuration</h2>
-          <p className="text-[11px] text-[#9c958a] mt-0.5">Customize the landing page for {tenant?.name || 'this ministry'}.</p>
+          <p className="text-[11px] text-[#9c958a] mt-0.5">Customize the landing page for ZioniteFM.</p>
         </div>
         <button type="submit" disabled={saving} className="flex items-center gap-2 bg-[#c9a227] hover:bg-[#e0bd5a] text-[#1b1208] text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 transition-colors">
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save Changes
@@ -110,8 +107,8 @@ export default function HomePageManager() {
           </div>
           <div className="space-y-1">
             <label className="text-[10px] text-[#9c958a] uppercase tracking-wider">Title</label>
-            <input value={config.hero?.title || ''} onChange={e => updateHero({ title: e.target.value })} className="w-full bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white outline-none" placeholder="{tenant} – The Voice of Redemption" />
-            <p className="text-[9px] text-[#9c958a]">Use {'{tenant}'} to insert the ministry name.</p>
+            <input value={config.hero?.title || ''} onChange={e => updateHero({ title: e.target.value })} className="w-full bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] rounded-lg px-3 py-2 text-xs text-white outline-none" placeholder="ZioniteFM – The Voice of Redemption" />
+            <p className="text-[9px] text-[#9c958a]">Title shown in the hero section.</p>
           </div>
         </div>
 

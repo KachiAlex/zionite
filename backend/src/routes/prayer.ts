@@ -10,8 +10,7 @@ router.get('/', async (req: any, res) => {
   try {
     await initDb()
     const rows = await db.all(
-      'SELECT id, CASE WHEN is_anonymous THEN NULL ELSE name END as name, request, is_anonymous, prayers_count, created_at FROM prayer_requests WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50',
-      [req.tenantId]
+      'SELECT id, CASE WHEN is_anonymous THEN NULL ELSE name END as name, request, is_anonymous, prayers_count, created_at FROM prayer_requests ORDER BY created_at DESC LIMIT 50'
     )
     res.json({ prayers: rows })
   } catch (err: any) {
@@ -28,8 +27,8 @@ router.post('/', async (req: any, res) => {
     const id = uuidv4()
     const anon = is_anonymous === true
     await db.run(
-      `INSERT INTO prayer_requests (id, name, request, is_anonymous, tenant_id) VALUES ($1, $2, $3, $4, $5)`,
-      [id, anon ? null : (name || 'Anonymous'), request.trim(), anon, req.tenantId]
+      `INSERT INTO prayer_requests (id, name, request, is_anonymous) VALUES ($1, $2, $3, $4)`,
+      [id, anon ? null : (name || 'Anonymous'), request.trim(), anon]
     )
     const row = await db.get('SELECT id, CASE WHEN is_anonymous THEN NULL ELSE name END as name, request, is_anonymous, prayers_count, created_at FROM prayer_requests WHERE id = $1', [id])
     res.status(201).json({ prayer: row })
@@ -43,8 +42,8 @@ router.post('/:id/pray', async (req: any, res) => {
   try {
     await initDb()
     await db.run(
-      'UPDATE prayer_requests SET prayers_count = prayers_count + 1 WHERE id = $1 AND tenant_id=$2',
-      [req.params.id, req.tenantId]
+      'UPDATE prayer_requests SET prayers_count = prayers_count + 1 WHERE id = $1',
+      [req.params.id]
     )
     const row = await db.get('SELECT prayers_count FROM prayer_requests WHERE id = $1', [req.params.id])
     res.json({ prayers_count: row?.prayers_count || 0 })
@@ -60,8 +59,7 @@ router.get('/admin/all', authenticateToken, async (req: AuthenticatedRequest, re
     const user = (req as any).user
     if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
     const rows = await db.all(
-      'SELECT * FROM prayer_requests WHERE tenant_id=$1 ORDER BY created_at DESC',
-      [req.tenantId]
+      'SELECT * FROM prayer_requests ORDER BY created_at DESC'
     )
     res.json({ prayers: rows })
   } catch (err: any) {
@@ -75,7 +73,7 @@ router.delete('/:id', authenticateToken, async (req: any, res) => {
     await initDb()
     const user = (req as any).user
     if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
-    await db.run('DELETE FROM prayer_requests WHERE id = $1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    await db.run('DELETE FROM prayer_requests WHERE id = $1', [req.params.id])
     res.json({ ok: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })

@@ -37,15 +37,15 @@ router.post('/register', async (req, res) => {
             return;
         }
         const { email, password, name } = parsed.data;
-        const existing = await db.get('SELECT * FROM users WHERE email = $1 AND tenant_id = $2', [email, req.tenantId]);
+        const existing = await db.get('SELECT * FROM users WHERE email = $1', [email]);
         if (existing) {
             res.status(409).json({ error: 'Email already registered' });
             return;
         }
         const hash = await bcrypt.hash(password, 10);
         const id = uuidv4();
-        await db.run('INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)', [id, email, hash, name, 'listener', req.tenantId]);
-        const token = jwt.sign({ id, email, name, role: 'listener', tenantId: req.tenantId }, JWT_SECRET, { expiresIn: '7d' });
+        await db.run('INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)', [id, email, hash, name, 'listener']);
+        const token = jwt.sign({ id, email, name, role: 'listener' }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id, email, name, role: 'listener' } });
     }
     catch (err) {
@@ -67,7 +67,7 @@ router.post('/login', async (req, res) => {
             return;
         }
         const { email, password } = parsed.data;
-        const user = await db.get('SELECT * FROM users WHERE email = $1 AND tenant_id = $2', [email, req.tenantId]);
+        const user = await db.get('SELECT * FROM users WHERE email = $1', [email]);
         if (!user) {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
@@ -77,7 +77,7 @@ router.post('/login', async (req, res) => {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
-        const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, tenantId: req.tenantId }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
     }
     catch (err) {
@@ -95,7 +95,7 @@ router.get('/verify', authenticateToken, (req, res) => {
 router.get('/users', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         await initDb();
-        const users = await db.all('SELECT id, email, name, role, created_at FROM users WHERE tenant_id=$1 ORDER BY created_at DESC', [req.tenantId]);
+        const users = await db.all('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC');
         res.json({ users });
     }
     catch (err) {
@@ -112,12 +112,12 @@ router.put('/users/:id/role', authenticateToken, requireRole('admin'), async (re
             res.status(400).json({ error: 'Invalid role' });
             return;
         }
-        const user = await db.get('SELECT * FROM users WHERE id = $1 AND tenant_id = $2', [id, req.tenantId]);
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [id]);
         if (!user) {
             res.status(404).json({ error: 'User not found' });
             return;
         }
-        await db.run('UPDATE users SET role = $1 WHERE id = $2 AND tenant_id = $3', [role, id, req.tenantId]);
+        await db.run('UPDATE users SET role = $1 WHERE id = $2', [role, id]);
         res.json({ success: true });
     }
     catch (err) {
@@ -138,7 +138,7 @@ router.post('/forgot-password', async (req, res) => {
             return;
         }
         const { email } = parsed.data;
-        const user = await db.get('SELECT id, email, name FROM users WHERE email = $1 AND tenant_id = $2', [email, req.tenantId]);
+        const user = await db.get('SELECT id, email, name FROM users WHERE email = $1', [email]);
         if (!user) {
             // Return success even if user not found (security through obscurity)
             res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
@@ -182,7 +182,7 @@ router.post('/reset-password', async (req, res) => {
             return;
         }
         const { token, password } = parsed.data;
-        const user = await db.get('SELECT id, email, name FROM users WHERE reset_token = $1 AND reset_token_expires > NOW() AND tenant_id = $2', [token, req.tenantId]);
+        const user = await db.get('SELECT id, email, name FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()', [token]);
         if (!user) {
             res.status(400).json({ error: 'Invalid or expired token' });
             return;
@@ -222,7 +222,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
             res.status(400).json({ error: 'Current and new password required (min 6 chars)' });
             return;
         }
-        const user = await db.get('SELECT * FROM users WHERE id = $1 AND tenant_id = $2', [req.user.id, req.tenantId]);
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [req.user.id]);
         if (!user) {
             res.status(404).json({ error: 'User not found' });
             return;
@@ -233,7 +233,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
             return;
         }
         const hash = await bcrypt.hash(newPassword, 10);
-        await db.run('UPDATE users SET password_hash = $1 WHERE id = $2 AND tenant_id = $3', [hash, req.user.id, req.tenantId]);
+        await db.run('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id]);
         res.json({ success: true });
     }
     catch (err) {

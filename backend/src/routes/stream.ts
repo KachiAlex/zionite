@@ -45,20 +45,19 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
       res.status(400).json({ error: 'Invalid chunk data' }); return
     }
 
-    // Verify broadcast belongs to tenant
-    const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [req.params.id])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
 
     const chunkId = uuidv4()
     await db.query(
-      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data, tenant_id) VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)
        ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
-      [chunkId, req.params.id, chunkIndex, chunkData, req.tenantId]
+      [chunkId, req.params.id, chunkIndex, chunkData]
     )
     // Keep last 300 chunks (~10 minutes at 2s interval)
     await db.query(
-      `DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2 AND tenant_id=$3`,
-      [req.params.id, chunkIndex - 300, req.tenantId]
+      `DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2`,
+      [req.params.id, chunkIndex - 300]
     )
     res.json({ success: true })
     // Feed HLS encoder
@@ -83,8 +82,8 @@ router.get('/:id/chunk/:index', async (req: any, res: Response) => {
     const row = await db.get(
       `SELECT sc.chunk_data FROM stream_chunks sc
        JOIN broadcasts b ON b.id = sc.broadcast_id
-       WHERE sc.broadcast_id=$1 AND sc.chunk_index=$2 AND b.tenant_id=$3`,
-      [req.params.id, req.params.index, req.tenantId]
+       WHERE sc.broadcast_id=$1 AND sc.chunk_index=$2`,
+      [req.params.id, req.params.index]
     )
     if (!row) { res.status(404).json({ error: 'Chunk not found' }); return }
     const buffer = Buffer.from(row.chunk_data, 'base64')
@@ -106,15 +105,15 @@ router.get('/:id/concat', async (req: any, res: Response) => {
     const { id } = req.params
     const fromIndex = parseInt(req.query.from as string || '1', 10)
 
-    // Verify broadcast belongs to tenant
-    const bcast = await db.get(`SELECT id, init_segment FROM broadcasts WHERE id=$1 AND tenant_id=$2`, [id, req.tenantId])
+    // Verify broadcast exists
+    const bcast = await db.get(`SELECT id, init_segment FROM broadcasts WHERE id=$1`, [id])
     if (!bcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
 
     // Fetch chunk 0 (WebM init/header — contains EBML + Segment + Tracks)
     // Fall back to broadcasts.init_segment for compatibility with old schema
     const initRow = await db.get(
-      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0 AND tenant_id=$2`,
-      [id, req.tenantId]
+      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+      [id]
     )
     let initBuf: Buffer | null = null
     if (initRow) {
@@ -128,15 +127,15 @@ router.get('/:id/concat', async (req: any, res: Response) => {
 
     // Fetch requested data chunks (chunk_index >= fromIndex, skip chunk 0)
     let rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 AND chunk_index > 0 AND tenant_id=$3 ORDER BY chunk_index ASC LIMIT 3`,
-      [id, Math.max(fromIndex, 1), req.tenantId]
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index >= $2 AND chunk_index > 0 ORDER BY chunk_index ASC LIMIT 3`,
+      [id, Math.max(fromIndex, 1)]
     )
 
     // If no new chunks, fall back to latest 3 data chunks
     if (!rows.length) {
       rows = await db.all(
-        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 AND tenant_id=$2 ORDER BY chunk_index DESC LIMIT 3`,
-        [id, req.tenantId]
+        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 ORDER BY chunk_index DESC LIMIT 3`,
+        [id]
       )
       if (!rows.length) {
         res.status(404).json({ error: 'No audio chunks yet' }); return
@@ -181,12 +180,12 @@ router.get('/:id/playlist.m3u8', async (req: any, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
-    // Verify broadcast belongs to tenant
-    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [id, req.tenantId])
+    // Verify broadcast exists
+    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [id])
     if (!bcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     const rows = await db.all(
-      `SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 AND tenant_id=$2 ORDER BY chunk_index DESC LIMIT 8`,
-      [id, req.tenantId]
+      `SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 8`,
+      [id]
     )
     if (!rows.length) { res.status(404).json({ error: 'No stream data' }); return }
 
@@ -212,15 +211,15 @@ router.get('/:id/playlist.m3u8', async (req: any, res: Response) => {
 router.get('/:id/info', async (req: any, res: Response) => {
   try {
     await initDb()
-    // Verify broadcast belongs to tenant
-    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    // Verify broadcast exists
+    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [req.params.id])
     if (!bcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     const rows = await db.all(
-      `SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 AND tenant_id=$2 ORDER BY chunk_index DESC LIMIT 1`,
-      [req.params.id, req.tenantId]
+      `SELECT chunk_index FROM stream_chunks WHERE broadcast_id=$1 ORDER BY chunk_index DESC LIMIT 1`,
+      [req.params.id]
     )
-    const count = await db.get(`SELECT COUNT(*) as count FROM stream_chunks WHERE broadcast_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
-    const listeners = await db.get(`SELECT COUNT(*) as count FROM stream_listeners WHERE broadcast_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    const count = await db.get(`SELECT COUNT(*) as count FROM stream_chunks WHERE broadcast_id=$1`, [req.params.id])
+    const listeners = await db.get(`SELECT COUNT(*) as count FROM stream_listeners WHERE broadcast_id=$1`, [req.params.id])
     res.json({
       latestChunk: rows[0]?.chunk_index ?? -1,
       totalChunks: Number(count?.count || 0),
@@ -238,8 +237,8 @@ router.post('/:id/join', async (req: any, res: Response) => {
     await initDb()
     const { sessionId } = req.body
     if (!sessionId) { res.status(400).json({ error: 'Missing sessionId' }); return }
-    // Verify broadcast belongs to tenant
-    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenantId])
+    // Verify broadcast exists
+    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [req.params.id])
     if (!bcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
                req.headers['x-real-ip'] as string ||
@@ -253,8 +252,8 @@ router.post('/:id/join', async (req: any, res: Response) => {
       } catch {}
     }
     await db.query(
-      `INSERT INTO stream_listeners (id, broadcast_id, session_id, last_seen, ip, country, region, city, tenant_id) VALUES ($1,$2,$3,NOW(),$4,$5,$6,$7,$8)`,
-      [uuidv4(), req.params.id, sessionId, ip, country, region, city, req.tenantId]
+      `INSERT INTO stream_listeners (id, broadcast_id, session_id, last_seen, ip, country, region, city) VALUES ($1,$2,$3,NOW(),$4,$5,$6,$7)`,
+      [uuidv4(), req.params.id, sessionId, ip, country, region, city]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -269,8 +268,8 @@ router.post('/:id/heartbeat', async (req: any, res: Response) => {
     const { sessionId } = req.body
     if (!sessionId) { res.status(400).json({ error: 'Missing sessionId' }); return }
     await db.query(
-      `UPDATE stream_listeners SET last_seen=NOW() WHERE broadcast_id=$1 AND session_id=$2 AND tenant_id=$3`,
-      [req.params.id, sessionId, req.tenantId]
+      `UPDATE stream_listeners SET last_seen=NOW() WHERE broadcast_id=$1 AND session_id=$2`,
+      [req.params.id, sessionId]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -285,8 +284,8 @@ router.post('/:id/leave', async (req: any, res: Response) => {
     const { sessionId } = req.body
     if (!sessionId) { res.status(400).json({ error: 'Missing sessionId' }); return }
     await db.query(
-      `DELETE FROM stream_listeners WHERE broadcast_id=$1 AND session_id=$2 AND tenant_id=$3`,
-      [req.params.id, sessionId, req.tenantId]
+      `DELETE FROM stream_listeners WHERE broadcast_id=$1 AND session_id=$2`,
+      [req.params.id, sessionId]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -299,11 +298,11 @@ router.post('/:id/stop', authenticateToken, requireRole('broadcaster', 'admin'),
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id=$2",
-      [id, req.tenantId]
+      "UPDATE broadcasts SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [id]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -317,11 +316,11 @@ router.post('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin')
   try {
     await initDb()
     const { id } = req.params
-    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1 AND tenant_id=$2', [id, req.tenantId])
+    const broadcast = await db.get('SELECT * FROM broadcasts WHERE id = $1', [id])
     if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
     await db.run(
-      "UPDATE broadcasts SET status = 'paused' WHERE id = $1 AND tenant_id=$2",
-      [id, req.tenantId]
+      "UPDATE broadcasts SET status = 'paused' WHERE id = $1",
+      [id]
     )
     res.json({ success: true })
   } catch (err: any) {
@@ -334,7 +333,7 @@ router.post('/:id/pause', authenticateToken, requireRole('broadcaster', 'admin')
 router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     await initDb()
-    await db.query(`DELETE FROM stream_chunks WHERE broadcast_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+    await db.query(`DELETE FROM stream_chunks WHERE broadcast_id=$1`, [req.params.id])
     res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
@@ -416,8 +415,8 @@ router.get('/:id/init', async (req: any, res: Response) => {
     const row = await db.get(
       `SELECT sc.chunk_data FROM stream_chunks sc
        JOIN broadcasts b ON b.id = sc.broadcast_id
-       WHERE sc.broadcast_id=$1 AND sc.chunk_index=0 AND b.tenant_id=$2`,
-      [req.params.id, req.tenantId]
+       WHERE sc.broadcast_id=$1 AND sc.chunk_index=0`,
+      [req.params.id]
     )
     if (!row) { res.status(404).json({ error: 'No stream data' }); return }
     const buf = Buffer.from(row.chunk_data, 'base64')
@@ -436,8 +435,8 @@ router.get('/:id/live-sse', async (req: any, res: Response) => {
   try {
     await initDb()
     const { id } = req.params
-    // Verify broadcast belongs to tenant
-    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1 AND tenant_id=$2', [id, req.tenantId])
+    // Verify broadcast exists
+    const bcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [id])
     if (!bcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
 
     res.setHeader('Content-Type', 'text/event-stream')
@@ -447,8 +446,8 @@ router.get('/:id/live-sse', async (req: any, res: Response) => {
 
     // Send init segment
     const initRow = await db.get(
-      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0 AND tenant_id=$2`,
-      [id, req.tenantId]
+      `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=0`,
+      [id]
     )
     if (!initRow) { res.write('event: error\ndata: no stream\n\n'); res.end(); return }
     const initBuf = Buffer.from(initRow.chunk_data, 'base64')
@@ -460,8 +459,8 @@ router.get('/:id/live-sse', async (req: any, res: Response) => {
 
     // Send existing clusters
     const rows = await db.all(
-      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 AND tenant_id=$2 ORDER BY chunk_index ASC LIMIT 120`,
-      [id, req.tenantId]
+      `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 ORDER BY chunk_index ASC LIMIT 120`,
+      [id]
     )
     for (const row of rows) {
       const buf = Buffer.from(row.chunk_data, 'base64')
@@ -475,8 +474,8 @@ router.get('/:id/live-sse', async (req: any, res: Response) => {
       try {
         if (chunkIndex <= latestSent) return
         const row = await db.get(
-          `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=$2 AND tenant_id=$3`,
-          [id, chunkIndex, req.tenantId]
+          `SELECT chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index=$2`,
+          [id, chunkIndex]
         )
         if (!row) return
         const buf = Buffer.from(row.chunk_data, 'base64')
@@ -511,15 +510,15 @@ router.get('/:id/listeners/geo', authenticateToken, requireRole('admin'), async 
     const rows = await db.all(
       `SELECT country, region, city, COUNT(*) as count FROM stream_listeners
        WHERE broadcast_id=$1 AND last_seen > NOW() - INTERVAL '5 minutes'
-         AND country IS NOT NULL AND country != '' AND tenant_id=$2
+         AND country IS NOT NULL AND country != ''
        GROUP BY country, region, city ORDER BY count DESC LIMIT 50`,
-      [req.params.id, req.tenantId])
+      [req.params.id])
     const byCountry = await db.all(
       `SELECT country, COUNT(*) as count FROM stream_listeners
        WHERE broadcast_id=$1 AND last_seen > NOW() - INTERVAL '5 minutes'
-         AND country IS NOT NULL AND country != '' AND tenant_id=$2
+         AND country IS NOT NULL AND country != ''
        GROUP BY country ORDER BY count DESC LIMIT 20`,
-      [req.params.id, req.tenantId])
+      [req.params.id])
     res.json({ locations: rows, byCountry })
   } catch (err: any) {
     res.status(500).json({ error: err.message })

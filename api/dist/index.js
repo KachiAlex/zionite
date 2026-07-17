@@ -32,7 +32,7 @@ import musicRoutes from './routes/music.js';
 import tenantRoutes from './routes/tenants.js';
 import licensePlanRoutes from './routes/license-plans.js';
 import { cacheMiddleware } from './middleware/cache.js';
-import { resolveTenant, JWT_SECRET, authenticateToken, requireRole } from './middleware/auth.js';
+import { JWT_SECRET, authenticateToken, requireRole } from './middleware/auth.js';
 import { optimizeImage } from './middleware/optimizeImage.js';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
@@ -105,20 +105,10 @@ app.use((req, res, next) => {
     }
     next();
 });
-// Resolve tenant from subdomain on every request
-app.use(resolveTenant);
 // Request logging
 app.use((req, res, next) => {
     console.log(`[REQ] ${req.method} ${req.url}`);
     next();
-});
-// Tenant lookup (matches Vercel API)
-app.get('/tenant', (req, res) => {
-    if (!req.tenant) {
-        res.status(404).json({ error: 'Tenant not found' });
-        return;
-    }
-    res.json({ tenant: req.tenant });
 });
 // Health checks
 app.get('/ping', (_req, res) => res.json({ ok: true }));

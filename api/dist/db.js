@@ -383,24 +383,24 @@ async function _initDbInternal() {
     // Run structured migrations
     const { runMigrations } = await import('./migrations/runner.js');
     await runMigrations();
-    // Initialize multi-tenant schema and backfill
-    const defaultTenantId = await _initTenantSchema();
+    // Initialize tenant schema (tables kept for compatibility but not used)
+    await _initTenantSchema();
     console.log('[DB] tenant schema OK');
     const existingSchedule = await db.get('SELECT * FROM schedule LIMIT 1');
     if (!existingSchedule) {
         await db.run(`
-      INSERT INTO schedule (id, title, day_of_week, time, type, tenant_id) VALUES
-      ($1, 'Sunday Gathering', 0, '10:00', 'service', $4),
-      ($2, 'Midweek Study', 3, '19:00', 'study', $4),
-      ($3, 'Prayer Meeting', 5, '18:00', 'prayer', $4)
-    `, [uuidv4(), uuidv4(), uuidv4(), defaultTenantId]);
+      INSERT INTO schedule (id, title, day_of_week, time, type) VALUES
+      ($1, 'Sunday Gathering', 0, '10:00', 'service'),
+      ($2, 'Midweek Study', 3, '19:00', 'study'),
+      ($3, 'Prayer Meeting', 5, '18:00', 'prayer')
+    `, [uuidv4(), uuidv4(), uuidv4()]);
         console.log('[DB] schedule seeded');
     }
     const admin = await db.get('SELECT * FROM users WHERE role = $1', ['super_admin']);
     if (!admin) {
         try {
             const hash = await bcrypt.hash('admin123', 10);
-            await db.run(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin', defaultTenantId]);
+            await db.run(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`, ['admin-1', 'admin@zionite.online', hash, 'Admin User', 'super_admin']);
             console.log('[DB] admin seeded');
         }
         catch (e) {
@@ -417,7 +417,7 @@ async function _initDbInternal() {
     if (!requestedSuperadmin) {
         try {
             const hash = await bcrypt.hash('superadmin123', 10);
-            await db.run(`INSERT INTO users (id, email, password_hash, name, role, tenant_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (email) DO NOTHING`, ['superadmin-1', 'superadmin@zionite.online', hash, 'Super Admin', 'super_admin', defaultTenantId]);
+            await db.run(`INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING`, ['superadmin-1', 'superadmin@zionite.online', hash, 'Super Admin', 'super_admin']);
             console.log('[DB] requested superadmin seeded');
         }
         catch (e) {
