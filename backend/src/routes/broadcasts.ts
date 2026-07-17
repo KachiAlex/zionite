@@ -175,7 +175,7 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
       [id, req.tenantId]
     )
     await pauseRadioForBroadcast()
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.zionite.online'
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://zionite.fly.dev'
     enqueueNotification({
       category: 'live_broadcast',
       type: 'live_broadcast_start',

@@ -83,8 +83,11 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const statsTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
-  const fallbackUrl = `${STREAM_BASE}/api/stream/${broadcastId}/playlist.m3u8`
+  const concatUrl = `${STREAM_BASE}/api/stream/${broadcastId}/concat`
   const usingFallbackRef = useRef(false)
+  const webmPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const webmAudioCtxRef = useRef<AudioContext | null>(null)
+  const webmSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastTimeRef = useRef<number>(0)
@@ -118,11 +121,70 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (infoIntervalRef.current) { clearInterval(infoIntervalRef.current); infoIntervalRef.current = null }
     if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
     if (retryPollRef.current) { clearInterval(retryPollRef.current); retryPollRef.current = null }
+    if (webmPollRef.current) { clearInterval(webmPollRef.current); webmPollRef.current = null }
+    if (webmSourceRef.current) { try { webmSourceRef.current.stop() } catch {} webmSourceRef.current = null }
+    if (webmAudioCtxRef.current) { try { webmAudioCtxRef.current.close() } catch {} webmAudioCtxRef.current = null }
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null }
     try {
       const android = (window as any).AndroidAudio
       if (android && typeof android.stopAudioService === 'function') android.stopAudioService()
     } catch {}
+  }
+
+  async function startWebmFallback(audio: HTMLAudioElement) {
+    console.warn('[WebM] Starting WebM concat fallback')
+    usingFallbackRef.current = true
+    if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+
+    let lastChunkIndex = 0
+
+    async function fetchAndPlay() {
+      try {
+        const res = await fetch(`${concatUrl}?from=${lastChunkIndex + 1}`, {
+          headers: { 'Accept': 'audio/webm' }
+        })
+        if (!res.ok) {
+          console.warn('[WebM] concat fetch failed:', res.status)
+          return
+        }
+        const latestHeader = res.headers.get('X-Latest-Chunk')
+        if (latestHeader) {
+          const newIdx = parseInt(latestHeader, 10)
+          if (newIdx > lastChunkIndex) lastChunkIndex = newIdx
+        }
+        const blob = await res.blob()
+        if (blob.size < 100) return
+
+        const arrayBuffer = await blob.arrayBuffer()
+        const audioCtx = webmAudioCtxRef.current || new (window.AudioContext || (window as any).webkitAudioContext)()
+        webmAudioCtxRef.current = audioCtx
+        if (audioCtx.state === 'suspended') await audioCtx.resume()
+
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+        const source = audioCtx.createBufferSource()
+        source.buffer = audioBuffer
+        source.connect(audioCtx.destination)
+        webmSourceRef.current = source
+
+        source.onended = () => {
+          if (webmSourceRef.current === source) webmSourceRef.current = null
+        }
+
+        source.start()
+        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'latest chunk:', lastChunkIndex)
+
+        if (!isPlaying) {
+          setIsPlaying(true)
+          setStatusText('Live')
+          updateMediaSession(true)
+        }
+      } catch (err: any) {
+        console.error('[WebM] fetch/decode error:', err.message)
+      }
+    }
+
+    await fetchAndPlay()
+    webmPollRef.current = setInterval(fetchAndPlay, 2000)
   }
 
   async function handleStart() {
@@ -280,57 +342,13 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS] Error:', data.type, data.details, data.fatal ? 'FATAL' : 'recoverable', data.response?.code, data.response?.text)
 
-        // Fallback to DB-based playlist when FFmpeg manifest is not available (404)
+        // Fallback to WebM concat playback when FFmpeg manifest is not available (404)
         if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR && data.response?.code === 404 && !fallbackAttempted) {
           fallbackAttempted = true
-          usingFallbackRef.current = true
-          console.warn('[HLS] FFmpeg manifest 404, falling back to DB playlist:', fallbackUrl)
+          console.warn('[HLS] FFmpeg manifest 404, switching to WebM concat fallback')
           hls.destroy()
-          const fallbackHls = new Hls({
-            liveSyncDurationCount: 6,
-            liveMaxLatencyDurationCount: 25,
-            backBufferLength: 10,
-            maxBufferLength: 45,
-            maxMaxBufferLength: 60,
-            manifestLoadingRetryDelay: 500,
-            manifestLoadingMaxRetry: 20,
-            levelLoadingRetryDelay: 500,
-            levelLoadingMaxRetry: 20,
-            fragLoadingRetryDelay: 500,
-            fragLoadingMaxRetry: 20,
-            liveDurationInfinity: true,
-          })
-          hlsRef.current = fallbackHls
-          fallbackHls.loadSource(fallbackUrl)
-          fallbackHls.attachMedia(audio)
-          fallbackHls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
-            if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
-            console.log('[HLS] Fallback manifest parsed, levels:', d.levels?.length)
-            audio.play().then(() => {
-              setIsPlaying(true)
-              setStatusText('Live')
-              updateMediaSession(true)
-            }).catch(() => { setStatusText('Tap play to start') })
-          })
-          fallbackHls.on(Hls.Events.FRAG_BUFFERED, (_e, d) => {
-            if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
-            if (audio.paused) audio.play().catch(() => {})
-          })
-          fallbackHls.on(Hls.Events.ERROR, (_e, err) => {
-            console.error('[HLS] Fallback error:', err.type, err.details, err.fatal ? 'FATAL' : 'recoverable')
-            if (err.fatal) {
-              if (err.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                setTimeout(() => fallbackHls.startLoad(), 1500)
-              } else if (err.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                fallbackHls.recoverMediaError()
-              } else {
-                fallbackHls.destroy()
-                setStatusText('Stream error')
-                setStarted(false)
-                startRetryPoll()
-              }
-            }
-          })
+          hlsRef.current = null
+          startWebmFallback(audio)
           return
         }
 
@@ -372,14 +390,26 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }
       })
     } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
+      // Safari native HLS — try manifest first, fallback to WebM on error
       audio.src = hlsUrl
+      audio.addEventListener('error', () => {
+        const err = audio.error
+        if (err && (err.code === 4 || err.code === 2) && !usingFallbackRef.current) {
+          console.warn('[HLS] Safari native HLS error, falling back to WebM')
+          audio.src = ''
+          startWebmFallback(audio)
+        }
+      })
       audio.play().then(() => {
         setIsPlaying(true)
         setStatusText('Live')
         updateMediaSession(true)
       }).catch(() => {
-        setStatusText('Tap play to start')
+        if (!usingFallbackRef.current) {
+          console.warn('[HLS] Safari native HLS play failed, falling back to WebM')
+          audio.src = ''
+          startWebmFallback(audio)
+        }
       })
     } else {
       setStatusText('HLS not supported in this browser')
