@@ -203,9 +203,9 @@ function doStart(blsId: string) {
     '-ar', '44100',
     '-ac', '2',
 
-    // Voice-optimized cleanup: remove rumble and gentle noise reduction.
-    // Keep filter chain minimal to avoid artifacts.
-    '-af', 'highpass=f=80,afftdn=nf=-15,alimiter=limit=-1.5dB:release=10',
+    // Voice-optimized: remove low-frequency rumble, prevent clipping.
+    // afftdn removed — its nf parameter range [-80,-20] is incompatible with our needs.
+    '-af', 'highpass=f=80,alimiter=limit=-1.5dB:release=10',
     '-bufsize', '256k',
 
     // HLS output

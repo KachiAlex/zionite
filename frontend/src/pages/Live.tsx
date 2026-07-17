@@ -140,39 +140,29 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
 
     let lastPlayedChunk = 0
     let stopped = false
+    let nextBuffer: AudioBuffer | null = null
+    let nextBufferChunk = 0
+    let isPreFetching = false
 
     webmStopRef.current = () => { stopped = true }
 
-    async function fetchAndPlay() {
-      if (stopped) return
+    async function fetchNextBuffer(): Promise<{ buffer: AudioBuffer; chunk: number } | null> {
+      if (stopped) return null
       try {
         const res = await fetch(`${concatUrl}?from=${lastPlayedChunk + 1}`, {
           headers: { 'Accept': 'audio/webm' }
         })
         if (!res.ok) {
           console.warn('[WebM] concat fetch failed:', res.status)
-          if (res.status === 404) {
-            setStatusText('Waiting for broadcaster…')
-            if (!stopped) setTimeout(fetchAndPlay, 3000)
-            return
-          }
-          if (!stopped) setTimeout(fetchAndPlay, 2000)
-          return
+          return null
         }
         const latestHeader = res.headers.get('X-Latest-Chunk')
         if (latestHeader) {
           const newIdx = parseInt(latestHeader, 10)
-          if (newIdx <= lastPlayedChunk) {
-            console.log('[WebM] No new chunks since', lastPlayedChunk, '- retrying in 2s')
-            if (!stopped) setTimeout(fetchAndPlay, 2000)
-            return
-          }
+          if (newIdx <= lastPlayedChunk) return null
         }
         const blob = await res.blob()
-        if (blob.size < 100) {
-          if (!stopped) setTimeout(fetchAndPlay, 2000)
-          return
-        }
+        if (blob.size < 100) return null
 
         const arrayBuffer = await blob.arrayBuffer()
         const audioCtx = webmAudioCtxRef.current || new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -180,40 +170,78 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         if (audioCtx.state === 'suspended') await audioCtx.resume()
 
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
-
-        if (webmSourceRef.current) {
-          try { webmSourceRef.current.stop() } catch {}
-          webmSourceRef.current = null
-        }
-
-        const source = audioCtx.createBufferSource()
-        source.buffer = audioBuffer
-        source.connect(audioCtx.destination)
-        webmSourceRef.current = source
-
-        if (latestHeader) lastPlayedChunk = parseInt(latestHeader, 10)
-        const duration = audioBuffer.duration
-        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'duration:', duration.toFixed(1) + 's', 'latest chunk:', lastPlayedChunk)
-
-        if (!isPlaying) {
-          setIsPlaying(true)
-          setStatusText('Live')
-          updateMediaSession(true)
-        }
-
-        source.onended = () => {
-          if (webmSourceRef.current === source) webmSourceRef.current = null
-          if (!stopped) fetchAndPlay()
-        }
-
-        source.start()
+        const chunk = latestHeader ? parseInt(latestHeader, 10) : lastPlayedChunk + 1
+        return { buffer: audioBuffer, chunk }
       } catch (err: any) {
         console.error('[WebM] fetch/decode error:', err.message)
-        if (!stopped) setTimeout(fetchAndPlay, 2000)
+        return null
       }
     }
 
-    await fetchAndPlay()
+    async function preFetch() {
+      if (isPreFetching || nextBuffer || stopped) return
+      isPreFetching = true
+      try {
+        const result = await fetchNextBuffer()
+        if (result) {
+          nextBuffer = result.buffer
+          nextBufferChunk = result.chunk
+        }
+      } finally {
+        isPreFetching = false
+      }
+    }
+
+    async function playNext() {
+      if (stopped) return
+
+      let buffer: AudioBuffer | null = nextBuffer
+      let chunk = nextBufferChunk
+      nextBuffer = null
+
+      if (!buffer) {
+        const result = await fetchNextBuffer()
+        if (!result) {
+          setStatusText('Waiting for broadcaster…')
+          if (!stopped) setTimeout(playNext, 2000)
+          return
+        }
+        buffer = result.buffer
+        chunk = result.chunk
+      }
+
+      if (stopped || !buffer) return
+
+      const audioCtx = webmAudioCtxRef.current!
+      if (webmSourceRef.current) {
+        try { webmSourceRef.current.stop() } catch {}
+        webmSourceRef.current = null
+      }
+
+      const source = audioCtx.createBufferSource()
+      source.buffer = buffer
+      source.connect(audioCtx.destination)
+      webmSourceRef.current = source
+
+      lastPlayedChunk = chunk
+      console.log('[WebM] Playing chunk', chunk, 'duration:', buffer.duration.toFixed(1) + 's')
+
+      if (!isPlaying) {
+        setIsPlaying(true)
+        setStatusText('Live')
+        updateMediaSession(true)
+      }
+
+      source.onended = () => {
+        if (webmSourceRef.current === source) webmSourceRef.current = null
+        if (!stopped) playNext()
+      }
+
+      source.start()
+      preFetch()
+    }
+
+    await playNext()
   }
 
   async function handleStart() {
