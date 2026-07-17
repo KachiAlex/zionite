@@ -109,30 +109,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, [pushSupported])
 
   async function registerFcmToken(): Promise<boolean> {
-    try {
-      const { PushNotifications } = await import('@capacitor/push-notifications')
-      const perm = await PushNotifications.requestPermissions()
-      if (perm.receive !== 'granted') return false
-      await PushNotifications.register()
-      return new Promise((resolve) => {
-        const handler = (event: any) => {
-          const token = event.value
-          fetch(`${API_BASE}/api/push/fcm-token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, user_id: getUserId(), platform: 'android' })
-          }).catch(() => {})
-          PushNotifications.removeAllListeners()
-          resolve(true)
-        }
-        PushNotifications.addListener('registration', handler)
-        PushNotifications.addListener('registrationError', () => { PushNotifications.removeAllListeners(); resolve(false) })
-        setTimeout(() => { PushNotifications.removeAllListeners(); resolve(false) }, 10000)
-      })
-    } catch (e: any) {
-      console.error('FCM register error:', e)
-      return false
-    }
+    return false
   }
 
   async function updatePreferences(patch: Partial<NotificationPreferences>) {
@@ -153,25 +130,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }
 
   async function unregisterFcmToken() {
-    try {
-      const { PushNotifications } = await import('@capacitor/push-notifications')
-      await PushNotifications.getDeliveredNotifications()
-      // Best effort: we cannot read the token after unregister, but we can try to remove from server
-      await PushNotifications.unregister()
-    } catch (e: any) { console.error('FCM unregister error:', e) }
+    // No-op: push notifications plugin removed
   }
 
   async function listenForNativeNotificationClicks() {
-    try {
-      const { PushNotifications } = await import('@capacitor/push-notifications')
-      PushNotifications.addListener('pushNotificationActionPerformed', (event: any) => {
-        const url = event.notification?.data?.url || event.notification?.data?.link
-        if (typeof url === 'string') {
-          const path = url.startsWith('/') ? url : '/' + url
-          window.location.href = path
-        }
-      })
-    } catch (e: any) { console.error('FCM tap listener error:', e) }
+    // No-op: push notifications plugin removed
   }
 
   useEffect(() => {

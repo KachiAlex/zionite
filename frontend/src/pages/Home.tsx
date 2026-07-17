@@ -14,7 +14,7 @@ import {
   Users, BookOpen, Headphones, ChevronRight,
   Download, Facebook, Instagram, Youtube, Twitter,
   Mic2, MapPin, Mail, Radio, Calendar, Disc3, Music, Share2,
-  SkipBack, SkipForward, Volume2, Square, Star
+  SkipBack, SkipForward, Volume2, X, Star
 } from "lucide-react"
 
 function formatTime(seconds: number) {
@@ -110,7 +110,7 @@ const MusicCard = memo(function MusicCard({ track }: { track: MusicTrack }) {
   }
 
   return (
-    <div className="group block hover-lift w-[150px] flex-shrink-0">
+    <div className="group block hover-lift w-full">
       <div className="relative rounded-xl overflow-hidden aspect-square mb-2.5 bg-[#1c1d24]">
         {track.cover_url ? (
           <img src={track.cover_url} alt={`${track.title} album cover`} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -148,7 +148,7 @@ export default function Home() {
   const isLive = broadcast?.status === 'live'
   const { data: radioCurrent } = useRadioCurrent(!isLive)
   const isRadioOn = radioCurrent?.current && !isLive
-  const { playQueue, togglePlay, currentTrack, isPlaying, seek, progress, duration, volume, setVolume, next, prev } = useAudioPlayer()
+  const { playQueue, stop, togglePlay, currentTrack, isPlaying, seek, progress, duration, volume, setVolume, next, prev } = useAudioPlayer()
 
   const radioTracks = useMemo(() => {
     if (!radioCurrent?.playlist?.items) return []
@@ -176,7 +176,7 @@ export default function Home() {
   }
 
   function handleRadioStop() {
-    if (isRadioPlaying) togglePlay()
+    stop()
     stopRadioMutation.mutate()
   }
 
@@ -388,14 +388,14 @@ export default function Home() {
                     className="w-16 h-1 accent-[#c9a227] cursor-pointer"
                   />
                 </div>
-                {/* Stop Radio */}
+                {/* Close Radio */}
                 <button
                   onClick={handleRadioStop}
                   disabled={stopRadioMutation.isPending}
                   className="w-8 h-8 flex items-center justify-center text-[#9c958a] hover:text-red-400 transition-colors ml-1"
-                  title="Stop radio stream"
+                  title="Close radio stream"
                 >
-                  <Square className="w-4 h-4 fill-current" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -441,7 +441,7 @@ export default function Home() {
               <section className="rounded-2xl border border-[rgba(243,238,228,0.08)] bg-[#1c1d24] p-5 hover-lift">
                 <SectionHeader title="Featured Music" action="View All" to="/music" />
                 {musicTracks.length > 0 ? (
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     {musicTracks.slice(0, 2).map((t: MusicTrack) => <MusicCard key={t.id} track={t} />)}
                   </div>
                 ) : (

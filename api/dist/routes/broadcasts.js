@@ -323,21 +323,34 @@ router.delete('/:id', authenticateToken, requireRole('broadcaster', 'admin'), as
             res.status(400).json({ error: 'Cannot delete a live broadcast. End it first.' });
             return;
         }
-        // Delete associated recording from R2 if present
+        // Stop any lingering HLS process (e.g. paused broadcasts)
+        try {
+            stopHlsBroadcast(id);
+        }
+        catch (e) {
+            console.warn('[BROADCASTS] stopHls on delete:', e.message);
+        }
+        // Delete associated recording from R2 if present (with timeout)
         if (broadcast.recording_url) {
             try {
                 const key = extractKeyFromUrl(broadcast.recording_url);
-                if (key)
-                    await deleteFile(key);
+                if (key) {
+                    await Promise.race([
+                        deleteFile(key),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('R2 delete timeout')), 5000))
+                    ]);
+                }
             }
             catch (e) {
                 console.warn('[BROADCASTS] delete recording warning:', e.message);
             }
         }
-        // Clean up related data
-        await db.run('DELETE FROM chat_messages WHERE broadcast_id=$1', [id]);
-        await db.run('DELETE FROM stream_chunks WHERE broadcast_id=$1', [id]);
-        await db.run('DELETE FROM stream_listeners WHERE broadcast_id=$1', [id]);
+        // Clean up related data in parallel for speed
+        await Promise.all([
+            db.run('DELETE FROM chat_messages WHERE broadcast_id=$1', [id]),
+            db.run('DELETE FROM stream_chunks WHERE broadcast_id=$1', [id]),
+            db.run('DELETE FROM stream_listeners WHERE broadcast_id=$1', [id]),
+        ]);
         await db.run('DELETE FROM broadcasts WHERE id=$1 AND tenant_id=$2', [id, req.tenantId]);
         res.json({ success: true });
     }

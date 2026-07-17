@@ -83,6 +83,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   const statsTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const hlsUrl = `${STREAM_BASE}/live/${broadcastId}/stream.m3u8`
+  const fallbackUrl = `${STREAM_BASE}/api/stream/${broadcastId}/playlist.m3u8`
+  const usingFallbackRef = useRef(false)
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastTimeRef = useRef<number>(0)
@@ -274,8 +276,63 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         setStats({ latency, buffer, bitrate })
       }, 2000)
 
+      let fallbackAttempted = false
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS] Error:', data.type, data.details, data.fatal ? 'FATAL' : 'recoverable', data.response?.code, data.response?.text)
+
+        // Fallback to DB-based playlist when FFmpeg manifest is not available (404)
+        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR && data.response?.code === 404 && !fallbackAttempted) {
+          fallbackAttempted = true
+          usingFallbackRef.current = true
+          console.warn('[HLS] FFmpeg manifest 404, falling back to DB playlist:', fallbackUrl)
+          hls.destroy()
+          const fallbackHls = new Hls({
+            liveSyncDurationCount: 6,
+            liveMaxLatencyDurationCount: 25,
+            backBufferLength: 10,
+            maxBufferLength: 45,
+            maxMaxBufferLength: 60,
+            manifestLoadingRetryDelay: 500,
+            manifestLoadingMaxRetry: 20,
+            levelLoadingRetryDelay: 500,
+            levelLoadingMaxRetry: 20,
+            fragLoadingRetryDelay: 500,
+            fragLoadingMaxRetry: 20,
+            liveDurationInfinity: true,
+          })
+          hlsRef.current = fallbackHls
+          fallbackHls.loadSource(fallbackUrl)
+          fallbackHls.attachMedia(audio)
+          fallbackHls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+            if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+            console.log('[HLS] Fallback manifest parsed, levels:', d.levels?.length)
+            audio.play().then(() => {
+              setIsPlaying(true)
+              setStatusText('Live')
+              updateMediaSession(true)
+            }).catch(() => { setStatusText('Tap play to start') })
+          })
+          fallbackHls.on(Hls.Events.FRAG_BUFFERED, (_e, d) => {
+            if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
+            if (audio.paused) audio.play().catch(() => {})
+          })
+          fallbackHls.on(Hls.Events.ERROR, (_e, err) => {
+            console.error('[HLS] Fallback error:', err.type, err.details, err.fatal ? 'FATAL' : 'recoverable')
+            if (err.fatal) {
+              if (err.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                setTimeout(() => fallbackHls.startLoad(), 1500)
+              } else if (err.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                fallbackHls.recoverMediaError()
+              } else {
+                fallbackHls.destroy()
+                setStatusText('Stream error')
+                setStarted(false)
+                startRetryPoll()
+              }
+            }
+          })
+          return
+        }
 
         // Non-fatal stall: try to keep audio moving
         if (!data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {

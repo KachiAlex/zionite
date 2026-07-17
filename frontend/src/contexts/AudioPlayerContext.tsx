@@ -199,6 +199,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
     setIsPlaying(false)
     setProgress(0)
+    setQueue([])
+    setOriginalIndex(0)
+    setShuffleOn(false)
+    setShuffleIndices([])
+    setShufflePos(0)
   }, [currentTrack, trackPlayEnd])
 
   const setVolume = useCallback((v: number) => {

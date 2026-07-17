@@ -175,12 +175,13 @@ router.patch('/:id/start', authenticateToken, requireRole('broadcaster', 'admin'
       [id, req.tenantId]
     )
     await pauseRadioForBroadcast()
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.zionite.online'
     enqueueNotification({
       category: 'live_broadcast',
       type: 'live_broadcast_start',
-      title: 'We are live!',
-      body: `${broadcast.title || 'ZioniteFM'} is streaming now.`,
-      url: `/live/${id}`
+      title: 'ZioniteFM is Live!',
+      body: `🔴 ${broadcast.title || 'Live Broadcast'} is streaming now. Tap to join the live service.`,
+      url: `${FRONTEND_URL}/live/${id}`
     }).catch((e: any) => console.error('[BROADCASTS] enqueue notification failed:', e.message))
     res.json({ success: true })
   } catch (err: any) {
