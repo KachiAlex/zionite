@@ -136,11 +136,14 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     usingFallbackRef.current = true
     if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null }
 
-    let lastChunkIndex = 0
+    let lastPlayedChunk = 0
+    let isFetching = false
 
     async function fetchAndPlay() {
+      if (isFetching) return
+      isFetching = true
       try {
-        const res = await fetch(`${concatUrl}?from=${lastChunkIndex + 1}`, {
+        const res = await fetch(`${concatUrl}?from=${lastPlayedChunk + 1}`, {
           headers: { 'Accept': 'audio/webm' }
         })
         if (!res.ok) {
@@ -150,7 +153,10 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         const latestHeader = res.headers.get('X-Latest-Chunk')
         if (latestHeader) {
           const newIdx = parseInt(latestHeader, 10)
-          if (newIdx > lastChunkIndex) lastChunkIndex = newIdx
+          if (newIdx <= lastPlayedChunk) {
+            console.log('[WebM] No new chunks since', lastPlayedChunk, '- skipping')
+            return
+          }
         }
         const blob = await res.blob()
         if (blob.size < 100) return
@@ -161,6 +167,12 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         if (audioCtx.state === 'suspended') await audioCtx.resume()
 
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+
+        if (webmSourceRef.current) {
+          try { webmSourceRef.current.stop() } catch {}
+          webmSourceRef.current = null
+        }
+
         const source = audioCtx.createBufferSource()
         source.buffer = audioBuffer
         source.connect(audioCtx.destination)
@@ -171,7 +183,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }
 
         source.start()
-        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'latest chunk:', lastChunkIndex)
+        if (latestHeader) lastPlayedChunk = parseInt(latestHeader, 10)
+        console.log('[WebM] Playing decoded chunk, samples:', audioBuffer.length, 'latest chunk:', lastPlayedChunk)
 
         if (!isPlaying) {
           setIsPlaying(true)
@@ -180,6 +193,8 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
         }
       } catch (err: any) {
         console.error('[WebM] fetch/decode error:', err.message)
+      } finally {
+        isFetching = false
       }
     }
 
