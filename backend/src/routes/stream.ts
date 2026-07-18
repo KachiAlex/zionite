@@ -131,16 +131,10 @@ router.get('/:id/concat', async (req: any, res: Response) => {
       [id, Math.max(fromIndex, 1)]
     )
 
-    // If no new chunks, fall back to latest 3 data chunks
+    // If no new chunks available, return 404 so the listener waits
+    // instead of replaying old chunks in a loop
     if (!rows.length) {
-      rows = await db.all(
-        `SELECT chunk_index, chunk_data FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index > 0 ORDER BY chunk_index DESC LIMIT 3`,
-        [id]
-      )
-      if (!rows.length) {
-        res.status(404).json({ error: 'No audio chunks yet' }); return
-      }
-      rows = rows.reverse()
+      res.status(404).json({ error: 'No new chunks yet' }); return
     }
 
     // Build: chunk 0 (full, as-is from MediaRecorder — EBML+Segment+Tracks+first Cluster)

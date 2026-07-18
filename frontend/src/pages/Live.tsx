@@ -518,6 +518,7 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   }
 
   /* ── Playback watchdog: detect silent stalls & recover ── */
+  const lastRestartRef = useRef<number>(0)
   useEffect(() => {
     if (!started || !audioRef.current) return
     const audio = audioRef.current
@@ -545,8 +546,14 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
             audio.currentTime = hls.liveSyncPosition
           }
         } else if (stallCountRef.current >= 3) {
-          // Attempt 3: full player restart
+          // Attempt 3: full player restart (with cooldown to prevent loops)
+          const sinceRestart = Date.now() - lastRestartRef.current
+          if (sinceRestart < 15000) {
+            console.warn(`[Watchdog] Attempt 3 skipped — cooldown (${Math.round(sinceRestart/1000)}s since last restart)`)
+            return
+          }
           console.warn('[Watchdog] Attempt 3: full restart')
+          lastRestartRef.current = Date.now()
           cleanup()
           setStarted(false)
           setStatusText('Reconnecting…')

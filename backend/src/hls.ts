@@ -376,12 +376,37 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
     const buf = Buffer.from(base64Chunk, 'base64')
     console.log(`[HLS] ${broadcastId} chunk ${chunkIndex}: decoded ${buf.length} bytes, first16=${buf.subarray(0, 16).toString('hex')}`)
     // If a fresh EBML header appears mid-stream, the broadcaster restarted
-    // MediaRecorder (new timeline). Restart FFmpeg to honor it.
+    // MediaRecorder (new timeline). Instead of restarting FFmpeg (which resets
+    // the HLS media sequence and causes listener-side loops), extract only the
+    // Cluster data and feed it to the existing FFmpeg process. FFmpeg's -fflags
+    // +genpts will regenerate timestamps for the new timeline.
     if (hls.initSent && hasEbmlHeader(buf)) {
-      console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has fresh EBML header while active — broadcaster reconnect, restarting`)
-      await restartHlsBroadcast(broadcastId)
-      hls = active.get(broadcastId)
-      if (!hls || hls.ended || hls.ffmpeg.killed) return
+      console.warn(`[HLS] ${broadcastId} chunk ${chunkIndex} has fresh EBML header while active — extracting cluster data without FFmpeg restart`)
+      const clusterOnly = extractCluster(buf)
+      const patchedChunk = makeStreamingChunk(buf)
+      if (patchedChunk) {
+        // Feed the patched full chunk (EBML + Segment with unknown size + Cluster)
+        // FFmpeg's WebM demuxer can handle a new EBML header mid-stream with genpts
+        try {
+          if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
+            hls.ffmpeg.stdin.write(patchedChunk)
+            console.log(`[HLS] ${broadcastId} fed EBML chunk ${chunkIndex} without restart: ${patchedChunk.length} bytes`)
+          }
+        } catch (writeErr: any) {
+          console.warn(`[HLS] ${broadcastId} stdin write failed for EBML chunk:`, writeErr.message)
+        }
+        return
+      }
+      // Fallback: feed cluster-only data
+      try {
+        if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
+          hls.ffmpeg.stdin.write(clusterOnly)
+          console.log(`[HLS] ${broadcastId} fed cluster-only from EBML chunk ${chunkIndex}: ${clusterOnly.length} bytes`)
+        }
+      } catch (writeErr: any) {
+        console.warn(`[HLS] ${broadcastId} stdin write failed for cluster-only:`, writeErr.message)
+      }
+      return
     }
     // FFmpeg expects a continuous WebM byte stream. MediaRecorder timeslice
     // chunks are contiguous, not necessarily cluster-aligned, so we feed the

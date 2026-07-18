@@ -134,6 +134,11 @@ export function initWebSocket(httpServer: HttpServer) {
            ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
           [crypto.randomUUID(), broadcastId, chunkIndex, chunkData]
         )
+        // Keep last 300 chunks (~10 minutes at 2s interval) — fire-and-forget
+        dbWriteSafe(
+          `DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2`,
+          [broadcastId, chunkIndex - 300]
+        )
       } catch (err: any) {
         console.error('[WS] broadcast_chunk error:', err.message)
       }
