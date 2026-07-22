@@ -595,6 +595,13 @@ export default function RadioStudio({
         } as any
       })
 
+      // Re-claim audio focus with "duck" mode so external players (VLC, Spotify) keep playing
+      try {
+        if (typeof (window as any).AndroidAudio?.requestDuckFocus === 'function') {
+          (window as any).AndroidAudio.requestDuckFocus()
+        }
+      } catch {}
+
       /* ── Build mixer graph ── */
       const { ctx, dest, micGain: micGNode } = getOrCreateMixer()
       if (ctx.state === 'suspended') ctx.resume().catch(() => {})
