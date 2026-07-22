@@ -14,6 +14,9 @@ export function initWebSocket(httpServer: HttpServer) {
   io = new SocketIOServer(httpServer, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
     path: '/socket.io',
+    pingInterval: 15000,
+    pingTimeout: 60000,
+    connectTimeout: 30000,
   })
 
   io.on('connection', (socket) => {

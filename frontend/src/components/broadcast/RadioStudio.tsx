@@ -260,6 +260,10 @@ export default function RadioStudio({
   const chunkTimesRef = useRef<number[]>([])
   const chunkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const shouldRecordRef = useRef(false)
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastChunkTimeRef = useRef<number>(Date.now())
+  const recorderRestartCountRef = useRef(0)
+  const audioCtxKeepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const localRecorderRef = useRef<MediaRecorder | null>(null)
   const fileWritableRef = useRef<FileSystemWritableFileStream | null>(null)
   const cloudRecorderRef = useRef<MediaRecorder | null>(null)
@@ -558,14 +562,25 @@ export default function RadioStudio({
       const socket = io(SOCKET_BASE, {
         path: '/socket.io',
         transports: ['websocket', 'polling'],
-        auth: token ? { token } : undefined
+        auth: token ? { token } : undefined,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 30000,
       })
       socketRef.current = socket
       socket.on('connect', () => {
         if (broadcastId) {
           socket.emit('join_broadcast', broadcastId)
-          socket.emit('start_broadcast_hls', broadcastId) // Pre-start FFmpeg before first chunk
+          socket.emit('start_broadcast_hls', broadcastId)
         }
+      })
+      socket.on('disconnect', () => {
+        console.warn('[Broadcast] socket disconnected — will auto-reconnect')
+      })
+      socket.on('connect_error', (err: any) => {
+        console.warn('[Broadcast] socket connect error:', err.message)
       })
 
       const deviceId = activeDeviceIdRef.current
@@ -658,6 +673,37 @@ export default function RadioStudio({
           setStreamStats({ chunkCount: data.totalChunks, bitrate, latestChunk: data.latestChunk })
         } catch {}
       }, 3000)
+
+      // Watchdog: detect if chunks stop flowing for >10s and force-restart recorder
+      lastChunkTimeRef.current = Date.now()
+      watchdogRef.current = setInterval(() => {
+        if (!shouldRecordRef.current) return
+        const elapsed = Date.now() - lastChunkTimeRef.current
+        if (elapsed > 10000) {
+          console.warn(`[Broadcast] Watchdog: no chunks for ${Math.round(elapsed / 1000)}s, force-restarting recorder`)
+          try {
+            const rec = mediaRecorderRef.current
+            if (rec && rec.state !== 'inactive') {
+              rec.stop() // will trigger onstop -> auto-restart
+            } else {
+              startChunkRecorder() // direct restart if already inactive
+            }
+          } catch (e) {
+            console.error('[Broadcast] watchdog restart failed:', e)
+            try { startChunkRecorder() } catch {}
+          }
+          lastChunkTimeRef.current = Date.now()
+        }
+      }, 5000)
+
+      // AudioContext keep-alive: resume if suspended (Android can suspend after backgrounding)
+      audioCtxKeepAliveRef.current = setInterval(() => {
+        const ctx = mixerCtxRef.current
+        if (ctx && ctx.state === 'suspended') {
+          console.warn('[Broadcast] AudioContext suspended, resuming')
+          ctx.resume().catch(() => {})
+        }
+      }, 3000)
     } catch {
       setUploadError('Could not access microphone for streaming')
     }
@@ -671,6 +717,7 @@ export default function RadioStudio({
 
     recorder.ondataavailable = async (e) => {
       if (e.data.size > 0 && broadcastId) {
+        lastChunkTimeRef.current = Date.now()
         const reader = new FileReader()
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(',')[1]
@@ -695,8 +742,34 @@ export default function RadioStudio({
       }
     }
 
+    recorder.onstop = () => {
+      console.warn('[Broadcast] MediaRecorder stopped unexpectedly')
+      // Auto-restart if we should still be recording (Android WebView can silently stop)
+      if (shouldRecordRef.current && streamRef.current) {
+        recorderRestartCountRef.current++
+        console.log(`[Broadcast] Auto-restarting recorder (attempt ${recorderRestartCountRef.current})`)
+        setTimeout(() => {
+          if (shouldRecordRef.current && streamRef.current) {
+            try { startChunkRecorder() } catch (e) { console.error('[Broadcast] restart failed:', e) }
+          }
+        }, 500)
+      }
+    }
+
+    recorder.onerror = (event: any) => {
+      console.error('[Broadcast] MediaRecorder error:', event.error || event)
+      // Try to restart on error
+      if (shouldRecordRef.current && streamRef.current) {
+        try {
+          if (recorder.state !== 'inactive') recorder.stop()
+        } catch {}
+        // onstop handler will auto-restart
+      }
+    }
+
     mediaRecorderRef.current = recorder
     recorder.start(2000) // timeslice: emit blob every 2 seconds with proper segments
+    lastChunkTimeRef.current = Date.now()
   }
 
   function stopStreaming(triggerUpload = false): Promise<void> {
@@ -714,6 +787,8 @@ export default function RadioStudio({
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setMicStream(null)
     if (statsIntervalRef.current) { clearInterval(statsIntervalRef.current); statsIntervalRef.current = null }
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null }
+    if (audioCtxKeepAliveRef.current) { clearInterval(audioCtxKeepAliveRef.current); audioCtxKeepAliveRef.current = null }
     mediaRecorderRef.current = null
     chunkTimesRef.current = []
     if (localRecorderRef.current && localRecorderRef.current.state !== 'inactive') {
