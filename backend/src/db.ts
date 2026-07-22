@@ -257,6 +257,16 @@ const SCHEMA_QUERIES = [
     processed_at TIMESTAMP,
     error TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS soundtracks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    audio_url TEXT NOT NULL,
+    duration INTEGER DEFAULT 0,
+    file_format TEXT,
+    file_size INTEGER,
+    uploaded_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ]
 

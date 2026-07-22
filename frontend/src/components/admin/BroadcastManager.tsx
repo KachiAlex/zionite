@@ -6,7 +6,7 @@ import {
   Radio, Play, Square, Plus, Loader2, ArrowLeft,
   Mic, BookOpen, ExternalLink, AlertCircle, Monitor, ChevronDown, ChevronUp,
   HardDrive, Folder, Download, X, MessageSquare, Calendar, Clock, User,
-  Music, Upload, Trash2
+  Music, Upload, Trash2, Library
 } from 'lucide-react'
 import { getRecordingConfig, setRecordingConfig } from '../../lib/recording'
 import RadioStudio from '../broadcast/RadioStudio'
@@ -211,6 +211,9 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [musicVolume, setMusicVolume] = useState(25)
   const [musicLoading, setMusicLoading] = useState(false)
   const [musicUploadProgress, setMusicUploadProgress] = useState(0)
+  const [sharedSoundtracks, setSharedSoundtracks] = useState<any[]>([])
+  const [sharedLoading, setSharedLoading] = useState(false)
+  const [showSharedLibrary, setShowSharedLibrary] = useState(false)
   const [micTestStream, setMicTestStream] = useState<MediaStream | null>(null)
   const [micTestActive, setMicTestActive] = useState(false)
 
@@ -563,6 +566,45 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
       setMusicLoading(false)
       setMusicUploadProgress(0)
       setSetupError('Could not decode audio file. Try a different format.')
+    }
+  }
+
+  async function fetchSharedSoundtracks() {
+    setSharedLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const { data } = await axios.get(`${API_BASE}/api/soundtracks`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      setSharedSoundtracks(data.soundtracks || [])
+    } catch {
+      setSharedSoundtracks([])
+    } finally {
+      setSharedLoading(false)
+    }
+  }
+
+  async function loadSharedSoundtrack(soundtrack: any) {
+    setMusicLoading(true)
+    setMusicUploadProgress(0)
+    setMusicName(soundtrack.title)
+    try {
+      const res = await fetch(soundtrack.audio_url)
+      if (!res.ok) throw new Error('Failed to download soundtrack')
+      setMusicUploadProgress(30)
+      const arrayBuf = await res.arrayBuffer()
+      setMusicUploadProgress(60)
+      const ctx = new AudioContext()
+      const decoded = await ctx.decodeAudioData(arrayBuf)
+      setMusicUploadProgress(100)
+      setMusicBuffer(decoded)
+      setMusicLoading(false)
+      setShowSharedLibrary(false)
+      setTimeout(() => setMusicUploadProgress(0), 1000)
+    } catch {
+      setMusicLoading(false)
+      setMusicUploadProgress(0)
+      setSetupError('Could not load shared soundtrack. Try again or upload your own.')
     }
   }
 
@@ -1052,6 +1094,49 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                         await loadMusicFile(file)
                       }} />
                   </label>
+
+                  {/* Shared Soundtrack Library toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showSharedLibrary && sharedSoundtracks.length === 0) fetchSharedSoundtracks()
+                      setShowSharedLibrary(!showSharedLibrary)
+                    }}
+                    className="flex items-center gap-2 text-[11px] text-[#c9a227] hover:opacity-80 transition-opacity">
+                    <Library className="w-3.5 h-3.5" />
+                    {showSharedLibrary ? 'Hide shared library' : 'Choose from shared library'}
+                  </button>
+
+                  {showSharedLibrary && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg p-2" style={{ background: 'rgba(243,238,228,0.02)', border: '1px solid rgba(243,238,228,0.06)' }}>
+                      {sharedLoading ? (
+                        <div className="flex items-center gap-2 py-3 px-1">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#c9a227]" />
+                          <span className="text-[11px] text-[#9c958a]">Loading shared soundtracks…</span>
+                        </div>
+                      ) : sharedSoundtracks.length === 0 ? (
+                        <p className="text-[11px] text-[#9c958a] py-3 px-1">No shared soundtracks available yet. An admin can upload some via the Soundtracks manager.</p>
+                      ) : (
+                        sharedSoundtracks.map((st) => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => loadSharedSoundtrack(st)}
+                            disabled={musicLoading}
+                            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-colors hover:bg-[rgba(243,238,228,0.04)] disabled:opacity-50">
+                            <Music className="w-3.5 h-3.5 flex-shrink-0 text-[#c9a227]" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] text-white truncate">{st.title}</div>
+                              {st.duration > 0 && (
+                                <div className="text-[9px] text-[#9c958a]">{Math.floor(st.duration / 60)}:{String(st.duration % 60).padStart(2, '0')}</div>
+                              )}
+                            </div>
+                            {musicName === st.title && <span className="text-[9px] text-[#4ade80] flex-shrink-0">Selected</span>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
 
                   {musicBuffer && (
                     <div className="space-y-2">

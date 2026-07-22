@@ -29,6 +29,7 @@ import radioRoutes from './routes/radio.js'
 import radioScheduleRoutes from './routes/radio-schedules.js'
 import playlistRoutes from './routes/playlists.js'
 import musicRoutes from './routes/music.js'
+import soundtrackRoutes from './routes/soundtracks.js'
 import tenantRoutes from './routes/tenants.js'
 import licensePlanRoutes from './routes/license-plans.js'
 import { cacheMiddleware } from './middleware/cache.js'
@@ -165,6 +166,7 @@ app.use('/radio', radioRoutes)
 app.use('/radio-schedules', radioScheduleRoutes)
 app.use('/playlists', playlistRoutes)
 app.use('/music', musicRoutes)
+app.use('/soundtracks', soundtrackRoutes)
 app.use('/tenants', tenantRoutes)
 app.use('/license-plans', licensePlanRoutes)
 

@@ -8,7 +8,7 @@ import type { Broadcast, User } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
-  Menu, X, Loader2, MapPin, Globe, Layout
+  Menu, X, Loader2, MapPin, Globe, Layout, Library
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -17,6 +17,7 @@ const SermonManager = lazy(() => import('../components/admin/SermonManager'))
 const ChatSupervisor = lazy(() => import('../components/admin/ChatSupervisor'))
 const AdminSettings = lazy(() => import('../components/admin/AdminSettings'))
 const MusicManager = lazy(() => import('../components/admin/MusicManager'))
+const SoundtrackManager = lazy(() => import('../components/admin/SoundtrackManager'))
 const GuestSpeakerManager = lazy(() => import('../components/admin/GuestSpeakerManager'))
 const PrayerManager = lazy(() => import('../components/admin/PrayerManager'))
 const TestimonyManager = lazy(() => import('../components/admin/TestimonyManager'))
@@ -27,7 +28,7 @@ const HomePageManager = lazy(() => import('../components/admin/HomePageManager')
 
 interface ChatMessage { id: string; broadcast_id?: string; user_name: string; message: string; created_at: string }
 
-type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse' | 'radio' | 'homepage'
+type Tab = 'dashboard' | 'broadcasts' | 'users' | 'sermons' | 'chat' | 'settings' | 'music' | 'soundtracks' | 'speakers' | 'prayer' | 'testimonies' | 'events' | 'dailyverse' | 'radio' | 'homepage'
 
 function formatDuration(totalSeconds: number) {
   const h = Math.floor(totalSeconds / 3600)
@@ -220,6 +221,7 @@ export default function AdminDashboard() {
       <SB label="Live Broadcast" tab="broadcasts" icon={Radio}/>
       <SB label="Sermon Radio" tab="radio" icon={Headphones}/>
       <SB label="Music Publishing" tab="music" icon={Music}/>
+      <SB label="Soundtracks" tab="soundtracks" icon={Library}/>
       <SB label="Stream Analytics" tab="dashboard" icon={BarChart3}/>
       <SL t="Community"/>
       <SB label="Chat Moderation" tab="chat" icon={MessageSquare} badge={chatMessages.length}/>
@@ -594,6 +596,10 @@ export default function AdminDashboard() {
           ):activeTab==='music'?(
             <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
               <MusicManager music={musicTracks as any} onRefresh={refresh}/>
+            </Suspense>
+          ):activeTab==='soundtracks'?(
+            <Suspense fallback={<div className="p-8 text-center text-sm text-[#9c958a]">Loading...</div>}>
+              <SoundtrackManager/>
             </Suspense>
           ):activeTab==='speakers'?(
             <div className="p-4 rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)]">
