@@ -210,6 +210,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
   const [musicName, setMusicName] = useState('')
   const [musicVolume, setMusicVolume] = useState(25)
   const [musicLoading, setMusicLoading] = useState(false)
+  const [musicUploadProgress, setMusicUploadProgress] = useState(0)
   const [micTestStream, setMicTestStream] = useState<MediaStream | null>(null)
   const [micTestActive, setMicTestActive] = useState(false)
 
@@ -547,15 +548,20 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
 
   async function loadMusicFile(file: File) {
     setMusicLoading(true)
+    setMusicUploadProgress(0)
     setMusicName(file.name)
     try {
       const arrayBuf = await file.arrayBuffer()
+      setMusicUploadProgress(50)
       const ctx = new AudioContext()
       const decoded = await ctx.decodeAudioData(arrayBuf)
+      setMusicUploadProgress(100)
       setMusicBuffer(decoded)
       setMusicLoading(false)
+      setTimeout(() => setMusicUploadProgress(0), 1000)
     } catch {
       setMusicLoading(false)
+      setMusicUploadProgress(0)
       setSetupError('Could not decode audio file. Try a different format.')
     }
   }
@@ -597,6 +603,7 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
     setMusicName('')
     setMusicVolume(25)
     setMusicLoading(false)
+    setMusicUploadProgress(0)
     stopMicTest()
     setView('setup')
   }
@@ -1026,9 +1033,16 @@ export default function BroadcastManager({ broadcasts, onRefresh }: { broadcasts
                     style={{ background: 'rgba(243,238,228,0.03)', border: '1px dashed rgba(243,238,228,0.15)' }}>
                     <Upload className="w-4 h-4 flex-shrink-0 text-[#c9a227]" />
                     <span className="text-xs truncate" style={{ color: musicName ? 'var(--parchment)' : 'var(--dim)' }}>
-                      {musicLoading ? 'Decoding audio...' : musicName || 'Upload background music (MP3, WAV, OGG…)'}
+                      {musicLoading ? `Processing... ${musicUploadProgress}%` : musicName || 'Upload background music (MP3, WAV, OGG…)'}
                     </span>
-                    {musicLoading && <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto flex-shrink-0 text-[#c9a227]" />}
+                    {musicLoading && (
+                      <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                        <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(243,238,228,0.1)' }}>
+                          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${musicUploadProgress}%`, background: '#c9a227' }} />
+                        </div>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#c9a227]" />
+                      </div>
+                    )}
                     <input type="file" accept="audio/*"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       style={{ zIndex: 10 }}

@@ -5,12 +5,13 @@ import { API_BASE, SOCKET_BASE } from '../../lib/api'
 import {
   Radio, Pause, Play, Square, Mic, MicOff, Volume2, Volume1, VolumeX,
   Copy, CheckCircle, Activity, Share2, Headphones, Wifi, Zap, HardDrive,
-  Disc, Loader2, Music2, Music, RotateCcw, StopCircle,
+  Disc, Loader2, Music2, Music, RotateCcw, StopCircle, Lock, Unlock,
   MessageSquare, Send, User, Clock
 } from 'lucide-react'
 import { getRecordingConfig } from '../../lib/recording'
 import AudioWaveVisualizer from './AudioWaveVisualizer'
 import VUMeter from './VUMeter'
+import SystemAudio from '../../lib/system-audio'
 
 function NetworkIndicator() {
   const [strength, setStrength] = useState(4)
@@ -120,6 +121,7 @@ export default function RadioStudio({
 }: Props) {
   const [micMuted, setMicMuted] = useState(false)
   const [micGain, setMicGain] = useState(90)
+  const [volumeLocked, setVolumeLocked] = useState(false)
 
   /* ── Background music mixer state ── */
   const [musicVolume, setMusicVolume] = useState(initialMusicVolume || 8)
@@ -144,6 +146,22 @@ export default function RadioStudio({
   const musicLocalConnectedRef = useRef(false)
   const musicSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const musicBufferRef = useRef<AudioBuffer | null>(null)
+
+  /* ── Equalizer refs ── */
+  const [eqEnabled, setEqEnabled] = useState(false)
+  const [eqLow, setEqLow] = useState(0)
+  const [eqMid, setEqMid] = useState(0)
+  const [eqHigh, setEqHigh] = useState(0)
+  const eqLowRef = useRef<BiquadFilterNode | null>(null)
+  const eqMidRef = useRef<BiquadFilterNode | null>(null)
+  const eqHighRef = useRef<BiquadFilterNode | null>(null)
+
+  /* ── System audio capture refs (for external app audio like VLC) ── */
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(false)
+  const [systemAudioSupported, setSystemAudioSupported] = useState(false)
+  const systemAudioGainRef = useRef<GainNode | null>(null)
+  const systemAudioListenerRef = useRef<any>(null)
+  const systemAudioCtxRef = useRef<AudioContext | null>(null)
   const [copied, setCopied] = useState(false)
   const [listenerCount, setListenerCount] = useState(0)
   const [streamStats, setStreamStats] = useState({ chunkCount: 0, bitrate: 0, latestChunk: -1 })
@@ -361,6 +379,33 @@ export default function RadioStudio({
     micG.gain.value = micGain / 100
     micG.connect(hpf)
     micGainNodeRef.current = micG
+
+    // 3-band EQ chain: mic -> hpf -> low EQ -> mid EQ -> high EQ -> dest
+    const lowEQ = ctx.createBiquadFilter()
+    lowEQ.type = 'lowshelf'
+    lowEQ.frequency.value = 200
+    lowEQ.gain.value = eqLow
+    eqLowRef.current = lowEQ
+
+    const midEQ = ctx.createBiquadFilter()
+    midEQ.type = 'peaking'
+    midEQ.frequency.value = 1000
+    midEQ.Q.value = 1
+    midEQ.gain.value = eqMid
+    eqMidRef.current = midEQ
+
+    const highEQ = ctx.createBiquadFilter()
+    highEQ.type = 'highshelf'
+    highEQ.frequency.value = 4000
+    highEQ.gain.value = eqHigh
+    eqHighRef.current = highEQ
+
+    // Chain: hpf -> lowEQ -> midEQ -> highEQ -> dest
+    hpf.disconnect()
+    hpf.connect(lowEQ)
+    lowEQ.connect(midEQ)
+    midEQ.connect(highEQ)
+    highEQ.connect(dest)
     const musG = ctx.createGain()
     musG.gain.value = musicVolume / 100
     musG.connect(dest)
@@ -389,6 +434,7 @@ export default function RadioStudio({
 
   function teardownMixer() {
     stopMusicPlayback()
+    stopSystemAudioCapture()
     if (mixerCtxRef.current) { mixerCtxRef.current.close().catch(() => {}); mixerCtxRef.current = null }
     mixerDestRef.current = null
     micGainNodeRef.current = null
@@ -408,6 +454,76 @@ export default function RadioStudio({
     }
     setMusicPlaying(false)
   }
+
+  /* ── System audio capture (external app audio via Android MediaProjection) ── */
+  async function startSystemAudioCapture() {
+    try {
+      const { ctx, dest } = getOrCreateMixer()
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+
+      // Create a gain node for system audio in the mixer graph
+      const sysGain = ctx.createGain()
+      sysGain.gain.value = musicVolume / 100
+      sysGain.connect(dest)
+      systemAudioGainRef.current = sysGain
+
+      // Create a separate AudioContext for decoding PCM chunks from native plugin
+      const sysCtx = new AudioContext({ sampleRate: 48000 })
+      systemAudioCtxRef.current = sysCtx
+
+      // Listen for PCM chunks from the native plugin
+      const listener = await SystemAudio.addListener('audioChunk', (data) => {
+        try {
+          const pcmBytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0))
+          const pcmBuffer = sysCtx.createBuffer(1, pcmBytes.length / 2, 48000)
+          const channelData = pcmBuffer.getChannelData(0)
+          const dv = new DataView(pcmBytes.buffer)
+          for (let i = 0; i < channelData.length; i++) {
+            channelData[i] = dv.getInt16(i * 2, true) / 32768
+          }
+          const src = sysCtx.createBufferSource()
+          src.buffer = pcmBuffer
+          src.connect(sysGain)
+          src.start()
+        } catch (e) {
+          console.warn('[SystemAudio] chunk decode error:', e)
+        }
+      })
+      systemAudioListenerRef.current = listener
+
+      await SystemAudio.startCapture()
+      setSystemAudioEnabled(true)
+      console.log('[SystemAudio] capture started')
+    } catch (e: any) {
+      console.error('[SystemAudio] startCapture error:', e)
+      setSystemAudioEnabled(false)
+    }
+  }
+
+  async function stopSystemAudioCapture() {
+    try {
+      if (systemAudioListenerRef.current) {
+        systemAudioListenerRef.current.remove()
+        systemAudioListenerRef.current = null
+      }
+      await SystemAudio.stopCapture()
+    } catch {}
+    if (systemAudioGainRef.current) {
+      try { systemAudioGainRef.current.disconnect() } catch {}
+      systemAudioGainRef.current = null
+    }
+    if (systemAudioCtxRef.current) {
+      try { systemAudioCtxRef.current.close() } catch {}
+      systemAudioCtxRef.current = null
+    }
+    setSystemAudioEnabled(false)
+  }
+
+  // Check if system audio capture is supported on this platform
+  useEffect(() => {
+    if (!isNativePlatform) return
+    SystemAudio.isSupported().then(({ supported }) => setSystemAudioSupported(supported)).catch(() => {})
+  }, [])
 
   function startMusicPlayback() {
     const buf = musicBufferRef.current
@@ -786,6 +902,18 @@ export default function RadioStudio({
 
         <div className="flex items-center gap-3">
           <NetworkIndicator />
+          <button
+            onClick={() => setVolumeLocked(!volumeLocked)}
+            title={volumeLocked ? 'Unlock volume controls' : 'Lock volume controls'}
+            className="px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors"
+            style={{
+              background: volumeLocked ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.1)',
+              color: volumeLocked ? (isLive ? '#1b1208' : 'var(--gold)') : (isLive ? '#1b1208' : 'var(--dim)'),
+              border: volumeLocked ? '1px solid rgba(201,162,39,0.4)' : '1px solid transparent'
+            }}>
+            {volumeLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+            {volumeLocked ? 'Locked' : 'Lock'}
+          </button>
           {isLive ? (
             <button onClick={onPause} disabled={actionLoading}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
@@ -818,7 +946,7 @@ export default function RadioStudio({
         <div className="mx-6 mt-4 p-3 rounded-xl text-sm flex items-center gap-2"
           style={{ background: 'rgba(201,162,39,0.1)', color: '#c9a227', border: '1px solid rgba(201,162,39,0.2)' }}>
           <Zap className="w-4 h-4" />
-          Keep this screen on during broadcast. Audio will pause if the app is backgrounded or the screen locks.
+          Audio service is active. You can minimize the app and the broadcast will continue. Keep this screen on for best results.
         </div>
       )}
 
@@ -951,11 +1079,70 @@ export default function RadioStudio({
                 setMicGain(v)
                 if (micGainNodeRef.current && !micMuted) micGainNodeRef.current.gain.value = v / 100
               }}
-              disabled={micMuted}
+              disabled={micMuted || volumeLocked}
               className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
-              style={{ background: `linear-gradient(to right, var(--gold) ${micGain}%, var(--line) ${micGain}%)`, opacity: micMuted ? 0.4 : 1 }} />
+              style={{ background: `linear-gradient(to right, var(--gold) ${micGain}%, var(--line) ${micGain}%)`, opacity: (micMuted || volumeLocked) ? 0.4 : 1 }} />
             <span className="text-xs font-mono w-8 text-right">{micGain}%</span>
           </div>
+        </div>
+
+        {/* Equalizer — collapsible, hidden by default */}
+        <div className="rounded-xl p-4" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Activity className="w-4 h-4" style={{ color: 'var(--gold)' }} /> Equalizer
+              <span className="text-xs font-normal" style={{ color: 'var(--dim)' }}>(3-band mic EQ)</span>
+            </span>
+            <button
+              onClick={() => setEqEnabled(!eqEnabled)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{
+                background: eqEnabled ? 'rgba(34,197,94,0.1)' : 'rgba(220,38,38,0.1)',
+                color: eqEnabled ? '#4ade80' : '#fca5a5',
+                border: `1px solid ${eqEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(220,38,38,0.2)'}`
+              }}>
+              {eqEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          {eqEnabled && (
+            <div className="space-y-3">
+              <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
+                Adjust frequencies to get the best mic output. Reset to 0 for flat response.
+              </p>
+              {[
+                { label: 'Low', freq: '200 Hz', value: eqLow, set: setEqLow, ref: eqLowRef },
+                { label: 'Mid', freq: '1 kHz', value: eqMid, set: setEqMid, ref: eqMidRef },
+                { label: 'High', freq: '4 kHz', value: eqHigh, set: setEqHigh, ref: eqHighRef },
+              ].map((band) => (
+                <div key={band.label} className="flex items-center gap-3">
+                  <span className="text-xs w-10" style={{ color: 'var(--parchment)' }}>{band.label}</span>
+                  <span className="text-[10px] w-12" style={{ color: 'var(--dim)' }}>{band.freq}</span>
+                  <input type="range" min={-12} max={12} step={0.5} value={band.value}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value)
+                      band.set(v)
+                      if (band.ref.current) band.ref.current.gain.value = v
+                    }}
+                    className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+                    style={{ background: `linear-gradient(to right, var(--gold) ${((band.value + 12) / 24) * 100}%, var(--line) ${((band.value + 12) / 24) * 100}%)` }} />
+                  <span className="text-xs font-mono w-10 text-right" style={{ color: band.value > 0 ? '#4ade80' : band.value < 0 ? '#fca5a5' : 'var(--dim)' }}>
+                    {band.value > 0 ? '+' : ''}{band.value} dB
+                  </span>
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  setEqLow(0); setEqMid(0); setEqHigh(0)
+                  if (eqLowRef.current) eqLowRef.current.gain.value = 0
+                  if (eqMidRef.current) eqMidRef.current.gain.value = 0
+                  if (eqHighRef.current) eqHighRef.current.gain.value = 0
+                }}
+                className="text-[11px] underline hover:opacity-80"
+                style={{ color: 'var(--dim)' }}>
+                Reset to flat
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Background Music Mixer */}
@@ -1016,8 +1203,9 @@ export default function RadioStudio({
                 setMusicVolume(v)
                 if (musicGainNodeRef.current) musicGainNodeRef.current.gain.value = v / 100
               }}
+              disabled={volumeLocked}
               className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
-              style={{ background: `linear-gradient(to right, #c9a227 ${musicVolume}%, var(--line) ${musicVolume}%)` }} />
+              style={{ background: `linear-gradient(to right, #c9a227 ${musicVolume}%, var(--line) ${musicVolume}%)`, opacity: volumeLocked ? 0.4 : 1 }} />
             <span className="text-xs font-mono w-8 text-right">{musicVolume}%</span>
           </div>
           {!isLive && musicBufferRef.current && (
@@ -1025,7 +1213,7 @@ export default function RadioStudio({
               Press Play to preview the soundtrack. It will be mixed into the stream when you go live.
             </p>
           )}
-          {isLive && !musicBufferRef.current && (
+          {isLive && !musicBufferRef.current && !systemAudioSupported && (
             <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
               No soundtrack loaded. Go back to setup to add one.
             </p>
@@ -1036,6 +1224,53 @@ export default function RadioStudio({
             </p>
           )}
         </div>
+
+        {/* System Audio Capture — capture audio from external apps (e.g. VLC) */}
+        {systemAudioSupported && (
+          <div className="rounded-xl p-4" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Music2 className="w-4 h-4" style={{ color: 'var(--gold)' }} /> External App Audio
+                <span className="text-xs font-normal" style={{ color: 'var(--dim)' }}>(capture from VLC, etc.)</span>
+              </span>
+              <button
+                onClick={() => {
+                  if (systemAudioEnabled) { stopSystemAudioCapture() }
+                  else { startSystemAudioCapture() }
+                }}
+                disabled={!isLive}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-40"
+                style={{
+                  background: systemAudioEnabled ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.1)',
+                  color: systemAudioEnabled ? '#fca5a5' : '#4ade80',
+                  border: `1px solid ${systemAudioEnabled ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.2)'}`
+                }}>
+                {systemAudioEnabled ? <><StopCircle className="w-3.5 h-3.5" /> Stop</> : <><Play className="w-3.5 h-3.5" /> Capture</>}
+              </button>
+            </div>
+            <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
+              {systemAudioEnabled
+                ? 'Capturing audio from other apps. Play music in VLC or any media app and it will be mixed into the broadcast.'
+                : 'Start a live broadcast, then tap Capture. Android will ask permission to capture audio from other apps. Play music in VLC or any media app.'}
+            </p>
+            {systemAudioEnabled && (
+              <div className="flex items-center gap-3 mt-3">
+                <Volume2 className="w-4 h-4" style={{ color: 'var(--gold)' }} />
+                <input type="range" min={0} max={100} value={musicVolume}
+                  onChange={e => {
+                    const v = parseInt(e.target.value)
+                    setMusicVolume(v)
+                    if (systemAudioGainRef.current) systemAudioGainRef.current.gain.value = v / 100
+                    if (musicGainNodeRef.current) musicGainNodeRef.current.gain.value = v / 100
+                  }}
+                  disabled={volumeLocked}
+                  className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+                  style={{ background: `linear-gradient(to right, #c9a227 ${musicVolume}%, var(--line) ${musicVolume}%)`, opacity: volumeLocked ? 0.4 : 1 }} />
+                <span className="text-xs font-mono w-8 text-right">{musicVolume}%</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Live Chat Panel — broadcaster can see and reply to listeners */}
         <div className="rounded-xl p-4 flex flex-col" style={{ background: 'var(--ink)', border: '1px solid var(--line)' }}>
