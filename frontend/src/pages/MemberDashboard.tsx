@@ -252,6 +252,7 @@ export default function MemberDashboard() {
   const [chatInput, setChatInput] = useState('')
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(()=>{
     if (!user) { navigate('/login'); return }
@@ -323,8 +324,6 @@ export default function MemberDashboard() {
   }
 
   if (!user) return null
-
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   return (
     <div className="min-h-screen pb-16 lg:pb-0" style={{background:'var(--ink)', color:'var(--parchment)'}}>

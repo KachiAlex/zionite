@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useState } from 'react'
+﻿import { lazy, Suspense, useEffect, useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
 import { useQueryClient } from '@tanstack/react-query'
@@ -72,6 +72,18 @@ export default function AdminDashboard() {
   const [bcActionLoading, setBcActionLoading] = useState(false)
   const [liveElapsed, setLiveElapsed] = useState(0)
   const [geoData, setGeoData] = useState<{ byCountry: {country:string;count:number}[]; locations: {country:string;region:string;city:string;count:number}[] }>({ byCountry: [], locations: [] })
+  const [avatarOpen, setAvatarOpen] = useState(false)
+  const avatarRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setAvatarOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   /* ── Live broadcast duration timer ── */
   useEffect(() => {
@@ -302,10 +314,25 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center bg-[#1c1d24] rounded-full px-3 py-1.5 border border-[rgba(243,238,228,0.08)]"><Search className="w-3.5 h-3.5 text-[#9c958a] mr-2"/><input type="text" placeholder="Search..." className="bg-transparent text-xs text-white placeholder-[#9c958a] outline-none w-20"/></div>
             <button className="relative p-2 text-[#9c958a] hover:text-white transition-colors"><Bell className="w-4 h-4"/><span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#ef4444] rounded-full"/></button>
-            <div className="flex items-center gap-2 pl-2 border-l border-[rgba(243,238,228,0.1)]">
+            <div ref={avatarRef} className="relative flex items-center gap-2 pl-2 border-l border-[rgba(243,238,228,0.1)] cursor-pointer" onClick={() => setAvatarOpen(!avatarOpen)}>
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#c9a227] to-[#e0bd5a] flex items-center justify-center text-[#1b1208] text-[10px] font-bold">{user.name?.[0]?.toUpperCase()||'A'}</div>
-              <div className="hidden sm:block"><p className="text-[11px] font-medium text-white">{user.name||'Admin'}</p><p className="text-[9px] text-[#9c958a]">Super Admin</p></div>
+              <div className="hidden sm:block"><p className="text-[11px] font-medium text-white">{user.name||'Admin'}</p><p className="text-[9px] text-[#9c958a] capitalize">{user.role}</p></div>
               <ChevronDown className="w-3 h-3 text-[#9c958a]"/>
+              {avatarOpen && (
+                <div className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-xl z-50" style={{ background: '#1c1d24', border: '1px solid rgba(243,238,228,0.08)' }}>
+                  <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(243,238,228,0.06)' }}>
+                    <p className="text-xs font-medium text-white">{user.name}</p>
+                    <p className="text-[10px] mt-0.5 text-[#9c958a]">{user.email}</p>
+                    <span className="inline-block mt-1.5 text-[9px] px-2 py-0.5 rounded-full font-medium capitalize" style={{ background: 'rgba(201,162,39,0.12)', color: '#c9a227' }}>{user.role}</span>
+                  </div>
+                  <Link to="/" onClick={() => setAvatarOpen(false)} className="flex items-center gap-2.5 px-4 py-3 text-xs transition-colors hover:bg-[rgba(243,238,228,0.04)] text-[#f3eee4]">
+                    <ArrowLeft className="w-3.5 h-3.5 text-[#9c958a]"/> Exit to Site
+                  </Link>
+                  <button onClick={() => { logout(); navigate('/'); }} className="w-full flex items-center gap-2.5 px-4 py-3 text-xs transition-colors hover:bg-[rgba(243,238,228,0.04)] text-[#f3eee4]">
+                    <LogOut className="w-3.5 h-3.5 text-[#9c958a]"/> Sign Out
+                  </button>
+                </div>
+              )}
             </div>
             <div className="hidden md:flex items-center gap-1.5 text-[11px] text-[#9c958a] border-l border-[rgba(243,238,228,0.1)] pl-3"><Calendar className="w-3 h-3"/><span>May 20, 2025</span></div>
           </div>
