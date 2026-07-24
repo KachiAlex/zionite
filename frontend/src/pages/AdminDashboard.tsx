@@ -121,7 +121,7 @@ export default function AdminDashboard() {
   const loading = !analytics
 
   useEffect(() => {
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) { navigate('/'); return }
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'broadcaster')) { navigate('/'); return }
   }, [user, navigate])
 
   function refresh() {
