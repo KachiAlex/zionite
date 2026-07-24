@@ -28,7 +28,9 @@ export function requireRole(...roles) {
             next();
             return;
         }
-        if (!roles.includes(req.user.role)) {
+        // Broadcasters share the AdminDashboard, so treat them as admin for API access
+        const effectiveRole = req.user.role === 'broadcaster' ? 'admin' : req.user.role;
+        if (!roles.includes(effectiveRole)) {
             res.status(403).json({ error: 'Insufficient permissions' });
             return;
         }
