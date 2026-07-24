@@ -48,7 +48,7 @@ export default function Login() {
           navigate('/admin')
           break
         case 'broadcaster':
-          navigate('/broadcast')
+          navigate('/admin')
           break
         case 'listener':
         default:

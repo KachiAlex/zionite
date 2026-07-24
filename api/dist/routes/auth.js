@@ -77,6 +77,10 @@ router.post('/login', async (req, res) => {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
+        if (user.is_suspended) {
+            res.status(403).json({ error: 'Your account has been suspended. Please contact the administrator.' });
+            return;
+        }
         const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
     }
@@ -85,17 +89,26 @@ router.post('/login', async (req, res) => {
         res.status(500).json({ error: 'Login failed' });
     }
 });
-router.get('/verify', authenticateToken, (req, res) => {
+router.get('/verify', authenticateToken, async (req, res) => {
     if (!req.user) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
     }
+    try {
+        await initDb();
+        const dbUser = await db.get('SELECT is_suspended FROM users WHERE id = $1', [req.user.id]);
+        if (dbUser?.is_suspended) {
+            res.status(403).json({ error: 'Your account has been suspended.' });
+            return;
+        }
+    }
+    catch { }
     res.json({ user: req.user });
 });
 router.get('/users', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         await initDb();
-        const users = await db.all('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC');
+        const users = await db.all('SELECT id, email, name, role, is_suspended, created_at FROM users ORDER BY created_at DESC');
         res.json({ users });
     }
     catch (err) {
@@ -123,6 +136,88 @@ router.put('/users/:id/role', authenticateToken, requireRole('admin'), async (re
     catch (err) {
         console.error('[AUTH] update role error:', err.message);
         res.status(500).json({ error: 'Failed to update role' });
+    }
+});
+router.patch('/users/:id/suspend', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const { suspend } = req.body;
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [id]);
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        if (user.role === 'super_admin') {
+            res.status(403).json({ error: 'Cannot suspend super admin' });
+            return;
+        }
+        await db.run('UPDATE users SET is_suspended = $1 WHERE id = $2', [suspend ? true : false, id]);
+        // Send email notification
+        try {
+            const action = suspend ? 'suspended' : 'reactivated';
+            await sendEmail({
+                to: user.email,
+                toName: user.name,
+                subject: `Account ${action} - ZioniteFM`,
+                htmlContent: emailTemplate({
+                    title: `Account ${action}`,
+                    body: suspend
+                        ? `<p>Hello ${user.name || 'there'},</p><p>Your ZioniteFM account has been <strong>suspended</strong> by an administrator.</p><p>If you believe this is an error, please contact support.</p>`
+                        : `<p>Hello ${user.name || 'there'},</p><p>Good news! Your ZioniteFM account has been <strong>reactivated</strong>. You can now log in normally.</p>`,
+                }),
+                textContent: `Your ZioniteFM account has been ${action}.`,
+            });
+        }
+        catch (emailErr) {
+            console.error('[AUTH] suspend email error:', emailErr.message);
+        }
+        res.json({ success: true, is_suspended: suspend ? true : false });
+    }
+    catch (err) {
+        console.error('[AUTH] suspend error:', err.message);
+        res.status(500).json({ error: 'Failed to update suspension status' });
+    }
+});
+router.delete('/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        await initDb();
+        const { id } = req.params;
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [id]);
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        if (user.role === 'super_admin') {
+            res.status(403).json({ error: 'Cannot delete super admin' });
+            return;
+        }
+        if (user.id === req.user.id) {
+            res.status(403).json({ error: 'Cannot delete your own account' });
+            return;
+        }
+        // Send email notification before deletion
+        try {
+            await sendEmail({
+                to: user.email,
+                toName: user.name,
+                subject: 'Account Removed - ZioniteFM',
+                htmlContent: emailTemplate({
+                    title: 'Account Removed',
+                    body: `<p>Hello ${user.name || 'there'},</p><p>Your ZioniteFM account has been removed by an administrator.</p><p>If you believe this is an error, please contact support.</p>`,
+                }),
+                textContent: 'Your ZioniteFM account has been removed by an administrator.',
+            });
+        }
+        catch (emailErr) {
+            console.error('[AUTH] delete email error:', emailErr.message);
+        }
+        await db.run('DELETE FROM users WHERE id = $1', [id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('[AUTH] delete user error:', err.message);
+        res.status(500).json({ error: 'Failed to delete user' });
     }
 });
 router.post('/forgot-password', async (req, res) => {

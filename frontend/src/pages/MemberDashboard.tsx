@@ -331,32 +331,21 @@ export default function MemberDashboard() {
       <div className="max-w-[1440px] mx-auto flex">
         <Sidebar activePath={location.pathname} mobileOpen={mobileSidebarOpen} onClose={()=>setMobileSidebarOpen(false)} onLogout={logout} />
         <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 py-4 md:py-6">
-          {/* Mobile header bar */}
-          <div className="lg:hidden flex items-center justify-between mb-4">
-            <button onClick={()=>setMobileSidebarOpen(true)} className="flex items-center gap-2 text-[#9c958a]">
-              <Menu className="w-5 h-5" />
-              <span className="text-xs">Menu</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <button className="relative w-8 h-8 rounded-full bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] flex items-center justify-center">
-                <Bell className="w-4 h-4 text-[#9c958a]" />
-                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#8a3326]" />
-              </button>
-              <div className="w-8 h-8 rounded-full bg-[#c9a227] flex items-center justify-center text-[#1b1208] text-xs font-bold">
-                {user.name?.[0]?.toUpperCase()||'L'}
-              </div>
-            </div>
-          </div>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
             <div className="xl:col-span-9 space-y-5">
-              {/* Header */}
+              {/* Single unified header */}
               <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-xs text-[#9c958a]">{greeting()},</p>
-                  <h1 className="text-xl font-serif font-medium text-white">Welcome back, {user.name?.split(' ')[0]||'Listener'}! 👋</h1>
-                  <p className="text-xs text-[#9c958a] mt-0.5">We&apos;re glad to have you with us today. Stay connected, be blessed.</p>
+                <div className="flex items-center gap-3 min-w-0">
+                  <button onClick={()=>setMobileSidebarOpen(true)} className="lg:hidden flex items-center gap-2 text-[#9c958a] shrink-0">
+                    <Menu className="w-5 h-5" />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="text-xs text-[#9c958a]">{greeting()},</p>
+                    <h1 className="text-xl font-serif font-medium text-white truncate">Welcome back, {user.name?.split(' ')[0]||'Listener'}! 👋</h1>
+                    <p className="text-xs text-[#9c958a] mt-0.5 hidden sm:block">We&apos;re glad to have you with us today. Stay connected, be blessed.</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="hidden md:flex items-center bg-[#1c1d24] rounded-full px-3 py-1.5 border border-[rgba(243,238,228,0.08)]">
                     <Search className="w-3.5 h-3.5 text-[#9c958a] mr-2" />
                     <input type="text" placeholder="Search sermons, topics, speakers..." className="bg-transparent text-xs text-white placeholder-[#9c958a] outline-none w-44" />

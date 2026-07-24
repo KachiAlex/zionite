@@ -20,7 +20,7 @@ export interface Sermon { id: string; title: string; scripture_reference?: strin
 export interface GuestSpeaker { id: string; name: string; bio: string; photo_url: string; topic: string; date: string; is_active: boolean }
 export interface EventItem { id: string; title: string; description: string; date: string; time: string; location: string; image_url: string; category?: string }
 export interface MusicTrack { id: string; title: string; artist: string; album: string; genre: string; audio_url: string; cover_url: string; duration: number; lyrics: string }
-export interface User { id: string; email: string; name?: string; role: string; created_at?: string }
+export interface User { id: string; email: string; name?: string; role: string; is_suspended?: boolean; created_at?: string }
 export interface HomeConfig {
   hero?: {
     title?: string

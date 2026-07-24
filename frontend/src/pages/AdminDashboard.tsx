@@ -8,7 +8,7 @@ import type { Broadcast, User } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
-  Menu, X, Loader2, MapPin, Globe, Layout, Library, LogOut, ArrowLeft
+  Menu, X, Loader2, MapPin, Globe, Layout, Library, LogOut, ArrowLeft, Ban, Trash2, CheckCircle2
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -144,6 +144,22 @@ export default function AdminDashboard() {
       await axios.patch(`${API_BASE}/api/auth/users/${userId}/role`, { role: newRole }, { headers: { Authorization: `Bearer ${token}` } })
       queryClient.setQueryData(['users'], (old: any) => old?.map((u: any) => u.id === userId ? { ...u, role: newRole } : u))
     } catch (err: any) { alert(err.response?.data?.error || 'Failed to update role') }
+  }
+
+  async function toggleSuspendUser(userId: string, suspend: boolean) {
+    const token = localStorage.getItem('token')
+    try {
+      await axios.patch(`${API_BASE}/api/auth/users/${userId}/suspend`, { suspend }, { headers: { Authorization: `Bearer ${token}` } })
+      queryClient.setQueryData(['users'], (old: any) => old?.map((u: any) => u.id === userId ? { ...u, is_suspended: suspend } : u))
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to update user') }
+  }
+
+  async function deleteUser(userId: string) {
+    const token = localStorage.getItem('token')
+    try {
+      await axios.delete(`${API_BASE}/api/auth/users/${userId}`, { headers: { Authorization: `Bearer ${token}` } })
+      queryClient.setQueryData(['users'], (old: any) => old?.filter((u: any) => u.id !== userId))
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to delete user') }
   }
 
   /* ── Broadcast control helpers ── */
@@ -588,11 +604,33 @@ export default function AdminDashboard() {
               ):null}
               <div className="space-y-1">
                 {users.map((u: User)=>u?(
-                  <div key={u.id} className="px-4 py-3 rounded-lg flex items-center justify-between hover:bg-[rgba(243,238,228,0.03)] transition-colors">
-                    <div><p className="text-xs font-medium text-white">{u.name||u.email}</p><p className="text-[10px] text-[#9c958a] mt-0.5">{u.email}</p></div>
-                    <select value={u.role} onChange={e=>updateUserRole(u.id,e.target.value)} className="text-xs rounded-md px-2.5 py-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-[#f3eee4] outline-none">
-                      <option value="listener">Listener</option><option value="broadcaster">Broadcaster</option><option value="admin">Admin</option>
-                    </select>
+                  <div key={u.id} className={`px-4 py-3 rounded-lg flex items-center justify-between transition-colors ${u.is_suspended ? 'bg-[rgba(239,68,68,0.04)]' : 'hover:bg-[rgba(243,238,228,0.03)]'}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-medium text-white truncate">{u.name||u.email}</p>
+                        {u.is_suspended && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgba(239,68,68,0.12)] text-red-400 font-bold uppercase">Suspended</span>}
+                      </div>
+                      <p className="text-[10px] text-[#9c958a] mt-0.5 truncate">{u.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select value={u.role} onChange={e=>updateUserRole(u.id,e.target.value)} disabled={u.role==='super_admin'} className="text-xs rounded-md px-2.5 py-1 bg-[#1c1d24] border border-[rgba(243,238,228,0.08)] text-[#f3eee4] outline-none disabled:opacity-50">
+                        <option value="listener">Listener</option><option value="broadcaster">Broadcaster</option><option value="admin">Admin</option>
+                      </select>
+                      {u.role !== 'super_admin' && u.id !== user?.id && (
+                        <>
+                          <button onClick={() => toggleSuspendUser(u.id, !u.is_suspended)}
+                            title={u.is_suspended ? 'Reactivate user' : 'Suspend user'}
+                            className={`p-1.5 rounded-md transition-colors ${u.is_suspended ? 'text-green-400 hover:bg-[rgba(74,222,128,0.1)]' : 'text-[#9c958a] hover:bg-[rgba(239,68,68,0.1)] hover:text-red-400'}`}>
+                            {u.is_suspended ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Ban className="w-3.5 h-3.5"/>}
+                          </button>
+                          <button onClick={() => { if (confirm(`Delete ${u.name||u.email}? This will permanently remove their account.`)) deleteUser(u.id) }}
+                            title="Delete user"
+                            className="p-1.5 rounded-md text-[#9c958a] hover:bg-[rgba(239,68,68,0.1)] hover:text-red-400 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5"/>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ):null)}
               </div>
