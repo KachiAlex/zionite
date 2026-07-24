@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Radio, BookOpen, Headphones, FileText, Heart, MessageSquare, Users, Mic2,
   Calendar, DollarSign, Bell, Bookmark, History, User, Settings, Search, Play, Pause,
   Volume2, VolumeX, Send, ChevronRight, TrendingUp, Smartphone, Cross, BookOpenCheck,
-  Menu, X, Fingerprint
+  Menu, X, Fingerprint, LogOut, ArrowLeft
 } from 'lucide-react'
 
 /* ─── Types ─── */
@@ -40,7 +40,7 @@ const bottomNav = [
   { label: 'Settings', path: '/settings', icon: Settings },
 ]
 
-function Sidebar({ activePath, mobileOpen, onClose }: { activePath: string; mobileOpen?: boolean; onClose?: () => void }) {
+function Sidebar({ activePath, mobileOpen, onClose, onLogout }: { activePath: string; mobileOpen?: boolean; onClose?: () => void; onLogout?: () => void }) {
   return (
     <>
       {/* Mobile overlay */}
@@ -94,6 +94,16 @@ function Sidebar({ activePath, mobileOpen, onClose }: { activePath: string; mobi
           <p className="text-[10px] text-[#9c958a] mb-3">Take the presence of God with you everywhere.</p>
           <button className="w-full rounded-lg bg-[#c9a227] text-[#1b1208] text-[10px] font-medium py-1.5 flex items-center justify-center gap-1">
             <Smartphone className="w-3 h-3" /> Get App
+          </button>
+        </div>
+        <div className="mt-3 space-y-0.5">
+          <Link to="/"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.04)] transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Exit to Site
+          </Link>
+          <button onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.04)] transition-colors">
+            <LogOut className="w-4 h-4" /> Sign Out
           </button>
         </div>
       </div>
@@ -225,7 +235,7 @@ const SermonRow = memo(function SermonRow({ s }: { s: Sermon }) {
 
 /* ─── MemberDashboard ─── */
 export default function MemberDashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const {
     pushEnabled, pushSupported, requestPush, disablePush, loadingPush,
     biometricSupported, biometricRegistered, registerBiometric, loadingBiometric,
@@ -319,7 +329,7 @@ export default function MemberDashboard() {
   return (
     <div className="min-h-screen pb-16 lg:pb-0" style={{background:'var(--ink)', color:'var(--parchment)'}}>
       <div className="max-w-[1440px] mx-auto flex">
-        <Sidebar activePath={location.pathname} mobileOpen={mobileSidebarOpen} onClose={()=>setMobileSidebarOpen(false)} />
+        <Sidebar activePath={location.pathname} mobileOpen={mobileSidebarOpen} onClose={()=>setMobileSidebarOpen(false)} onLogout={logout} />
         <main className="flex-1 min-w-0 px-3 sm:px-4 md:px-6 py-4 md:py-6">
           {/* Mobile header bar */}
           <div className="lg:hidden flex items-center justify-between mb-4">

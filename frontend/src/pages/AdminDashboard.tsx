@@ -1,5 +1,5 @@
 ﻿import { lazy, Suspense, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,7 +8,7 @@ import type { Broadcast, User } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
-  Menu, X, Loader2, MapPin, Globe, Layout, Library
+  Menu, X, Loader2, MapPin, Globe, Layout, Library, LogOut, ArrowLeft
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -56,7 +56,7 @@ function LiveWaveform({ active }: { active: boolean }) {
 }
 
 export default function AdminDashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: broadcasts = [] } = useBroadcasts()
@@ -176,7 +176,7 @@ export default function AdminDashboard() {
     }
   }
 
-  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) return null
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'broadcaster')) return null
 
   function SB({label,tab,icon:I,badge}:any){const a=activeTab===tab;return(<button onClick={()=>setActiveTab(tab)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors ${a?'bg-[#c9a227] text-[#1b1208] font-semibold':'text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]'}`}><I className="w-3.5 h-3.5 flex-shrink-0"/>{!sidebarCollapsed && <><span className="flex-1 text-left">{label}</span>{badge?<span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${a?'bg-[#1b1208]/20':'bg-[#ef4444] text-white'}`}>{badge}</span>:null}</>}</button>)}
   function SL({t}:{t:string}){return sidebarCollapsed ? null : <p className="px-3 text-[9px] font-bold uppercase tracking-wider text-[#9c958a]/40 mb-1 mt-3">{t}</p>}
@@ -238,6 +238,18 @@ export default function AdminDashboard() {
           {!sidebarCollapsed && <span className="flex-1 text-left">Super Admin</span>}
         </button>
       )}
+      <div className="mt-3 pt-3 border-t border-[rgba(243,238,228,0.06)] space-y-0.5">
+        <Link to="/"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]">
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0"/>
+          {!sidebarCollapsed && <span className="flex-1 text-left">Exit to Site</span>}
+        </Link>
+        <button onClick={() => { logout(); navigate('/'); }}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] transition-colors text-[#9c958a] hover:text-white hover:bg-[rgba(243,238,228,0.05)]">
+          <LogOut className="w-3.5 h-3.5 flex-shrink-0"/>
+          {!sidebarCollapsed && <span className="flex-1 text-left">Sign Out</span>}
+        </button>
+      </div>
     </div>
   )
 
