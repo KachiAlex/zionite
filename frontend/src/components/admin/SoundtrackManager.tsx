@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../../lib/api'
-import { Music, Upload, Trash2, Loader2, Library, X } from 'lucide-react'
+import { Music, Upload, Trash2, Loader2, Library, AlertCircle } from 'lucide-react'
 
 interface Soundtrack {
   id: string
@@ -18,6 +18,7 @@ export default function SoundtrackManager() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadError, setUploadError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => { fetchSoundtracks() }, [])
@@ -40,24 +41,48 @@ export default function SoundtrackManager() {
   async function handleUpload(file: File) {
     setUploading(true)
     setUploadProgress(0)
+    setUploadError('')
     try {
       const token = localStorage.getItem('token')
-      const formData = new FormData()
-      formData.append('audio', file)
-      formData.append('title', file.name.replace(/\.[^/.]+$/, ''))
+      const contentType = file.type || 'audio/mpeg'
+      const ext = file.name.split('.').pop() || 'mp3'
 
-      await axios.post(`${API_BASE}/api/soundtracks`, formData, {
-        headers: token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } : { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => {
-          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
-        }
+      // Step 1: Get presigned upload URL from backend
+      const { data: presigned } = await axios.get(
+        `${API_BASE}/api/soundtracks/upload-url?contentType=${encodeURIComponent(contentType)}&ext=${ext}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      )
+
+      // Step 2: Upload file directly to R2 (bypasses serverless body limit)
+      const uploadRes = await fetch(presigned.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': contentType },
       })
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => 'Unknown error')
+        throw new Error(`R2 upload failed: ${errText}`)
+      }
+      setUploadProgress(80)
+
+      // Step 3: Save metadata to backend
+      await axios.post(`${API_BASE}/api/soundtracks`, {
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        audio_url: presigned.publicUrl,
+        file_format: contentType,
+        file_size: file.size,
+      }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      setUploadProgress(100)
       await fetchSoundtracks()
-    } catch {
-      alert('Failed to upload soundtrack')
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to upload soundtrack'
+      setUploadError(msg)
     } finally {
       setUploading(false)
-      setUploadProgress(0)
+      setTimeout(() => setUploadProgress(0), 1000)
     }
   }
 
@@ -103,7 +128,7 @@ export default function SoundtrackManager() {
       </div>
 
       {/* Upload area */}
-      <div className="rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] p-4">
+      <div className="rounded-xl bg-[#14141a] border border-[rgba(243,238,228,0.06)] p-4 space-y-2">
         <label className="relative flex items-center gap-2 cursor-pointer px-3 py-3 rounded-lg transition-colors"
           style={{ background: 'rgba(243,238,228,0.03)', border: '1px dashed rgba(243,238,228,0.15)' }}>
           <Upload className="w-4 h-4 flex-shrink-0 text-[#c9a227]" />
@@ -129,6 +154,12 @@ export default function SoundtrackManager() {
               e.target.value = ''
             }} />
         </label>
+        {uploadError && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-red-400 mt-0.5" />
+            <span className="text-[11px] text-red-300">{uploadError}</span>
+          </div>
+        )}
       </div>
 
       {/* Soundtracks list */}

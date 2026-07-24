@@ -1,24 +1,10 @@
 import { Router } from 'express'
-import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
 import { db, dbWriteSafe, initDb } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
-import { uploadBuffer, deleteFile, extractKeyFromUrl, r2Configured } from '../lib/r2.js'
+import { getPresignedUploadUrl, deleteFile, extractKeyFromUrl, r2Configured } from '../lib/r2.js'
 
 const router = Router()
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/x-m4a']
-    if (allowed.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
-      cb(null, true)
-    } else {
-      cb(new Error('Only audio files are allowed') as any, false)
-    }
-  }
-})
 
 // List all soundtracks (broadcaster + admin)
 router.get('/', authenticateToken, requireRole('broadcaster', 'admin'), async (req: any, res) => {
@@ -34,31 +20,39 @@ router.get('/', authenticateToken, requireRole('broadcaster', 'admin'), async (r
   }
 })
 
-// Upload a shared soundtrack (admin only)
-router.post('/', authenticateToken, requireRole('admin'), upload.single('audio'), async (req: AuthenticatedRequest, res) => {
+// Get presigned upload URL for direct-to-R2 upload (admin only)
+router.get('/upload-url', authenticateToken, requireRole('admin'), async (req: any, res) => {
   try {
-    if (!req.file) { res.status(400).json({ error: 'Audio file required' }); return }
+    if (!r2Configured) {
+      res.status(500).json({ error: 'R2 storage not configured' }); return
+    }
+    const contentType = (req.query.contentType as string) || 'audio/mpeg'
+    const ext = (req.query.ext as string) || 'mp3'
+    const { uploadUrl, publicUrl, key } = await getPresignedUploadUrl('zionite/soundtracks', contentType, ext)
+    res.json({ uploadUrl, publicUrl, key })
+  } catch (err: any) {
+    console.error('[SOUNDTRACKS] presigned URL error:', err.message)
+    res.status(500).json({ error: err.message || 'Failed to generate upload URL' })
+  }
+})
+
+// Save soundtrack metadata after direct R2 upload (admin only)
+router.post('/', authenticateToken, requireRole('admin'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { title, audio_url, duration, file_format, file_size } = req.body
+    if (!audio_url) { res.status(400).json({ error: 'audio_url required' }); return }
     await initDb()
 
-    const title = req.body.title || req.file.originalname.replace(/\.[^/.]+$/, '')
     const id = uuidv4()
-
-    let audio_url: string
-    if (r2Configured) {
-      audio_url = await uploadBuffer(req.file.buffer, 'zionite/soundtracks', req.file.mimetype)
-    } else {
-      audio_url = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
-    }
-
     await dbWriteSafe(
       `INSERT INTO soundtracks (id, title, audio_url, duration, file_format, file_size, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, title, audio_url, parseInt(req.body.duration) || 0, req.file.mimetype, req.file.size, req.user?.id || null]
+      [id, title || 'Untitled', audio_url, parseInt(duration) || 0, file_format || '', parseInt(file_size) || 0, req.user?.id || null]
     )
 
     res.status(201).json({ id, title, audio_url })
   } catch (err: any) {
-    console.error('[SOUNDTRACKS] upload error:', err.message)
-    res.status(500).json({ error: err.message || 'Failed to upload soundtrack' })
+    console.error('[SOUNDTRACKS] create error:', err.message)
+    res.status(500).json({ error: err.message || 'Failed to save soundtrack' })
   }
 })
 
