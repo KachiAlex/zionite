@@ -38,7 +38,7 @@ export interface DbClient {
   run(sqlStr: string, params?: any[]): Promise<{ lastID: number; changes: number }>
 }
 
-async function queryWithRetry(sqlStr: string, params?: any[], retries = 3): Promise<any[]> {
+async function queryWithRetry(sqlStr: string, params?: any[], retries = 4): Promise<any[]> {
   if (!dbReady) throw new Error('DATABASE_URL not configured')
   const sql = getSql()
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -48,7 +48,7 @@ async function queryWithRetry(sqlStr: string, params?: any[], retries = 3): Prom
       const isLast = attempt === retries
       console.warn(`[DB] query failed (attempt ${attempt}/${retries}):`, err?.message || err)
       if (isLast) throw err
-      await new Promise(r => setTimeout(r, 300 * attempt))
+      await new Promise(r => setTimeout(r, 1000 * attempt))
     }
   }
   throw new Error('DB query failed after retries')

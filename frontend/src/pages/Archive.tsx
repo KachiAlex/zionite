@@ -43,7 +43,7 @@ export default function Archive() {
     setLoading(true)
     setError('')
     try {
-      const { data } = await axios.get(`${API_BASE}/api/sermons`, { timeout: 8000 })
+      const { data } = await axios.get(`${API_BASE}/api/sermons`, { timeout: 15000 })
       setSermons(data.sermons || [])
     } catch (err: any) {
       console.error('Failed to fetch sermons:', err)

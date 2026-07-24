@@ -35,6 +35,7 @@ import licensePlanRoutes from './routes/license-plans.js'
 import { cacheMiddleware } from './middleware/cache.js'
 import { JWT_SECRET, authenticateToken, requireRole } from './middleware/auth.js'
 import { optimizeImage } from './middleware/optimizeImage.js'
+import { db } from './db.js'
 import jwt from 'jsonwebtoken'
 import multer from 'multer'
 
@@ -273,6 +274,16 @@ app.get('/download', async (req: Request, res: Response) => {
     res.status(502).json({ error: 'Failed to download file' })
   }
 })
+
+// DB keep-alive — ping every 4 minutes to prevent Neon free plan auto-suspend
+setInterval(async () => {
+  try {
+    await db.query('SELECT 1 as keepalive')
+    console.log('[DB] keep-alive ping OK')
+  } catch (err: any) {
+    console.warn('[DB] keep-alive ping failed:', err?.message || err)
+  }
+}, 4 * 60 * 1000)
 
 // 404
 app.use((_req, res) => {
