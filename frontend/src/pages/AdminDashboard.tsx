@@ -8,7 +8,7 @@ import type { Broadcast, User } from '../lib/api'
 import {
   Users, Radio, Headphones, LayoutDashboard, MessageSquare, Settings, Music, Mic2, Heart, Calendar,
   Search, Bell, ChevronDown, BookOpen, DollarSign, Pause, StopCircle, BarChart3, Shield, Sparkles,
-  Menu, X, Loader2, MapPin, Globe, Layout, Library, LogOut, ArrowLeft, Ban, Trash2, CheckCircle2
+  Menu, X, Loader2, MapPin, Globe, Layout, Library, LogOut, ArrowLeft, Ban, Trash2, CheckCircle2, Home
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -304,6 +304,9 @@ export default function AdminDashboard() {
         <header className="h-14 border-b border-[rgba(243,238,228,0.06)] bg-[#111118]/80 backdrop-blur-md flex items-center justify-between px-3 sm:px-5 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={()=>setMobileSidebarOpen(true)} className="lg:hidden text-[#9c958a] p-1"><Menu className="w-5 h-5" /></button>
+            <Link to="/" className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors text-[#c9a227] hover:bg-[rgba(201,162,39,0.1)]">
+              <Home className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Home</span>
+            </Link>
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-sm text-white font-medium">Welcome back,</span>
               <span className="text-sm font-bold text-white">{user.name||'Admin'}</span>

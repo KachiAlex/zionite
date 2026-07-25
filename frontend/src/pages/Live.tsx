@@ -771,6 +771,7 @@ export default function Live() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [giveOpen, setGiveOpen] = useState(false)
   const [reactingTo, setReactingTo] = useState<string | null>(null)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const isAtBottomRef = useRef(true)
@@ -1057,11 +1058,45 @@ export default function Live() {
                   <MessageSquare className="w-3.5 h-3.5 text-[#c9a227]" /> Chat
                 </h3>
                 <div className="flex items-center gap-2">
-                  <Link to="/donate"
-                    className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md transition-colors"
-                    style={{ background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }}>
-                    <HandHeart className="w-3 h-3" /> Give
-                  </Link>
+                  <div className="relative">
+                    <button onClick={() => setGiveOpen(!giveOpen)}
+                      className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md transition-colors"
+                      style={{ background: 'rgba(201,162,39,0.12)', color: 'var(--gold)' }}>
+                      <HandHeart className="w-3 h-3" /> Give
+                    </button>
+                    {giveOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden shadow-2xl z-50" style={{ background: '#1c1d24', border: '1px solid rgba(243,238,228,0.08)' }}>
+                        <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(243,238,228,0.06)' }}>
+                          <p className="text-xs font-semibold text-white mb-2 flex items-center gap-1.5"><HandHeart className="w-3.5 h-3.5 text-[#c9a227]" /> Give to the Ministry</p>
+                          <div className="space-y-2 text-[11px]">
+                            <div>
+                              <p className="text-[9px] uppercase tracking-wider text-[#9c958a]">Account Name</p>
+                              <p className="text-white">The Redemption Project Ministries</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] uppercase tracking-wider text-[#9c958a]">Account Number</p>
+                              <button onClick={() => { navigator.clipboard?.writeText('1312546374') }}
+                                className="text-white font-mono hover:text-[#c9a227] transition-colors flex items-center gap-1">
+                                1312546374
+                              </button>
+                            </div>
+                            <div>
+                              <p className="text-[9px] uppercase tracking-wider text-[#9c958a]">Bank</p>
+                              <p className="text-white">Zenith Bank</p>
+                            </div>
+                          </div>
+                        </div>
+                        <Link to="/donate" onClick={() => setGiveOpen(false)}
+                          className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-[10px] font-medium text-[#c9a227] hover:bg-[rgba(201,162,39,0.08)] transition-colors">
+                          Go to full giving page <ArrowLeft className="w-3 h-3 rotate-180" />
+                        </Link>
+                        <button onClick={() => setGiveOpen(false)}
+                          className="w-full flex items-center justify-center gap-1 px-4 py-2 text-[10px] text-[#9c958a] hover:bg-[rgba(243,238,228,0.04)] transition-colors">
+                          Close
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <span className="text-[10px] font-mono text-[#9c958a]">{onlineCount} active</span>
                   <button onClick={() => setChatOpen(false)} className="md:hidden text-[#9c958a] p-0.5"><X className="w-4 h-4" /></button>
                 </div>
