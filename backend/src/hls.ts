@@ -219,15 +219,21 @@ function doStart(blsId: string) {
     manifest
   ])
 
+  let stderrBuf = ''
   ffmpeg.stderr?.on('data', (data: Buffer) => {
-    const msg = data.toString().trim()
-    if (msg) console.error(`[FFmpeg ${blsId}]`, msg)
+    stderrBuf += data.toString()
+    // Only log FFmpeg errors, not routine progress
+    const lines = stderrBuf.split('\n')
+    stderrBuf = lines.pop() || '' // keep incomplete line
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed && /error|invalid|corrupt|failed|warning/i.test(trimmed)) {
+        console.error(`[FFmpeg ${blsId}]`, trimmed)
+      }
+    }
   })
 
-  ffmpeg.stdout?.on('data', (data: Buffer) => {
-    const msg = data.toString().trim()
-    if (msg) console.log(`[FFmpeg ${blsId} stdout]`, msg)
-  })
+  ffmpeg.stdout?.on('data', () => {})
 
   ffmpeg.on('close', (code) => {
     console.log(`[FFmpeg ${blsId}] exited with code ${code}`)
@@ -369,12 +375,10 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
     hls.lastChunkAt = Date.now()
     // Deduplicate chunks delivered via both WebSocket and HTTP fallback
     if (hls.lastProcessedIndex !== undefined && chunkIndex <= hls.lastProcessedIndex) {
-      console.log(`[HLS] ${broadcastId} chunk ${chunkIndex} already processed (last=${hls.lastProcessedIndex}), skipping`)
       return
     }
     hls.lastProcessedIndex = chunkIndex
     const buf = Buffer.from(base64Chunk, 'base64')
-    console.log(`[HLS] ${broadcastId} chunk ${chunkIndex}: decoded ${buf.length} bytes, first16=${buf.subarray(0, 16).toString('hex')}`)
     // If a fresh EBML header appears mid-stream, the broadcaster restarted
     // MediaRecorder (new timeline). Instead of restarting FFmpeg (which resets
     // the HLS media sequence and causes listener-side loops), extract only the
@@ -401,7 +405,6 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
       try {
         if (hls.ffmpeg.stdin?.writable && !hls.ffmpeg.killed) {
           hls.ffmpeg.stdin.write(clusterOnly)
-          console.log(`[HLS] ${broadcastId} fed cluster-only from EBML chunk ${chunkIndex}: ${clusterOnly.length} bytes`)
         }
       } catch (writeErr: any) {
         console.warn(`[HLS] ${broadcastId} stdin write failed for cluster-only:`, writeErr.message)
@@ -420,7 +423,7 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
         if (streamingChunk) {
           data = streamingChunk
           isInitChunk = true
-          console.log(`[HLS] ${broadcastId} first chunk ${chunkIndex}: streaming chunk (${data.length} bytes), first16=${data.subarray(0, 16).toString('hex')}`)
+          console.log(`[HLS] ${broadcastId} first chunk ${chunkIndex}: streaming chunk (${data.length} bytes)`)
           // Persist init for recovery after server restart
           const rawInit = extractInit(buf)
           if (rawInit) dbWriteSafe(`UPDATE broadcasts SET init_segment=$1 WHERE id=$2`, [rawInit.toString('base64'), broadcastId])
@@ -480,17 +483,17 @@ export async function feedHlsChunk(broadcastId: string, chunkIndex: number, base
       try {
         hls.ffmpeg.stdin.write(data)
         if (isInitChunk) hls.initSent = true
-        console.log(`[HLS] ${broadcastId} fed chunk ${chunkIndex}: ${data.length} bytes (initSent=${hls.initSent})`)
       } catch (writeErr: any) {
         console.warn(`[HLS] ${broadcastId} stdin write failed:`, writeErr.message)
       }
-      // Periodically log directory contents so we can see if files are being created
-      if (Math.random() < 0.05) { // ~5% of chunks
+      // Log health stats every 60 chunks (~2 minutes at 2s intervals)
+      if (chunkIndex % 60 === 0) {
+        const memMB = Math.round(process.memoryUsage().heapUsed / 1048576)
         try {
           const files = fs.readdirSync(hls.dir)
-          console.log(`[HLS] ${broadcastId} dir contents:`, files)
-        } catch (e: any) {
-          console.log(`[HLS] ${broadcastId} dir read error:`, e.message)
+          console.log(`[HLS] ${broadcastId} health: chunk=${chunkIndex} segs=${files.length} heap=${memMB}MB`)
+        } catch {
+          console.log(`[HLS] ${broadcastId} health: chunk=${chunkIndex} heap=${memMB}MB`)
         }
       }
     } else {
