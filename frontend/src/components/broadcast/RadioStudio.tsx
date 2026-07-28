@@ -271,6 +271,30 @@ export default function RadioStudio({
   const cloudMimeRef = useRef('audio/webm')
   const socketRef = useRef<Socket | null>(null)
 
+  // Re-acquire wake lock and restart recorder when app returns to foreground
+  // (Android may release wake lock and kill MediaRecorder when backgrounded)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && shouldRecordRef.current) {
+        // Re-acquire wake lock
+        if ('wakeLock' in navigator && !wakeLockRef.current) {
+          try {
+            wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
+            console.log('[Broadcast] Wake lock re-acquired on foreground')
+          } catch {}
+        }
+        // Resume recorder if it died while backgrounded
+        const rec = mediaRecorderRef.current
+        if ((!rec || rec.state === 'inactive') && streamRef.current && shouldRecordRef.current) {
+          console.warn('[Broadcast] App returned to foreground — restarting recorder')
+          try { startChunkRecorder() } catch (e) { console.error('[Broadcast] foreground restart failed:', e) }
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   useEffect(() => {
     if (!recordEnabled) return
     getRecordingConfig().then(config => {
