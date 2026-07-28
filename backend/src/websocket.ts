@@ -111,15 +111,6 @@ export function initWebSocket(httpServer: HttpServer) {
     socket.on('broadcast_chunk', async (payload: { broadcastId: string; chunkIndex: number; chunkData: string }) => {
       const { broadcastId, chunkIndex, chunkData } = payload
       try {
-        await initDb()
-        console.log(`[WS] broadcast_chunk ${broadcastId} idx=${chunkIndex} userId=${userId}`)
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
-        if (!broadcast) {
-          console.warn(`[WS] broadcast_chunk ${broadcastId}: not found`)
-          socket.emit('error', { message: 'Broadcast not found' })
-          return
-        }
-
         // Feed HLS encoder FIRST — this is the critical path.
         // Start HLS if not already active (e.g. after server restart mid-broadcast)
         if (!isHlsActive(broadcastId)) {
