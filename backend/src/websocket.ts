@@ -152,15 +152,10 @@ export function initWebSocket(httpServer: HttpServer) {
 
     socket.on('start_broadcast_hls', async (broadcastId: string) => {
       try {
-        await initDb()
         console.log(`[WS] start_broadcast_hls ${broadcastId} userId=${userId}`)
-        const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [broadcastId])
-        if (!broadcast) {
-          console.warn(`[WS] start_broadcast_hls ${broadcastId}: not found`)
-          socket.emit('error', { message: 'Broadcast not found' })
-          return
-        }
-        await pauseRadioForBroadcast()
+        // Don't block on DB verification — if broadcast doesn't exist, feedHlsChunk will fail harmlessly
+        // The critical path is starting FFmpeg ASAP so chunks aren't dropped
+        pauseRadioForBroadcast().catch(err => console.error('[WS] pauseRadio error:', err.message))
         if (!isHlsActive(broadcastId)) {
           await restartHlsBroadcast(broadcastId)
         } else {

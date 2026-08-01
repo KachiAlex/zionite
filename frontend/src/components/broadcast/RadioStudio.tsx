@@ -304,6 +304,7 @@ export default function RadioStudio({
 
   const isStartingRef = useRef(false)
   const isStreamActiveRef = useRef(false)
+  const startSeqRef = useRef(0)
 
   useEffect(() => {
     shouldRecordRef.current = isLive
@@ -596,6 +597,7 @@ export default function RadioStudio({
       return
     }
     isStartingRef.current = true
+    const startSeq = ++startSeqRef.current
     try {
       // Connect socket for real-time chunk relay
       const token = localStorage.getItem('token')
@@ -637,6 +639,14 @@ export default function RadioStudio({
           echoCancellationType: { ideal: 'system' },
         } as any
       })
+
+      // Cancellation check: if stopStreaming was called while we were awaiting getUserMedia, abort
+      if (startSeq !== startSeqRef.current || !shouldRecordRef.current) {
+        console.warn('[Broadcast] startStreaming cancelled during getUserMedia, aborting')
+        rawMicStream.getTracks().forEach(t => t.stop())
+        if (socket.connected) socket.disconnect()
+        return
+      }
 
       // Re-claim audio focus with "duck" mode so external players (VLC, Spotify) keep playing
       try {
@@ -730,13 +740,25 @@ export default function RadioStudio({
       lastChunkTimeRef.current = Date.now()
       watchdogRef.current = setInterval(() => {
         if (!shouldRecordRef.current) return
+
+        // Socket health recovery: if socket is connected and we got a recent ack, restore health
+        if (!socketHealthyRef.current && socketRef.current?.connected) {
+          const ackAge = Date.now() - lastSocketAckRef.current
+          if (ackAge < 10000) {
+            console.log('[Broadcast] Socket health restored — switching back to WebSocket')
+            socketHealthyRef.current = true
+          }
+        }
+
         const elapsed = Date.now() - lastChunkTimeRef.current
         if (elapsed > 10000) {
           console.warn(`[Broadcast] Watchdog: no chunks for ${Math.round(elapsed / 1000)}s, force-restarting recorder`)
           try {
             const rec = mediaRecorderRef.current
             if (rec && rec.state !== 'inactive') {
-              rec.stop() // will trigger onstop -> auto-restart
+              // Set to null first to prevent onstop auto-restart from racing with watchdog
+              mediaRecorderRef.current = null
+              rec.stop() // will trigger onstop, but onstop checks mediaRecorderRef === recorder which is now null
             } else {
               startChunkRecorder() // direct restart if already inactive
             }
@@ -781,18 +803,18 @@ export default function RadioStudio({
           if (useSocket) {
             let acked = false
             socketRef.current!.emit('broadcast_chunk', { broadcastId, chunkIndex: idx, chunkData: base64 }, () => { acked = true; lastSocketAckRef.current = Date.now() })
-            // If no ack within 3s, socket is unhealthy — fall back to HTTP for this and future chunks
+            // If no ack within 5s, socket is unhealthy — fall back to HTTP for this chunk only
             setTimeout(() => {
               if (!acked) {
-                console.warn('[Broadcast] Socket ack timeout — falling back to HTTP')
-                socketHealthyRef.current = false
+                console.warn('[Broadcast] Socket ack timeout — falling back to HTTP for this chunk')
+                // Don't permanently mark socket unhealthy — it may just be a transient delay
                 axios.post(`${API_BASE}/api/stream/${broadcastId}/chunk`, {
                   chunkIndex: idx, chunkData: base64
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, timeout: 5000 })
                   .then(() => { setUploadError('') })
                   .catch((e) => { console.error('[Broadcast] HTTP fallback failed:', e); setUploadError('Upload failed - check connection') })
               }
-            }, 3000)
+            }, 5000)
           } else {
             // HTTP fallback when WebSocket is offline or unhealthy
             try {
@@ -814,7 +836,7 @@ export default function RadioStudio({
         recorderRestartCountRef.current++
         console.log(`[Broadcast] Auto-restarting recorder (attempt ${recorderRestartCountRef.current})`)
         setTimeout(() => {
-          if (shouldRecordRef.current && streamRef.current) {
+          if (shouldRecordRef.current && streamRef.current && mediaRecorderRef.current === recorder) {
             try { startChunkRecorder() } catch (e) { console.error('[Broadcast] restart failed:', e) }
           }
         }, 500)
@@ -838,6 +860,7 @@ export default function RadioStudio({
   }
 
   function stopStreaming(triggerUpload = false): Promise<void> {
+    startSeqRef.current++ // invalidate any in-progress startStreaming
     isStartingRef.current = false
     isStreamActiveRef.current = false
     teardownMixer()
