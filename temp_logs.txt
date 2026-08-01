@@ -1,0 +1,100 @@
+﻿[2m2026-08-01T17:28:19Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:19Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:19Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:19Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview
+[2m2026-08-01T17:28:20Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:20Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:20Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:20Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:21Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:21Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:22Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:22Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:22Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:22Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:22Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:23Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview
+[2m2026-08-01T17:28:24Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:25Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:25Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:26Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:26Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:26Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:26Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:27Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/listeners/geo
+[2m2026-08-01T17:28:27Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:27Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:27Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:27Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][DB] keep-alive ping OK
+[2m2026-08-01T17:28:28Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:28Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:28Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:28Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:28Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:29Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:29Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:29Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview
+[2m2026-08-01T17:28:30Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:30Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:30Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:30Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:30Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:31Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:31Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:32Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:32Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:32Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:32Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:33Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:33Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:34Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview
+[2m2026-08-01T17:28:35Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:36Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:36Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:36Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:36Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:36Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:37Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:37Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:38Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:38Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:38Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:38Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:39Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:39Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:39Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:39Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview
+[2m2026-08-01T17:28:40Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:40Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:40Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:40Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:40Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:41Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/listeners/geo
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:42Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /ping
+[2m2026-08-01T17:28:43Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/info
+[2m2026-08-01T17:28:43Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] Already active for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab, ignoring start request
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] POST /stream/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/chunk
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][AUTH] authenticated user: { id: 'admin-1', email: 'admin@zionite.online', role: 'admin' }
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][HLS] startHlsBroadcast called for c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab force=true
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /chat/c45e87c5-a5cd-42b7-a3f7-4d0e2b9fd8ab/users
+[2m2026-08-01T17:28:44Z[0m app[843994f27e0338] [32mams[0m [[34minfo[0m][REQ] GET /broadcasts/stats/overview

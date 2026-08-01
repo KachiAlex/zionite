@@ -608,13 +608,41 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
   // Restart stream when tab returns to foreground (mobile browsers suspend background tabs)
   useEffect(() => {
     function handleVisibility() {
-      if (!document.hidden && started && !userPausedRef.current && audioRef.current?.paused) {
-        console.warn('[HLS] Tab visible but audio paused — attempting resume')
-        audioRef.current?.play().catch(() => {})
+      if (document.hidden) return
+      if (!started || userPausedRef.current) return
+      console.warn('[HLS] Tab became visible — checking playback state')
+      const audio = audioRef.current
+      const hls = hlsRef.current
+      if (!audio) return
+
+      // Restart hls.js loading if it was stalled during background
+      if (hls) {
+        console.warn('[HLS] Restarting hls.js loading after background')
+        hls.startLoad()
+        // Snap to live edge after being backgrounded
+        if (hls.liveSyncPosition) {
+          audio.currentTime = hls.liveSyncPosition
+          console.warn('[HLS] Snapped to live edge:', hls.liveSyncPosition)
+        }
+      }
+
+      // Resume audio playback
+      if (audio.paused) {
+        audio.play().then(() => {
+          setIsPlaying(true)
+          setStatusText('Live')
+          updateMediaSession(true)
+        }).catch(() => {
+          console.warn('[HLS] Audio resume failed after visibility change')
+        })
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('pageshow', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('pageshow', handleVisibility)
+    }
   }, [started])
 
   useEffect(() => {
