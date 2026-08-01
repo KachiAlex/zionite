@@ -228,10 +228,8 @@ export default function RadioStudio({
         const fallback = mics[0]?.deviceId || ''
         activeDeviceIdRef.current = fallback
         setActiveDeviceId(fallback)
-        if (isLive) {
-          stopStreaming()
-          setTimeout(() => startStreaming(), 300)
-        }
+        // Do NOT restart the stream here — this would tear down an active broadcast.
+        // The new device will be used on next stream start.
       }
     } catch {}
   }
@@ -304,9 +302,20 @@ export default function RadioStudio({
     })
   }, [recordEnabled])
 
+  const isStartingRef = useRef(false)
+  const isStreamActiveRef = useRef(false)
+
   useEffect(() => {
     shouldRecordRef.current = isLive
-    if (shouldRecordRef.current) { startStreaming() } else { stopStreaming() }
+    if (shouldRecordRef.current) {
+      if (isStartingRef.current) {
+        console.warn('[Broadcast] startStreaming already in progress, skipping duplicate call')
+        return
+      }
+      startStreaming()
+    } else {
+      stopStreaming()
+    }
     // On unmount/refresh: only disconnect socket, do NOT stop FFmpeg so listeners aren't interrupted
     return () => {
       if (socketRef.current) {
@@ -316,7 +325,7 @@ export default function RadioStudio({
       teardownMixer()
       shouldRecordRef.current = false
     }
-  }, [isLive, activeDeviceId, broadcastId])
+  }, [isLive, broadcastId])
 
   // Start/stop mix monitor when broadcaster toggles it during live broadcast
   useEffect(() => {
@@ -524,8 +533,8 @@ export default function RadioStudio({
       await SystemAudio.startCapture()
       setSystemAudioEnabled(true)
       console.log('[SystemAudio] capture started')
-    } catch (e: any) {
-      console.error('[SystemAudio] startCapture error:', e)
+    } catch (err: any) {
+      console.error('[SystemAudio] startCapture error:', err)
       setSystemAudioEnabled(false)
     }
   }
@@ -582,6 +591,11 @@ export default function RadioStudio({
   }, [initialMusicBuffer])
 
   async function startStreaming() {
+    if (isStartingRef.current || isStreamActiveRef.current) {
+      console.warn('[Broadcast] startStreaming called while already starting/active, skipping')
+      return
+    }
+    isStartingRef.current = true
     try {
       // Connect socket for real-time chunk relay
       const token = localStorage.getItem('token')
@@ -661,6 +675,8 @@ export default function RadioStudio({
       }
 
       startChunkRecorder()
+      isStreamActiveRef.current = true
+      isStartingRef.current = false
 
       // Start local recording alongside server streaming
       if (recordEnabled && recordDirHandle) {
@@ -822,6 +838,8 @@ export default function RadioStudio({
   }
 
   function stopStreaming(triggerUpload = false): Promise<void> {
+    isStartingRef.current = false
+    isStreamActiveRef.current = false
     teardownMixer()
     shouldRecordRef.current = false
     if (socketRef.current) {

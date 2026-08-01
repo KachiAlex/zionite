@@ -23,6 +23,15 @@ export function initWebSocket(httpServer: HttpServer) {
     let userId: string | null = null
     let userName: string | null = null
     let currentRoom: string | null = null
+    console.log(`[WS] socket connected: ${socket.id} transport=${socket.conn.transport.name}`)
+
+    socket.on('disconnect', (reason) => {
+      console.log(`[WS] socket disconnected: ${socket.id} reason=${reason}`)
+    })
+
+    socket.conn.on('upgrade', (transport) => {
+      console.log(`[WS] ${socket.id} upgraded to ${transport.name}`)
+    })
 
     const token = socket.handshake.auth?.token as string | undefined
     if (token) {
