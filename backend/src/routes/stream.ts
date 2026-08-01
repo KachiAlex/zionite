@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { EventEmitter } from 'events'
-import { db, initDb } from '../db.js'
+import { db, initDb, dbWriteSafe } from '../db.js'
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth.js'
 import fs from 'fs'
 import path from 'path'
@@ -39,28 +39,12 @@ function mergeWebMChunks(chunks: Buffer[]): Buffer {
 // All chunks (including chunk 0 which contains the init segment) are stored in stream_chunks
 router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin'), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await initDb()
     const { chunkIndex, chunkData } = req.body
     if (typeof chunkData !== 'string' || chunkData.length === 0) {
       res.status(400).json({ error: 'Invalid chunk data' }); return
     }
 
-    const broadcast = await db.get('SELECT id FROM broadcasts WHERE id=$1', [req.params.id])
-    if (!broadcast) { res.status(404).json({ error: 'Broadcast not found' }); return }
-
-    const chunkId = uuidv4()
-    await db.query(
-      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
-      [chunkId, req.params.id, chunkIndex, chunkData]
-    )
-    // Keep last 300 chunks (~10 minutes at 2s interval)
-    await db.query(
-      `DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2`,
-      [req.params.id, chunkIndex - 300]
-    )
-    res.json({ success: true })
-    // Feed HLS encoder
+    // Feed HLS encoder FIRST — this is the critical path
     const wasActive = isHlsActive(req.params.id)
     await startHlsBroadcast(req.params.id, true)
     if (!wasActive) {
@@ -69,6 +53,20 @@ router.post('/:id/chunk', authenticateToken, requireRole('broadcaster', 'admin')
     await feedHlsChunk(req.params.id, chunkIndex, chunkData)
     // Notify live listeners that a new chunk is available
     liveEmitter.emit(`chunk:${req.params.id}`, chunkIndex)
+    // Respond immediately — chunk is delivered
+    res.json({ success: true })
+
+    // DB persistence — fire-and-forget, never block streaming
+    const chunkId = uuidv4()
+    dbWriteSafe(
+      `INSERT INTO stream_chunks (id, broadcast_id, chunk_index, chunk_data) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (broadcast_id, chunk_index) DO UPDATE SET chunk_data = EXCLUDED.chunk_data, created_at = CURRENT_TIMESTAMP`,
+      [chunkId, req.params.id, chunkIndex, chunkData]
+    )
+    dbWriteSafe(
+      `DELETE FROM stream_chunks WHERE broadcast_id=$1 AND chunk_index < $2`,
+      [req.params.id, chunkIndex - 300]
+    )
   } catch (err: any) {
     console.error('[STREAM] chunk upload error:', err.message)
     res.status(500).json({ error: err.message })

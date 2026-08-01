@@ -14,9 +14,9 @@ export function initWebSocket(httpServer: HttpServer) {
   io = new SocketIOServer(httpServer, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
     path: '/socket.io',
-    pingInterval: 15000,
-    pingTimeout: 60000,
-    connectTimeout: 30000,
+    pingInterval: 5000,
+    pingTimeout: 10000,
+    connectTimeout: 15000,
   })
 
   io.on('connection', (socket) => {
@@ -108,7 +108,7 @@ export function initWebSocket(httpServer: HttpServer) {
       }
     })
 
-    socket.on('broadcast_chunk', async (payload: { broadcastId: string; chunkIndex: number; chunkData: string }) => {
+    socket.on('broadcast_chunk', async (payload: { broadcastId: string; chunkIndex: number; chunkData: string }, ack?: () => void) => {
       const { broadcastId, chunkIndex, chunkData } = payload
       try {
         // Feed HLS encoder FIRST — this is the critical path.
@@ -118,6 +118,9 @@ export function initWebSocket(httpServer: HttpServer) {
           await startHlsBroadcast(broadcastId, true)
         }
         await feedHlsChunk(broadcastId, chunkIndex, chunkData)
+
+        // Acknowledge immediately after FFmpeg receives the chunk
+        if (ack) ack()
 
         // Relay to listeners in real-time
         io!.to(`broadcast_${broadcastId}`).emit('stream_chunk', { chunkIndex, chunkData })

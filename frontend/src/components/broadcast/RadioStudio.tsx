@@ -263,6 +263,8 @@ export default function RadioStudio({
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastChunkTimeRef = useRef<number>(Date.now())
   const recorderRestartCountRef = useRef(0)
+  const socketHealthyRef = useRef(true)
+  const lastSocketAckRef = useRef<number>(Date.now())
   const audioCtxKeepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const localRecorderRef = useRef<MediaRecorder | null>(null)
   const fileWritableRef = useRef<FileSystemWritableFileStream | null>(null)
@@ -595,6 +597,8 @@ export default function RadioStudio({
       })
       socketRef.current = socket
       socket.on('connect', () => {
+        socketHealthyRef.current = true
+        lastSocketAckRef.current = Date.now()
         if (broadcastId) {
           socket.emit('join_broadcast', broadcastId)
           socket.emit('start_broadcast_hls', broadcastId)
@@ -602,6 +606,7 @@ export default function RadioStudio({
       })
       socket.on('disconnect', () => {
         console.warn('[Broadcast] socket disconnected — will auto-reconnect')
+        socketHealthyRef.current = false
       })
       socket.on('connect_error', (err: any) => {
         console.warn('[Broadcast] socket connect error:', err.message)
@@ -755,16 +760,29 @@ export default function RadioStudio({
           chunkTimesRef.current.push(Date.now())
           if (chunkTimesRef.current.length > 10) chunkTimesRef.current.shift()
           const idx = chunkIndexRef.current++
-          // Real-time relay via WebSocket (preferred)
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('broadcast_chunk', { broadcastId, chunkIndex: idx, chunkData: base64 })
+          // Real-time relay via WebSocket with ack + HTTP fallback
+          const useSocket = socketRef.current?.connected && socketHealthyRef.current
+          if (useSocket) {
+            let acked = false
+            socketRef.current!.emit('broadcast_chunk', { broadcastId, chunkIndex: idx, chunkData: base64 }, () => { acked = true; lastSocketAckRef.current = Date.now() })
+            // If no ack within 3s, socket is unhealthy — fall back to HTTP for this and future chunks
+            setTimeout(() => {
+              if (!acked) {
+                console.warn('[Broadcast] Socket ack timeout — falling back to HTTP')
+                socketHealthyRef.current = false
+                axios.post(`${API_BASE}/api/stream/${broadcastId}/chunk`, {
+                  chunkIndex: idx, chunkData: base64
+                }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, timeout: 5000 })
+                  .then(() => { setUploadError('') })
+                  .catch((e) => { console.error('[Broadcast] HTTP fallback failed:', e); setUploadError('Upload failed - check connection') })
+              }
+            }, 3000)
           } else {
-            // HTTP fallback for persistence / replay only when WebSocket is offline
+            // HTTP fallback when WebSocket is offline or unhealthy
             try {
               await axios.post(`${API_BASE}/api/stream/${broadcastId}/chunk`, {
-                chunkIndex: idx,
-                chunkData: base64
-              }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+                chunkIndex: idx, chunkData: base64
+              }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, timeout: 5000 })
               setUploadError('')
             } catch { setUploadError('Upload failed - check connection') }
           }
