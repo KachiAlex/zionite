@@ -269,6 +269,12 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     setStatusText('Connecting…')
     userPausedRef.current = false
 
+    // Start Android foreground audio service to keep playback alive in background
+    try {
+      const android = (window as any).AndroidAudio
+      if (android && typeof android.startAudioService === 'function') android.startAudioService()
+    } catch {}
+
     // Connection timeout: if manifest never parses, broadcaster may be offline
     connectionTimeoutRef.current = setTimeout(() => {
       console.warn('[HLS] Connection timeout — broadcaster offline?')
@@ -508,12 +514,22 @@ function StreamPlayer({ broadcastId, title, thumbnailUrl }: { broadcastId: strin
     if (userPausedRef.current) {
       userPausedRef.current = false
       audio.play().then(() => { setIsPlaying(true); updateMediaSession(true); setStatusText('Live') }).catch(() => {})
+      // Re-start Android audio service when resuming
+      try {
+        const android = (window as any).AndroidAudio
+        if (android && typeof android.startAudioService === 'function') android.startAudioService()
+      } catch {}
     } else {
       userPausedRef.current = true
       audio.pause()
       setIsPlaying(false)
       updateMediaSession(false)
       setStatusText('Paused')
+      // Stop Android audio service when user pauses
+      try {
+        const android = (window as any).AndroidAudio
+        if (android && typeof android.stopAudioService === 'function') android.stopAudioService()
+      } catch {}
     }
   }
 
