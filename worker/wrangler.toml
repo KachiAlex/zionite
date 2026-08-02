@@ -1,0 +1,10 @@
+name = "r2-upload-worker"
+main = "r2-upload-worker.js"
+compatibility_date = "2024-01-01"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "zionite"
+
+[vars]
+R2_PUBLIC_URL = "https://pub-65e1bfa308d049a98f14e848e0dfd516.r2.dev"

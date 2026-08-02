@@ -19,9 +19,10 @@ export default {
       if (!key) return json({ error: 'Missing key' }, 400, corsHeaders);
 
       const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
-      const body = await request.arrayBuffer();
 
-      await env.R2_BUCKET.put(key, body, {
+      // Stream the request body directly to R2 — avoids Cloudflare Worker
+      // 100MB memory limit and 128MB request body limit for large files.
+      await env.R2_BUCKET.put(key, request.body, {
         httpMetadata: { contentType },
       });
 
