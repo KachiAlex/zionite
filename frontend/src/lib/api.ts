@@ -1,9 +1,9 @@
 import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
-export const API_BASE = 'https://zionite.fly.dev'
-export const STREAM_BASE = 'https://zionite.fly.dev'
-export const SOCKET_BASE = 'https://zionite.fly.dev'
+export const API_BASE = import.meta.env.VITE_API_BASE || 'https://zionite.fly.dev'
+export const STREAM_BASE = import.meta.env.VITE_STREAM_BASE || API_BASE
+export const SOCKET_BASE = import.meta.env.VITE_SOCKET_BASE || API_BASE
 export const api = axios.create({ baseURL: `${API_BASE}/api`, timeout: 8000 })
 
 api.interceptors.request.use(config => {

@@ -1,0 +1,128 @@
+# Zionite Full Stack — VPS Deployment with Docker Compose
+# Services: PostgreSQL + Backend (Node.js/Express) + Nginx reverse proxy
+
+version: '3.8'
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: zionite-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zionite}
+      POSTGRES_USER: ${POSTGRES_USER:-zionite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zionite} -d ${POSTGRES_DB:-zionite}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zionite-net
+
+  # ── Backend API (Express + Socket.io + FFmpeg) ───────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: zionite-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_DRIVER: pg
+      DATABASE_URL: postgres://${POSTGRES_USER:-zionite}:${POSTGRES_PASSWORD:-changeme_strong_password}@db:5432/${POSTGRES_DB:-zionite}
+      HLS_DIR: /tmp/hls
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-https://www.zionite.online}
+
+      # Cloudflare R2
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET:-zionite}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      R2_WORKER_URL: ${R2_WORKER_URL:-https://r2-upload-worker.zionite-r2.workers.dev}
+
+      # Email (Brevo/SMTP)
+      SMTP_HOST: ${SMTP_HOST:-smtp-relay.brevo.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@zionite.online}
+      FROM_NAME: ${FROM_NAME:-ZioniteFM}
+
+      # Firebase Push Notifications
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+
+      # Web Push (VAPID)
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@zionite.online}
+
+      # Sentry (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://www.zionite.online,http://localhost:5173}
+    volumes:
+      - hls_data:/tmp/hls
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - zionite-net
+
+  # ── Nginx Reverse Proxy (SSL termination) ────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: zionite-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - web-root:/var/www/certbot
+    networks:
+      - zionite-net
+
+  # ── Certbot (Let's Encrypt SSL) ──────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: zionite-certbot
+    restart: unless-stopped
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - web-root:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - zionite-net
+
+volumes:
+  pgdata:
+  hls_data:
+  certbot-etc:
+  certbot-var:
+  web-root:
+
+networks:
+  zionite-net:
+    driver: bridge

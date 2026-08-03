@@ -5,14 +5,37 @@ import bcrypt from 'bcryptjs'
 const rawDbUrl = process.env.DATABASE_URL?.trim()
 const dbUrl = rawDbUrl?.startsWith('psql ') ? rawDbUrl.slice(5) : rawDbUrl
 
+// Auto-detect driver: use 'pg' for standard postgres:// URLs on VPS, 'neon' for Neon serverless
+const DB_DRIVER = process.env.DB_DRIVER || (
+  dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://')) && !dbUrl.includes('neon')
+    ? 'pg' : 'neon'
+)
+
 console.log('[DB] NODE_ENV:', process.env.NODE_ENV)
-console.log('[DB] VERCEL:', process.env.VERCEL || 'undefined')
+console.log('[DB] DB_DRIVER:', DB_DRIVER)
 console.log('[DB] DATABASE_URL present:', !!process.env.DATABASE_URL)
 console.log('[DB] dbUrl present:', !!dbUrl)
 
 export let dbReady = !!dbUrl
 let _sqlInitError: string | null = null
 let _sql: ReturnType<typeof neon> | null = null
+let _pgPool: any = null
+
+async function getPgPool(): Promise<any> {
+  if (_pgPool) return _pgPool
+  const { Pool } = await import('pg')
+  _pgPool = new Pool({
+    connectionString: dbUrl,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  })
+  _pgPool.on('error', (err: any) => {
+    console.error('[DB] pg pool error:', err.message)
+  })
+  console.log('[DB] pg pool created OK')
+  return _pgPool
+}
 
 function getSql(): ReturnType<typeof neon> {
   if (_sql) return _sql
@@ -40,6 +63,25 @@ export interface DbClient {
 
 async function queryWithRetry(sqlStr: string, params?: any[], retries = 4): Promise<any[]> {
   if (!dbReady) throw new Error('DATABASE_URL not configured')
+
+  // Use standard pg driver for self-hosted PostgreSQL
+  if (DB_DRIVER === 'pg') {
+    const pool = await getPgPool()
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const result = await pool.query(sqlStr, params)
+        return result.rows
+      } catch (err: any) {
+        const isLast = attempt === retries
+        console.warn(`[DB] pg query failed (attempt ${attempt}/${retries}):`, err?.message || err)
+        if (isLast) throw err
+        await new Promise(r => setTimeout(r, 1000 * attempt))
+      }
+    }
+    throw new Error('DB query failed after retries')
+  }
+
+  // Use neon serverless driver
   const sql = getSql()
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
