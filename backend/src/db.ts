@@ -204,8 +204,6 @@ const SCHEMA_QUERIES = [
     opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE INDEX IF NOT EXISTS idx_music_share_clicks_track ON music_share_clicks (track_id)`,
-  `ALTER TABLE radio_state ADD COLUMN IF NOT EXISTS manual_stop BOOLEAN DEFAULT FALSE`,
-  `ALTER TABLE radio_state ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT FALSE`,
   `CREATE TABLE IF NOT EXISTS stream_chunks (
     id TEXT PRIMARY KEY, broadcast_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
     chunk_data TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -448,7 +446,11 @@ async function _initDbInternal() {
   }
 
   for (let i = 0; i < SCHEMA_QUERIES.length; i++) {
-    await db.query(SCHEMA_QUERIES[i])
+    try {
+      await db.query(SCHEMA_QUERIES[i])
+    } catch (err: any) {
+      console.warn(`[DB] schema query ${i} failed (non-fatal): ${err?.message || err}`)
+    }
   }
   console.log('[DB] schema OK')
 
