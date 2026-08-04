@@ -1,8 +1,6 @@
 # Zionite Full Stack — VPS Deployment with Docker Compose
 # Services: PostgreSQL + Backend (Node.js/Express) + Nginx reverse proxy
 
-version: '3.8'
-
 services:
   # ── PostgreSQL Database ──────────────────────────────────────────
   db:
@@ -29,7 +27,7 @@ services:
   # ── Backend API (Express + Socket.io + FFmpeg) ───────────────────
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: deploy/Dockerfile
     container_name: zionite-backend
     restart: unless-stopped
