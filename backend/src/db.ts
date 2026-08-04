@@ -308,6 +308,36 @@ const SCHEMA_QUERIES = [
     file_size INTEGER,
     uploaded_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS prayer_interactions (
+    id TEXT PRIMARY KEY,
+    prayer_id TEXT NOT NULL,
+    user_id TEXT,
+    interaction TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS event_rsvps (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
+    user_id TEXT,
+    name TEXT,
+    email TEXT,
+    status TEXT DEFAULT 'going',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS spiritual_health (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    score INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ]
 
